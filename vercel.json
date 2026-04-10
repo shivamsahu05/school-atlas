@@ -1,6 +1,0 @@
-{
-  "_comment": "This vercel.json is intentionally empty. Deploy sams-web/ on Vercel and sams-backend/ on Render separately.",
-  "version": 2,
-  "builds": [],
-  "routes": []
-}
