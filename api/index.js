@@ -1,3 +1,5 @@
-import app from "../sams-backend/src/app.js";
+const app = require('../sams-backend/src/app');
 
-export default app;
+module.exports = (req, res) => {
+  app(req, res);
+};
