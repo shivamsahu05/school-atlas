@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
-    "build": "npm install && npx prisma generate",
+    "build": "npx prisma generate",
+    "postinstall": "npx prisma generate",
     "db:push": "npx prisma db push",
     "db:studio": "npx prisma studio",
     "db:seed": "node src/utils/seed.js"
