@@ -65,16 +65,6 @@ app.use(errorHandler)
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
-// app.listen(PORT, () => {
-//   console.log(`
-//   ╔══════════════════════════════════════════╗
-//   ║   SAMS API Server                        ║
-//   ║   http://localhost:${PORT}                  ║
-//   ║   ENV: ${(process.env.NODE_ENV || 'development').padEnd(34)}║
-//   ╚══════════════════════════════════════════╝
-//   `)
-// })
-
 if (process.env.NODE_ENV !== 'production') {
   app.listen(PORT, () => {
     console.log(`
@@ -88,5 +78,17 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 module.exports = app
+
+
+
+// app.listen(PORT, () => {
+//   console.log(`
+//   ╔══════════════════════════════════════════╗
+//   ║   SAMS API Server                        ║
+//   ║   http://localhost:${PORT}                  ║
+//   ║   ENV: ${(process.env.NODE_ENV || 'development').padEnd(34)}║
+//   ╚══════════════════════════════════════════╝
+//   `)
+// })
 
 // module.exports = app
