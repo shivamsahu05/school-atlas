@@ -1,0 +1,348 @@
+{
+  "info": {
+    "name": "SAMS API",
+    "description": "School Academic Management System – complete API collection",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",     "value": "http://localhost:5000/api" },
+    { "key": "admin_token",   "value": "" },
+    { "key": "teacher_token", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login – Admin",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const r = pm.response.json();",
+            "if (r.success) pm.collectionVariables.set('admin_token', r.data.token);"
+          ]}}],
+          "request": {
+            "method": "POST", "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"email\": \"admin@sams.com\", \"password\": \"Admin@123\" }" }
+          }
+        },
+        {
+          "name": "Login – Teacher",
+          "event": [{ "listen": "test", "script": { "exec": [
+            "const r = pm.response.json();",
+            "if (r.success) pm.collectionVariables.set('teacher_token', r.data.token);"
+          ]}}],
+          "request": {
+            "method": "POST", "url": "{{base_url}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ \"email\": \"teacher@sams.com\", \"password\": \"Teacher@123\" }" }
+          }
+        },
+        {
+          "name": "Get Me",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/auth/me",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Teacher Dashboard",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/dashboard/teacher",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        },
+        {
+          "name": "Admin Dashboard",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/dashboard/admin",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users (Admin)",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/users?page=1&limit=10",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Create User",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/users",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"New Teacher\", \"email\": \"new@sams.com\", \"password\": \"Test@1234\", \"role\": \"teacher\", \"phone\": \"9999999999\" }" }
+          }
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "method": "PUT", "url": "{{base_url}}/users/2",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"Updated Name\", \"status\": \"active\" }" }
+          }
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "DELETE", "url": "{{base_url}}/users/99",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "item": [
+        {
+          "name": "Get All Students",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/students?class_id=5&page=1&limit=20",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Create Student",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/students",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"name\": \"Test Student\", \"roll_no\": \"13\", \"class_id\": 5, \"gender\": \"Male\" }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Classes & Subjects",
+      "item": [
+        {
+          "name": "Get All Classes",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/classes",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Get All Subjects",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/subjects",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Syllabus",
+      "item": [
+        {
+          "name": "Get Syllabus",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/syllabus?class_id=5&subject_id=1",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        },
+        {
+          "name": "Create Syllabus Item",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/syllabus",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"class_id\": 5, \"subject_id\": 1, \"chapter\": \"Chapter 11\", \"topic\": \"Probability\", \"planned_date\": \"2024-03-10\" }" }
+          }
+        },
+        {
+          "name": "Mark Topic Complete",
+          "request": {
+            "method": "PUT", "url": "{{base_url}}/syllabus/1",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"is_completed\": true }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Homework",
+      "item": [
+        {
+          "name": "Get Homework",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/homework?class_id=5",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        },
+        {
+          "name": "Create Homework",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/homework",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"class_id\": 5, \"subject_id\": 1, \"description\": \"Chapter 6 Exercise 6.1\", \"assigned_date\": \"2024-02-05\", \"due_date\": \"2024-02-07\" }" }
+          }
+        },
+        {
+          "name": "Get Submissions",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/homework/1/submissions",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        },
+        {
+          "name": "Submit Homework",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/homework/1/submit",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"student_id\": 1, \"score\": 90 }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Learning Outcomes",
+      "item": [
+        {
+          "name": "Get LOs",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/lo?subject_id=1&class_id=5",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        },
+        {
+          "name": "Create LO",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/lo",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"student_id\": 1, \"subject_id\": 1, \"topic\": \"Mensuration\", \"teacher_score\": 7.5 }" }
+          }
+        },
+        {
+          "name": "Update LO (Principal Score)",
+          "request": {
+            "method": "PUT", "url": "{{base_url}}/lo/1",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"principal_score\": 8.0 }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Observations",
+      "item": [
+        {
+          "name": "Get Observations",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/observations",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Create Observation",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/observations",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"teacher_id\": 2, \"observation_date\": \"2024-02-01\", \"total_score\": 44 }" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Performance",
+      "item": [
+        {
+          "name": "All Teacher Performance",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/performance/all",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Single Teacher Performance",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/performance/teacher/2",
+            "header": [{ "key": "Authorization", "value": "Bearer {{teacher_token}}" }]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Leave",
+      "item": [
+        {
+          "name": "Get Leaves (Admin – All)",
+          "request": {
+            "method": "GET", "url": "{{base_url}}/leave?status=Pending",
+            "header": [{ "key": "Authorization", "value": "Bearer {{admin_token}}" }]
+          }
+        },
+        {
+          "name": "Apply Leave (Teacher)",
+          "request": {
+            "method": "POST", "url": "{{base_url}}/leave",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{teacher_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"type\": \"Casual\", \"from_date\": \"2024-03-01\", \"to_date\": \"2024-03-01\", \"reason\": \"Personal work\" }" }
+          }
+        },
+        {
+          "name": "Approve Leave (Admin)",
+          "request": {
+            "method": "PUT", "url": "{{base_url}}/leave/2",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"Approved\" }" }
+          }
+        },
+        {
+          "name": "Reject Leave (Admin)",
+          "request": {
+            "method": "PUT", "url": "{{base_url}}/leave/3",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type",  "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{ \"status\": \"Rejected\" }" }
+          }
+        }
+      ]
+    }
+  ]
+}
