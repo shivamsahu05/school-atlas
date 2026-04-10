@@ -64,14 +64,29 @@ app.use(notFound)
 app.use(errorHandler)
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`
-  ╔══════════════════════════════════════════╗
-  ║   SAMS API Server                        ║
-  ║   http://localhost:${PORT}                  ║
-  ║   ENV: ${(process.env.NODE_ENV || 'development').padEnd(34)}║
-  ╚══════════════════════════════════════════╝
-  `)
-})
+
+// app.listen(PORT, () => {
+//   console.log(`
+//   ╔══════════════════════════════════════════╗
+//   ║   SAMS API Server                        ║
+//   ║   http://localhost:${PORT}                  ║
+//   ║   ENV: ${(process.env.NODE_ENV || 'development').padEnd(34)}║
+//   ╚══════════════════════════════════════════╝
+//   `)
+// })
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => {
+    console.log(`
+    ╔══════════════════════════════════════════╗
+    ║   SAMS API Server                        ║
+    ║   http://localhost:${PORT}               ║
+    ║   ENV: ${(process.env.NODE_ENV || 'development').padEnd(34)}║
+    ╚══════════════════════════════════════════╝
+    `)
+  })
+}
 
 module.exports = app
+
+// module.exports = app
