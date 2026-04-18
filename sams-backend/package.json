@@ -4,7 +4,6 @@
   "description": "SAMS – School Academic Management System Backend API",
   "main": "src/app.js",
   "scripts": {
-<<<<<<< HEAD
     "start":     "node src/app.js",
     "dev":       "nodemon src/app.js",
     "db:push":   "npx prisma db push",
@@ -22,8 +21,8 @@
     "joi":            "^17.13.3",
     "jsonwebtoken":   "^9.0.2",
     "morgan":         "^1.10.0",
-    "prisma":         "^5.22.0"
-=======
+    "prisma":         "^5.22.0",
+
     "start": "node src/app.js",
     "dev": "nodemon src/app.js",
     "build": "npx prisma generate",
@@ -44,7 +43,6 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.0",
     "prisma": "^5.22.0"
->>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
   },
   "devDependencies": {
     "nodemon": "^3.1.7"
@@ -52,8 +50,5 @@
   "engines": {
     "node": ">=18.0.0"
   }
-<<<<<<< HEAD
 }
-=======
-}
->>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
+

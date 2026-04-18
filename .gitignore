@@ -5,5 +5,8 @@ build
 .vscode
 .DS_Store
 
+*.sql
+*.zip
+
 # optional सुरक्षा
 drop_all_tables_atlas_db.sql
