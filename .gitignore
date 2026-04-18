@@ -1,0 +1,9 @@
+node_modules
+.env
+dist
+build
+.vscode
+.DS_Store
+
+# optional सुरक्षा
+drop_all_tables_atlas_db.sql

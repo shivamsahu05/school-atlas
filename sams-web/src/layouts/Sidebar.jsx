@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
@@ -6,12 +7,21 @@ import {
   Calendar, Users, Star, Bell, CheckSquare, Eye, TrendingUp, Trophy,
   LogOut, X, GraduationCap, Clock, UserCog, User, ShieldCheck, Settings, Mail,
   ChevronLeft, ChevronRight
+=======
+import { NavLink, useNavigate } from 'react-router-dom'
+import { clsx } from 'clsx'
+import {
+  LayoutDashboard, BookOpen, ClipboardList, Brain, BarChart2,
+  Calendar, Users, Star, Bell, CheckSquare, Eye, TrendingUp,
+  LogOut, X, GraduationCap, Clock, UserCog,
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 
 const TEACHER_NAV = [
   { label: 'Dashboard',           icon: LayoutDashboard, to: '/teacher'            },
   { label: 'Syllabus Tracking',   icon: BookOpen,        to: '/teacher/syllabus'   },
+<<<<<<< HEAD
   { label: 'Learning Outcomes',   icon: Brain,           to: '/teacher/lo'         },
   { label: 'Performance',         icon: BarChart2,       to: '/teacher/analytics'  },
   { label: 'Micro Schedule',      icon: Calendar,        to: '/teacher/schedule'   },
@@ -19,6 +29,13 @@ const TEACHER_NAV = [
   { label: 'Leave Management',    icon: Clock,           to: '/teacher/leave'      },
   { label: 'Notifications',       icon: Bell,            to: '/teacher/notifications'},
   { label: 'My Profile',          icon: User,            to: '/teacher/profile'    },
+=======
+  { label: 'Homework',            icon: ClipboardList,   to: '/teacher/homework'   },
+  { label: 'Learning Outcomes',   icon: Brain,           to: '/teacher/lo'         },
+  { label: 'Performance',         icon: BarChart2,       to: '/teacher/analytics'  },
+  { label: 'Micro Schedule',      icon: Calendar,        to: '/teacher/schedule'   },
+  { label: 'Leave Management',    icon: Clock,           to: '/teacher/leave'      },
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 ]
 
 const ADMIN_NAV = [
@@ -26,6 +43,7 @@ const ADMIN_NAV = [
   { label: 'Syllabus Status',     icon: BookOpen,        to: '/admin/syllabus'         },
   { label: 'Award LO Scores',     icon: Star,            to: '/admin/award-lo'         },
   { label: 'Follow-ups',          icon: Bell,            to: '/admin/followups'        },
+<<<<<<< HEAD
   { label: 'Messages',            icon: Mail,            to: '/admin/contact'          },
   { label: 'School Events',       icon: Trophy,          to: '/admin/competitions'     },
   { label: 'Classroom Obs.',      icon: Eye,             to: '/admin/observation'      },
@@ -56,6 +74,38 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
               <p className="text-[10px] text-slate-400 font-medium">ATLAS Platform</p>
             </div>
           )}
+=======
+  { label: 'Classroom Obs.',      icon: Eye,             to: '/admin/observation'      },
+  { label: 'Teacher Performance', icon: TrendingUp,      to: '/admin/performance'      },
+  { label: 'User Management',     icon: UserCog,         to: '/admin/users'            },
+  { label: 'Timetable & Marks',   icon: Calendar,        to: '/admin/timetable'        },
+  { label: 'Leave Approval',      icon: CheckSquare,     to: '/admin/leave'            },
+]
+
+export function Sidebar({ mobileOpen, onClose }) {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const nav = user?.role === 'admin' ? ADMIN_NAV : TEACHER_NAV
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login')
+  }
+
+  const SidebarContent = () => (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 gradient-brand rounded-xl flex items-center justify-center shadow-sm">
+            <GraduationCap size={20} className="text-white" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-slate-800 leading-tight">SAMS</p>
+            <p className="text-[10px] text-slate-400 font-medium">ATLAS Platform</p>
+          </div>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
         </div>
         {/* Mobile close */}
         <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg hover:bg-slate-100">
@@ -64,6 +114,7 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
       </div>
 
       {/* User info */}
+<<<<<<< HEAD
       {!(collapsed && isDesktop) ? (
         <div className="px-4 py-4 border-b border-slate-100">
           <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50">
@@ -83,6 +134,19 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
           </div>
         </div>
       )}
+=======
+      <div className="px-4 py-4 border-b border-slate-100">
+        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-slate-50">
+          <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center flex-shrink-0">
+            <span className="text-white text-xs font-bold">{user?.name?.[0]}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-slate-700 truncate">{user?.name}</p>
+            <p className="text-[10px] text-slate-400 capitalize">{user?.role}</p>
+          </div>
+        </div>
+      </div>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
       {/* Nav items */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto scrollbar-thin">
@@ -92,6 +156,7 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
             to={item.to}
             end={item.to === '/teacher' || item.to === '/admin'}
             onClick={onClose}
+<<<<<<< HEAD
             title={collapsed && isDesktop ? item.label : undefined}
             className={({ isActive }) => clsx(
               'nav-item',
@@ -101,12 +166,19 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
           >
             <item.icon size={17} />
             {!(collapsed && isDesktop) && <span>{item.label}</span>}
+=======
+            className={({ isActive }) => clsx('nav-item', isActive && 'active')}
+          >
+            <item.icon size={17} />
+            <span>{item.label}</span>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
           </NavLink>
         ))}
       </nav>
 
       {/* Logout */}
       <div className="px-3 py-4 border-t border-slate-100">
+<<<<<<< HEAD
         <button
           onClick={onSignOut}
           title={collapsed && isDesktop ? 'Sign Out' : undefined}
@@ -117,10 +189,16 @@ function SidebarContent({ isDesktop = false, collapsed, user, onClose, nav, onSi
         >
           <LogOut size={17} />
           {!(collapsed && isDesktop) && <span>Sign Out</span>}
+=======
+        <button onClick={handleLogout} className="nav-item w-full text-rose-500 hover:bg-rose-50 hover:text-rose-600">
+          <LogOut size={17} />
+          <span>Sign Out</span>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
         </button>
       </div>
     </div>
   )
+<<<<<<< HEAD
 }
 
 export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
@@ -135,10 +213,13 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
     navigate('/login')
   }
 
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
   return (
     <>
       {/* Desktop sidebar */}
+<<<<<<< HEAD
       <div className="hidden lg:block relative flex-shrink-0">
         <aside className={clsx(
           "flex flex-col bg-white border-r border-slate-100 h-screen sticky top-0 transition-all duration-300",
@@ -167,12 +248,18 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
           </div>
         </button>
       </div>
+=======
+      <aside className="hidden lg:flex flex-col w-60 bg-white border-r border-slate-100 h-screen sticky top-0 flex-shrink-0">
+        <SidebarContent />
+      </aside>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
       {/* Mobile drawer overlay */}
       {mobileOpen && (
         <div className="lg:hidden fixed inset-0 z-40 flex">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={onClose} />
           <aside className="relative w-64 bg-white h-full shadow-float animate-slide-right">
+<<<<<<< HEAD
             <SidebarContent 
               user={user}
               onClose={onClose}
@@ -226,6 +313,12 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
           </div>
         </div>
       )}
+=======
+            <SidebarContent />
+          </aside>
+        </div>
+      )}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
     </>
   )
 }

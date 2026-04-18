@@ -23,14 +23,20 @@ model users {
   updated_at DateTime  @updatedAt
 
   // Relations
+<<<<<<< HEAD
   school_events        school_events[]
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
   teacher_subjects     teacher_subjects[]
   homework_assigned    homework[]         @relation("TeacherHomework")
   observations_received observations[]   @relation("ObservedTeacher")
   observations_given   observations[]    @relation("ObservedBy")
   performance_scores   performance_scores?
   leave_requests       leave_requests[]
+<<<<<<< HEAD
   teacher_lo_entries   teacher_performance_lo[] @relation("TeacherPerformanceLO")
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
   @@index([role], name: "idx_user_role")
 }
@@ -57,13 +63,17 @@ model classes {
   teacher_subjects teacher_subjects[]
   syllabus         syllabus[]
   homework         homework[]
+<<<<<<< HEAD
   teacher_lo       teacher_performance_lo[]
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
   @@unique([class_name, section])
 }
 
 // ─── subjects ────────────────────────────────────────────────────────────────
 model subjects {
+<<<<<<< HEAD
   id          Int      @id @default(autoincrement())
   name        String   @unique @db.VarChar(100)
   code        String?  @db.VarChar(20)
@@ -177,6 +187,17 @@ model acad_class_streams {
   stream streams          @relation(fields: [stream_id], references: [id], onDelete: Cascade)
 
   @@unique([class_id, stream_id])
+=======
+  id         Int      @id @default(autoincrement())
+  name       String   @unique @db.VarChar(100)
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  teacher_subjects  teacher_subjects[]
+  syllabus          syllabus[]
+  homework          homework[]
+  learning_outcomes learning_outcomes[]
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 }
 
 // ─── students ────────────────────────────────────────────────────────────────
@@ -358,6 +379,7 @@ enum leave_requests_status {
   Approved
   Rejected
 }
+<<<<<<< HEAD
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // EVENT MANAGEMENT
@@ -456,3 +478,5 @@ enum teacher_lo_status {
   Meeting
   Exceeding
 }
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d

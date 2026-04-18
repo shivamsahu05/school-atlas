@@ -32,6 +32,7 @@ const unwrap = (promise) => promise.then((r) => r.data.data)
 // AUTH
 // ─────────────────────────────────────────────────────────────────────────────
 export const authApi = {
+<<<<<<< HEAD
   /**
    * Login and return { token, user }.
    * Saves token to localStorage automatically via the updated AuthContext.
@@ -39,6 +40,10 @@ export const authApi = {
   login: (email, password) =>
     api.post('/auth/login', { email, password }).then((r) => r.data.data),
 
+=======
+  login: (email, password) =>
+    api.post('/auth/login', { email, password }).then((r) => r.data.data),
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
   me: () => unwrap(api.get('/auth/me')),
 }
 
@@ -51,7 +56,11 @@ export const dashboardApi = {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+<<<<<<< HEAD
 // USERS (admin only)
+=======
+// DATA MANAGEMENT
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 // ─────────────────────────────────────────────────────────────────────────────
 export const usersApi = {
   getAll:  (params = {}) => unwrap(api.get('/users',    { params })),
@@ -61,9 +70,12 @@ export const usersApi = {
   delete:  (id)          => unwrap(api.delete(`/users/${id}`)),
 }
 
+<<<<<<< HEAD
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENTS
 // ─────────────────────────────────────────────────────────────────────────────
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 export const studentsApi = {
   getAll:  (params = {}) => unwrap(api.get('/students',    { params })),
   getById: (id)          => unwrap(api.get(`/students/${id}`)),
@@ -72,6 +84,7 @@ export const studentsApi = {
   delete:  (id)          => unwrap(api.delete(`/students/${id}`)),
 }
 
+<<<<<<< HEAD
 // ─────────────────────────────────────────────────────────────────────────────
 // CLASSES & SUBJECTS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +164,24 @@ export const leaveApi = {
   getById: (id)          => unwrap(api.get(`/leave/${id}`)),
   apply:   (data)        => unwrap(api.post('/leave',          data)),
   update:  (id, status)  => unwrap(api.put(`/leave/${id}`,    { status })),
+=======
+export const classesApi  = { getAll: () => unwrap(api.get('/classes'))  }
+export const subjectsApi = { getAll: () => unwrap(api.get('/subjects')) }
+
+export const syllabusApi = {
+  getAll:   (params = {}) => unwrap(api.get('/syllabus',    { params })),
+  update:   (id, data)    => unwrap(api.put(`/syllabus/${id}`, data)),
+}
+
+export const homeworkApi = {
+  getAll:         (params = {}) => unwrap(api.get('/homework',               { params })),
+  getById:        (id)          => unwrap(api.get(`/homework/${id}`)),
+  create:         (data)        => unwrap(api.post('/homework',              data)),
+}
+
+export const loApi = {
+  getAll:  (params = {}) => unwrap(api.get('/lo', { params })),
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 }
 
 export default api

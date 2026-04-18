@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 import clsx from 'clsx'
 import { X, ChevronDown, Eye, EyeOff } from 'lucide-react'
+=======
+import { clsx } from 'clsx'
+import { X } from 'lucide-react'
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 import { useState } from 'react'
 
 /* ─── StatCard ─────────────────────────────────────────────────────────── */
@@ -94,7 +99,11 @@ export function Modal({ open, onClose, title, children, size = 'md' }) {
             <X size={16} />
           </button>
         </div>
+<<<<<<< HEAD
         <div className="px-6 py-4 max-h-[calc(100vh-120px)] overflow-y-auto scrollbar-thin overflow-x-hidden">{children}</div>
+=======
+        <div className="px-6 py-4">{children}</div>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
       </div>
     </div>
   )
@@ -188,6 +197,7 @@ export function StepIndicator({ steps, current }) {
   )
 }
 
+<<<<<<< HEAD
 /* ─── FormInput ───────────────────────────────────────────────────────── */
 export function FormInput({ label, error, type, ...props }) {
   const [showPassword, setShowPassword] = useState(false)
@@ -263,3 +273,14 @@ export function InfoRow({ label, value }) {
 
 export { default as DataTable } from "./DataTable";
 export { default as Footer } from "./Footer";
+=======
+/* ─── InfoRow ──────────────────────────────────────────────────────────── */
+export function InfoRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between py-2.5 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">{label}</span>
+      <span className="text-sm font-medium text-slate-700">{value}</span>
+    </div>
+  )
+}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d

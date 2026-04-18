@@ -1,6 +1,7 @@
 // src/routes/classes.js
 const router       = require('express').Router()
 const asyncHandler = require('express-async-handler')
+<<<<<<< HEAD
 const {
   getClasses, createClass, updateClass, deleteClass,
   getSubjects, createSubject, updateSubject, deleteSubject,
@@ -27,5 +28,14 @@ router.get('/class-subjects',         asyncHandler(getClassSubjects))
 router.post('/class-subjects',        roleCheck('admin'), asyncHandler(assignSubjectToClass))
 router.put('/class-subjects/bulk',    roleCheck('admin'), asyncHandler(bulkAssignSubjects))
 router.delete('/class-subjects/:id',  roleCheck('admin'), asyncHandler(removeSubjectFromClass))
+=======
+const { getClasses, getSubjects } = require('../controllers/classesController')
+const { authenticate } = require('../middleware/auth')
+
+router.use(authenticate)
+
+router.get('/classes',  asyncHandler(getClasses))
+router.get('/subjects', asyncHandler(getSubjects))
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 
 module.exports = router

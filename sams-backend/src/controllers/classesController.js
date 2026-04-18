@@ -1,5 +1,6 @@
 // src/controllers/classesController.js
 const prisma = require('../config/db')
+<<<<<<< HEAD
 const { sendSuccess, sendError } = require('../utils/response')
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -7,6 +8,11 @@ const { sendSuccess, sendError } = require('../utils/response')
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** GET /api/classes — all class-section combos with student count */
+=======
+const { sendSuccess } = require('../utils/response')
+
+/** GET /api/classes */
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 const getClasses = async (req, res) => {
   const classes = await prisma.classes.findMany({
     orderBy: [{ class_name: 'asc' }, { section: 'asc' }],
@@ -15,6 +21,7 @@ const getClasses = async (req, res) => {
   return sendSuccess(res, classes)
 }
 
+<<<<<<< HEAD
 /** POST /api/classes — create a class-section combo */
 const createClass = async (req, res) => {
   const { class_name, section } = req.body
@@ -71,12 +78,15 @@ const deleteClass = async (req, res) => {
 // SUBJECTS
 // ═══════════════════════════════════════════════════════════════════════════════
 
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 /** GET /api/subjects */
 const getSubjects = async (req, res) => {
   const subjects = await prisma.subjects.findMany({ orderBy: { name: 'asc' } })
   return sendSuccess(res, subjects)
 }
 
+<<<<<<< HEAD
 /** POST /api/subjects */
 const createSubject = async (req, res) => {
   const { name } = req.body
@@ -224,3 +234,6 @@ module.exports = {
   getSubjects, createSubject, updateSubject, deleteSubject,
   getClassSubjects, assignSubjectToClass, removeSubjectFromClass, bulkAssignSubjects,
 }
+=======
+module.exports = { getClasses, getSubjects }
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d

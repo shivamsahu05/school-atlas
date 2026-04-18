@@ -92,7 +92,11 @@ export default function Login() {
           </div>
 
           {/* Demo quick-fill */}
+<<<<<<< HEAD
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
+=======
+          <div className="grid grid-cols-2 gap-2 mb-6">
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             <button onClick={() => fillDemo('admin')}
               className="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white hover:border-brand-400 hover:text-brand-600 text-slate-500 transition-all text-center font-medium">
               👔 Fill Admin

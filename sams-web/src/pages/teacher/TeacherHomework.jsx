@@ -1,4 +1,5 @@
 import { useState } from 'react'
+<<<<<<< HEAD
 import { Plus, ChevronDown, ChevronUp, Users, CheckCircle, AlertTriangle, Filter } from 'lucide-react'
 import { StatCard, SectionHeader, Modal, ProgressBar, StatusBadge } from '../../components/ui/index.jsx'
 import { HOMEWORK, PERMISSIONS } from '../../data/dummyData'
@@ -69,11 +70,43 @@ export default function TeacherHomework() {
           value={filtered.reduce((a,h) => a + h.defaulters.length, 0)}
           icon={AlertTriangle} color="amber" />
         <StatCard title="Perfect Submit" value={filtered.filter(h=>h.defaulters.length===0).length}
+=======
+import { Plus, ChevronDown, ChevronUp, Users, CheckCircle, AlertTriangle } from 'lucide-react'
+import { StatCard, SectionHeader, Modal, ProgressBar, StatusBadge } from '../../components/ui/index.jsx'
+import { HOMEWORK } from '../../data/dummyData'
+import { clsx } from 'clsx'
+
+function pct(submitted, total) { return Math.round((submitted / total) * 100) }
+
+export default function TeacherHomework() {
+  const [expanded, setExpanded] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState({ desc:'', due:'', subject:'Mathematics', class:'Grade 8-A' })
+
+  const totalAssigned  = HOMEWORK.reduce((a,h) => a + h.total, 0)
+  const totalSubmitted = HOMEWORK.reduce((a,h) => a + h.submitted, 0)
+  const avgPct = Math.round((totalSubmitted / totalAssigned) * 100)
+
+  const toggle = (id) => setExpanded(e => e === id ? null : id)
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard title="Assignments"   value={HOMEWORK.length} icon={CheckCircle} color="blue" />
+        <StatCard title="Avg Submission" value={`${avgPct}%`}  icon={Users}       color="green" trend={avgPct} />
+        <StatCard title="Total Defaulters"
+          value={HOMEWORK.reduce((a,h) => a + h.defaulters.length, 0)}
+          icon={AlertTriangle} color="amber" />
+        <StatCard title="Perfect Submit" value={HOMEWORK.filter(h=>h.defaulters.length===0).length}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
           icon={CheckCircle} color="teal" />
       </div>
 
       {/* Homework cards */}
       <div className="card p-6">
+<<<<<<< HEAD
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <SectionHeader title="Homework Records" subtitle={`${filtered.length} assignments`} />
           <button
@@ -82,10 +115,16 @@ export default function TeacherHomework() {
             className="btn-primary btn btn-sm disabled:opacity-50 disabled:cursor-not-allowed"
             title={!canUpload ? 'Upload permission required' : ''}
           >
+=======
+        <div className="flex items-center justify-between mb-5">
+          <SectionHeader title="Homework Records" subtitle="Latest 5 assignments" />
+          <button onClick={() => setModalOpen(true)} className="btn-primary btn btn-sm">
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             <Plus size={14}/> Add
           </button>
         </div>
 
+<<<<<<< HEAD
         {/* Filters */}
         <div className="flex flex-wrap gap-2 mb-4">
           <Filter size={14} className="text-slate-400 self-center" />
@@ -105,12 +144,20 @@ export default function TeacherHomework() {
           {filtered.length === 0 ? (
             <p className="text-center text-sm text-slate-400 py-8">No homework matches the selected filters.</p>
           ) : filtered.map(hw => {
+=======
+        <div className="space-y-3">
+          {HOMEWORK.map(hw => {
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             const p = pct(hw.submitted, hw.total)
             const isOpen = expanded === hw.id
             const barColor = p >= 90 ? 'green' : p >= 70 ? 'amber' : 'red'
 
             return (
               <div key={hw.id} className="border border-slate-100 rounded-xl overflow-hidden">
+<<<<<<< HEAD
+=======
+                {/* Header row */}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
                 <button
                   onClick={() => toggle(hw.id)}
                   className="w-full flex items-start gap-4 p-4 hover:bg-slate-50/60 transition-colors text-left"
@@ -120,7 +167,10 @@ export default function TeacherHomework() {
                     <p className="text-xs text-slate-400 mt-0.5">
                       Assigned: {hw.assigned} &nbsp;·&nbsp; Due: {hw.due} &nbsp;·&nbsp; {hw.class}
                     </p>
+<<<<<<< HEAD
                     <p className="text-[10px] text-slate-300 mt-0.5">Week: {getWeek(hw)}</p>
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
                     <div className="mt-3">
                       <ProgressBar value={hw.submitted} max={hw.total} color={barColor} height="h-1.5" />
                     </div>
@@ -135,6 +185,10 @@ export default function TeacherHomework() {
                   </div>
                 </button>
 
+<<<<<<< HEAD
+=======
+                {/* Expanded defaulters */}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
                 {isOpen && (
                   <div className="px-4 pb-4 border-t border-slate-100 bg-slate-50/50">
                     <div className="pt-3">
@@ -173,6 +227,7 @@ export default function TeacherHomework() {
             <input className="input" placeholder="e.g. Exercise 3.1 – Q1 to Q10"
               value={form.desc} onChange={e => setForm(f=>({...f,desc:e.target.value}))} />
           </div>
+<<<<<<< HEAD
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="label">Subject</label>
@@ -181,6 +236,16 @@ export default function TeacherHomework() {
             <div>
               <label className="label">Class</label>
               <input className="input bg-slate-50 text-slate-500 cursor-not-allowed" value={form.class} readOnly />
+=======
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="label">Subject</label>
+              <input className="input" value={form.subject} readOnly className="input bg-slate-50 text-slate-500 cursor-not-allowed" />
+            </div>
+            <div>
+              <label className="label">Class</label>
+              <input className="input" value={form.class} readOnly className="input bg-slate-50 text-slate-500 cursor-not-allowed" />
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             </div>
           </div>
           <div>

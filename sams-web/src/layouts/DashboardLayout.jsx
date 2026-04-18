@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { useState, useRef, useEffect } from 'react'
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom'
 import { Menu, Bell, Search, CheckCircle, Info, Calendar, AlertTriangle } from 'lucide-react'
@@ -7,17 +8,32 @@ import { useAuth } from '../context/AuthContext'
 import { Footer } from '../components/ui'
 import ErrorBoundary from '../components/ErrorBoundary'
 
+=======
+import { useState } from 'react'
+import { Outlet, useLocation } from 'react-router-dom'
+import { Menu, Bell, Search } from 'lucide-react'
+import { Sidebar } from './Sidebar'
+import { useAuth } from '../context/AuthContext'
+
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
 /* Derive page title from current path */
 function getTitle(pathname) {
   const map = {
     '/teacher':             'Dashboard',
     '/teacher/syllabus':    'Syllabus Tracking',
+<<<<<<< HEAD
+=======
+    '/teacher/homework':    'Homework & Classwork',
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
     '/teacher/lo':          'Learning Outcomes',
     '/teacher/analytics':   'Performance Analytics',
     '/teacher/schedule':    'Micro Schedule',
     '/teacher/leave':       'Leave Management',
+<<<<<<< HEAD
     '/teacher/profile':     'My Profile',
     '/teacher/notifications': 'Notifications Center',
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
     '/admin':               'School Overview',
     '/admin/syllabus':      'Syllabus Status',
     '/admin/award-lo':      'Award LO Scores',
@@ -27,14 +43,18 @@ function getTitle(pathname) {
     '/admin/users':         'User Management',
     '/admin/timetable':     'Timetable & Marks',
     '/admin/leave':         'Leave Approval',
+<<<<<<< HEAD
     '/admin/completion-report': 'Completion Report',
     '/admin/notifications': 'Admin Notifications',
+=======
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
   }
   return map[pathname] ?? 'SAMS'
 }
 
 export function DashboardLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false)
+<<<<<<< HEAD
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const { user } = useAuth()
@@ -94,6 +114,18 @@ export function DashboardLayout() {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Sticky Header */}
         <header className="sticky top-0 z-10 bg-white border-b border-slate-100 flex-shrink-0 h-14 px-4 lg:px-6 flex items-center justify-between">
+=======
+  const { user } = useAuth()
+  const { pathname } = useLocation()
+
+  return (
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+      <Sidebar mobileOpen={drawerOpen} onClose={() => setDrawerOpen(false)} />
+
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        {/* Top Navbar */}
+        <header className="flex items-center justify-between px-4 lg:px-6 h-14 bg-white border-b border-slate-100 flex-shrink-0 z-10">
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
           <div className="flex items-center gap-3">
             <button
               onClick={() => setDrawerOpen(true)}
@@ -110,12 +142,17 @@ export function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2">
+<<<<<<< HEAD
             {/* Search */}
+=======
+            {/* Search (decorative on mobile) */}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-sm w-48">
               <Search size={14} />
               <span>Search…</span>
             </div>
 
+<<<<<<< HEAD
             {/* Notifications */}
             <div className="relative" ref={notifRef}>
               <button 
@@ -163,12 +200,22 @@ export function DashboardLayout() {
               )}
             </div>
 
+=======
+            {/* Notification bell */}
+            <button className="relative p-2 rounded-xl hover:bg-slate-100 text-slate-500">
+              <Bell size={18} />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full ring-2 ring-white" />
+            </button>
+
+            {/* Avatar */}
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
             <div className="w-8 h-8 rounded-xl bg-brand-600 flex items-center justify-center ml-1">
               <span className="text-white text-xs font-bold">{user?.name?.[0]}</span>
             </div>
           </div>
         </header>
 
+<<<<<<< HEAD
         {/* Scrollable Main */}
         <main className="flex-1 overflow-y-auto scrollbar-thin flex flex-col">
           <div className="p-4 lg:p-6 max-w-7xl mx-auto w-full flex-1">
@@ -177,6 +224,13 @@ export function DashboardLayout() {
             </ErrorBoundary>
           </div>
           <Footer />
+=======
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto scrollbar-thin">
+          <div className="p-4 lg:p-6 max-w-7xl mx-auto">
+            <Outlet />
+          </div>
+>>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
         </main>
       </div>
     </div>

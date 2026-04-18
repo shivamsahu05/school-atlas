@@ -27,8 +27,6 @@ export default function TeacherLeave() {
   const [tab, setTab] = useState('history')
   const [form, setForm] = useState({ type: '', from: '', to: '', reason: '' })
   const [submitted, setSubmitted] = useState(false)
-
-  // Urgent leave state
   const [urgentForm, setUrgentForm] = useState({ description: '', from: '', to: '' })
   const [urgentSubmitted, setUrgentSubmitted] = useState(false)
 
@@ -36,8 +34,6 @@ export default function TeacherLeave() {
   const approved = myLeaves.filter(l => l?.status === 'Approved').length
   const pending = myLeaves.filter(l => l?.status === 'Pending').length
   const rejected = myLeaves.filter(l => l?.status === 'Rejected').length
-
-  // Filter forced leaves
   const forcedLeaves = myLeaves.filter(l => l.isForced === true)
 
   const daysNotice = daysUntil(form.from)
@@ -61,14 +57,12 @@ export default function TeacherLeave() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* KPI cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <StatCard title="Approved" value={approved} icon={CheckCircle} color="green" />
         <StatCard title="Pending" value={pending} icon={Clock} color="amber" />
         <StatCard title="Rejected" value={rejected} icon={XCircle} color="red" />
       </div>
 
-      {/* Salary deduction global notice for rejected leaves */}
       {rejected > 0 && (
         <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 rounded-xl px-4 py-3">
           <Info size={16} className="text-rose-500 flex-shrink-0 mt-0.5" />
@@ -81,7 +75,6 @@ export default function TeacherLeave() {
         </div>
       )}
 
-      {/* Forced leave warning banner */}
       {forcedLeaves.length > 0 && (
         <div className="flex items-start gap-3 bg-purple-50 border border-purple-200 rounded-xl px-4 py-3">
           <Zap size={16} className="text-purple-600 flex-shrink-0 mt-0.5" />
@@ -95,14 +88,12 @@ export default function TeacherLeave() {
         </div>
       )}
 
-      {/* Tab panel */}
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <SectionHeader title="Leave Management" subtitle="Apply & track your requests" />
           <Tabs tabs={TABS} active={tab} onChange={setTab} />
         </div>
 
-        {/* ── History ── */}
         {tab === 'history' && (
           <div className="space-y-3">
             {myLeaves.map(leave => (
@@ -121,7 +112,6 @@ export default function TeacherLeave() {
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed max-w-sm">{leave?.reason ?? '-'}</p>
                     <p className="text-[10px] text-slate-400 mt-1">Applied on: {leave?.applied ?? '-'}</p>
                     
-                    {/* Show salary deduction info for forced leaves */}
                     {leave?.isForced && leave?.deductionDays > 0 && (
                       <p className="flex items-center gap-1 mt-2 text-[10px] font-semibold text-amber-700 bg-amber-50 px-2 py-1 rounded-md border border-amber-100 w-fit">
                         <IndianRupee size={10} /> Salary deduction: {leave.deductionDays} day(s)
@@ -147,7 +137,6 @@ export default function TeacherLeave() {
           </div>
         )}
 
-        {/* ── Apply Regular Leave ── */}
         {tab === 'apply' && (
           <>
             {submitted ? (
@@ -215,10 +204,9 @@ export default function TeacherLeave() {
                   </div>
                 </div>
 
-                {/* Late submission warning */}
                 {isLate && (
                   <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
-                    <AlertTriangle size={15} className="text-amber-500 flex-shrink-0 mt-0.5" />
+                    <AlertTriangle size={15} className="text-amber Asc 500 flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-sm font-semibold text-amber-800">Late Submission Warning</p>
                       <p className="text-xs text-amber-700 mt-0.5">
@@ -249,7 +237,6 @@ export default function TeacherLeave() {
           </>
         )}
 
-        {/* ── Urgent Leave ── */}
         {tab === 'urgent' && (
           <>
             {urgentSubmitted ? (
@@ -274,7 +261,6 @@ export default function TeacherLeave() {
               </div>
             ) : (
               <div className="max-w-xl">
-                {/* Urgent leave info banner */}
                 <div className="flex items-start gap-3 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-5">
                   <Zap size={18} className="text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
@@ -286,7 +272,6 @@ export default function TeacherLeave() {
                   </div>
                 </div>
 
-                {/* Auto-filled date & time */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5">
                   <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Leave Effective From</p>
                   <div className="flex items-center gap-4">
@@ -301,7 +286,6 @@ export default function TeacherLeave() {
                 </div>
 
                 <form onSubmit={handleUrgentSubmit} className="space-y-5">
-                  {/* From / To Date */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="label">From Date</label>
@@ -325,7 +309,6 @@ export default function TeacherLeave() {
                     </div>
                   </div>
 
-                  {/* Description */}
                   <div>
                     <label className="label">Description / Reason</label>
                     <textarea
@@ -341,7 +324,6 @@ export default function TeacherLeave() {
                     </p>
                   </div>
 
-                  {/* Salary warning */}
                   <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                     <AlertTriangle size={13} className="text-amber-500 flex-shrink-0" />
                     <span className="text-xs text-amber-700 font-medium">
