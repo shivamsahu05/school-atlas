@@ -1,5 +1,5 @@
 // src/app.js
-<<<<<<< HEAD
+
 require('dotenv').config()
 const express  = require('express')
 const cors     = require('cors')
@@ -82,7 +82,6 @@ app.listen(PORT, () => {
 })
 
 module.exports = app
-=======
 require('dotenv').config();
 
 const express = require('express');
@@ -198,4 +197,3 @@ if (require.main === module) {
 
 // Export for testing or serverless wrappers
 module.exports = app;
->>>>>>> b1b479845e53524359717104ab47c7124a6cfd6d
