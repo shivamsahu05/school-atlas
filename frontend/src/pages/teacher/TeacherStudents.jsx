@@ -59,12 +59,15 @@ export default function TeacherStudents() {
 
   // Selection
   const [selectedStudent, setSelectedStudent] = useState(null)
+  const [isPromoteSectionModalOpen, setIsPromoteSectionModalOpen] = useState(false)
+  const [promoteData, setPromoteData] = useState(null)
+  const [selectedTargetSection, setSelectedTargetSection] = useState('')
 
   // Form State
   const [form, setForm] = useState({
     name: '', father_name: '', mother_name: '', gender: 'Male',
     class_name: '', section: '', class_id: '', mobile: '', optional_mobile: '', address: '',
-    dob: '', remarks: '', roll_no: '', isNewStudent: false
+    dob: '', remarks: '', roll_no: '', house: 'Not Assigned', isNewStudent: false
   })
 
   const [uploadLoading, setUploadLoading] = useState(false)
@@ -97,9 +100,14 @@ export default function TeacherStudents() {
     setUploadLoading(true)
     try {
       const res = await studentsApi.bulkUpload(formData)
-      setUploadResults(res.results)
-      toast.success(res.message)
-      fetchAllData()
+      const summary = res.data?.[0] || res.data || res.results || {};
+      setUploadResults({
+        total: summary.total || summary.totalRows || summary.inserted || 0,
+        success: summary.success || summary.inserted || 0,
+        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0
+      });
+      toast.success(res.message || 'Upload successful')
+      await fetchAllData()
     } catch (err) {
       toast.error(err.response?.data?.message || 'Bulk upload failed')
     } finally {
@@ -177,7 +185,8 @@ export default function TeacherStudents() {
         dob: form.dob || null,
         remarks: form.remarks?.trim() || null,
         roll_no: form.roll_no?.trim() || null,
-        status: form.status || 'Active'
+        status: form.status || 'Active',
+        house: form.house || 'Not Assigned'
       }
 
       if (editId) {
@@ -201,7 +210,7 @@ export default function TeacherStudents() {
     setForm({ 
       name: '', father_name: '', mother_name: '', gender: 'Male', 
       class_id: '', section_id: '', mobile: '', optional_mobile: '', address: '', 
-      dob: '', remarks: '', roll_no: '', isNewStudent: false, status: 'Active'
+      dob: '', remarks: '', roll_no: '', house: 'Not Assigned', isNewStudent: false, status: 'Active'
     })
     setAlert(null)
     setEditId(null)
@@ -242,46 +251,49 @@ export default function TeacherStudents() {
       remarks: row.remarks || '',
       roll_no: row.roll_no || '',
       status: row.status || 'Active',
+      house: row.house || 'Not Assigned',
       isNewStudent: false 
     })
     setEditId(row.id)
     setIsAddModalOpen(true)
   }
 
-  const handleLifecycleAction = async (student, action) => {
+  const handleLifecycleAction = async (student, action, extra = {}) => {
     try {
-      let status = 'Active'
-      if (action === 'fail') status = 'Failed'
-      else if (action === 'graduate') status = 'Graduated'
+      const res = await studentsApi.lifecycle(student.id, action, extra)
+      
+      if (res.needs_section) {
+        setPromoteData(res);
+        setIsPromoteSectionModalOpen(true);
+        setSelectedTargetSection(res.sections[0]?.id || '');
+        return;
+      }
 
-      await studentsApi.update(student.id, { status })
-      toast.success(`Student status updated to ${status}`)
+      if (res.needs_graduation_confirm) {
+        setConfirmDialog({
+          isOpen: true,
+          title: "Highest Class Reached",
+          message: res.message,
+          type: "primary",
+          onConfirm: () => handleLifecycleAction(student, 'graduate')
+        });
+        return;
+      }
+
+      toast.success(res.message || 'Student lifecycle updated successfully')
       setIsLifecycleModalOpen(false)
+      setIsPromoteSectionModalOpen(false)
+      setPromoteData(null)
       fetchAllData()
     } catch (err) {
-      toast.error('Failed to update lifecycle status')
+      toast.error(err.response?.data?.message || 'Failed to update lifecycle status')
     }
   }
 
-  const handleDirectPromote = (student) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Promote Student",
-      message: `Are you sure you want to promote ${student.name}?`,
-      type: "primary",
-      onConfirm: async () => {
-        try {
-          toast.success(`${student.name} promoted successfully`)
-          fetchAllData()
-        } catch (err) {
-          toast.error('Promotion failed')
-        }
-      }
-    });
-  }
+
 
   const COLUMNS = [
-    { key: 'id', label: 'ID', sortable: true },
+    { key: 'sr_no', label: 'Sr No', sortable: false, render: (_, __, { rowIndex }) => <span className="font-medium text-slate-500">{rowIndex + 1}</span> },
     {
       key: 'name', label: 'Student Name', sortable: true,
       render: (v, row) => (
@@ -304,6 +316,19 @@ export default function TeacherStudents() {
       render: v => <span className="text-xs font-medium text-slate-600">{v || 'N/A'}</span>
     },
     {
+      key: 'house', label: 'HOUSE',
+      render: v => (
+        <span className={clsx(
+          "px-2 py-0.5 rounded text-[10px] font-black tracking-wider uppercase border",
+          v === 'INDIRA - BLUE' ? "bg-blue-50 text-blue-600 border-blue-100" :
+          v === 'BHABHA - RED' ? "bg-red-50 text-red-600 border-red-100" :
+          "bg-slate-50 text-slate-400 border-slate-100"
+        )}>
+          {v === 'INDIRA - BLUE' ? '🔵 INDIRA' : v === 'BHABHA - RED' ? '🔴 BHABHA' : v || 'Not Assigned'}
+        </span>
+      )
+    },
+    {
       key: 'status', label: 'Status',
       render: v => <StatusBadge status={v || 'Active'} />
     },
@@ -311,13 +336,6 @@ export default function TeacherStudents() {
       key: 'actions', label: 'Management',
       render: (_, row) => (
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => handleDirectPromote(row)}
-            className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors"
-            title="Promote"
-          >
-            <TrendingUp size={15} />
-          </button>
           <button
             onClick={() => { setSelectedStudent(row); setIsLifecycleModalOpen(true); }}
             className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-500 transition-colors"
@@ -359,12 +377,27 @@ export default function TeacherStudents() {
   ]
 
   const handleExport = () => {
-    const csvHeaders = ['ID', 'Name', 'Roll No', 'Class', 'Section', 'Father Name', 'Mobile', 'Status']
+    const csvHeaders = ['Sr No', 'Class', 'Sec', 'Roll No', 'Student Name', 'Father Name', 'Mother Name', 'Gender', 'DOB', 'House', 'Address', 'Mobile 1', 'Mobile 2', 'Remarks']
     const csvContent = "data:text/csv;charset=utf-8,"
       + csvHeaders.join(',') + "\n"
-      + filteredStudents.map(s => [
-          s.id, s.name, s.roll_no, s.class?.class_name, s.class?.section, s.father_name, s.mobile, s.status
-        ].join(',')).join("\n")
+      + filteredStudents.map((s, index) => {
+          return [
+            index + 1,
+            `"${s.class?.class_name || s.class?.name || ''}"`,
+            `"${s.class?.section || ''}"`,
+            `"${s.roll_no || ''}"`,
+            `"${s.name || ''}"`,
+            `"${s.father_name || ''}"`,
+            `"${s.mother_name || ''}"`,
+            `"${s.gender || 'Male'}"`,
+            `"${s.dob ? s.dob.substring(0, 10) : ''}"`,
+            `"${s.house || 'Not Assigned'}"`,
+            `"${s.address || ''}"`,
+            `"${s.mobile || ''}"`,
+            `"${s.optional_mobile || ''}"`,
+            `"${s.remarks || ''}"`
+          ].join(',')
+        }).join("\n")
 
     const encodedUri = encodeURI(csvContent)
     const link = document.createElement("a")
@@ -485,6 +518,12 @@ export default function TeacherStudents() {
               />
             )}
             <FormInput label="DOB" type="date" value={form.dob} onChange={e => setForm({ ...form, dob: e.target.value })} />
+            <SelectDropdown 
+              label="House" 
+              options={['Not Assigned', 'INDIRA - BLUE', 'BHABHA - RED']} 
+              value={form.house} 
+              onChange={e => setForm({ ...form, house: e.target.value })} 
+            />
 
             <FormInput label="Primary Mobile *" value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} maxLength={10} />
             <FormInput label="Optional Mobile" value={form.optional_mobile} onChange={e => setForm({ ...form, optional_mobile: e.target.value })} maxLength={10} />
@@ -519,15 +558,60 @@ export default function TeacherStudents() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              <button onClick={() => handleLifecycleAction(selectedStudent, 'promote')} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-emerald-100 hover:bg-emerald-50 text-emerald-700 font-bold text-[10px]">
-                <UserCheck size={16} /> PROMOTE
+              <button onClick={() => handleLifecycleAction(selectedStudent, 'promote')} className="p-3 rounded-xl border border-emerald-100 hover:bg-emerald-50 text-emerald-700 font-bold text-xs tracking-wider">
+                PROMOTE
               </button>
-              <button onClick={() => handleLifecycleAction(selectedStudent, 'fail')} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-amber-100 hover:bg-amber-50 text-amber-700 font-bold text-[10px]">
-                <RefreshCw size={16} /> FAIL/REPEAT
+              <button onClick={() => handleLifecycleAction(selectedStudent, 'fail')} className="p-3 rounded-xl border border-amber-100 hover:bg-amber-50 text-amber-700 font-bold text-xs tracking-wider">
+                FAIL / REPEAT
               </button>
-              <button onClick={() => handleLifecycleAction(selectedStudent, 'graduate')} className="flex flex-col items-center gap-2 p-3 rounded-xl border border-purple-100 hover:bg-purple-50 text-purple-700 font-bold text-[10px]">
-                <GraduationCap size={16} /> GRADUATE
+              <button onClick={() => handleLifecycleAction(selectedStudent, 'graduate')} className="p-3 rounded-xl border border-purple-100 hover:bg-purple-50 text-purple-700 font-bold text-xs tracking-wider">
+                GRADUATE
               </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Section Selection Modal for Promotion */}
+      <Modal 
+        open={isPromoteSectionModalOpen} 
+        onClose={() => setIsPromoteSectionModalOpen(false)} 
+        title="Select Section for Promotion" 
+        size="sm"
+      >
+        {promoteData && (
+          <div className="space-y-6">
+            <div className="bg-brand-50 p-4 rounded-2xl border border-brand-100">
+              <p className="text-xs font-bold text-brand-600 uppercase tracking-widest mb-1">Student</p>
+              <p className="text-lg font-black text-slate-800">{promoteData.student_name}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-xs font-bold text-slate-400">{selectedStudent?.class?.class_name}</span>
+                <ChevronRight size={14} className="text-slate-300" />
+                <span className="text-xs font-black text-brand-700">{promoteData.next_class_name}</span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-black text-slate-500 uppercase ml-1">Select Target Section</label>
+              <select 
+                className="select w-full"
+                value={selectedTargetSection}
+                onChange={e => setSelectedTargetSection(e.target.value)}
+              >
+                {promoteData.sections.map(s => (
+                  <option key={s.id} value={s.id}>Section {s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button 
+                onClick={() => handleLifecycleAction(selectedStudent, 'promote', { target_section_id: Number(selectedTargetSection) })}
+                className="btn-primary flex-1 justify-center py-3"
+              >
+                Confirm Promotion
+              </button>
+              <button onClick={() => setIsPromoteSectionModalOpen(false)} className="btn-secondary">Cancel</button>
             </div>
           </div>
         )}
@@ -571,9 +655,20 @@ export default function TeacherStudents() {
                     <span className="text-xs font-semibold text-slate-500">DOB</span>
                     <span className="text-xs font-bold text-slate-800">{selectedStudent.dob ? new Date(selectedStudent.dob).toLocaleDateString('en-GB') : 'N/A'}</span>
                   </div>
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center border-b border-slate-50 pb-2">
                     <span className="text-xs font-semibold text-slate-500">Gender</span>
                     <span className="text-xs font-bold text-slate-800">{selectedStudent.gender || 'N/A'}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-semibold text-slate-500">House</span>
+                    <span className={clsx(
+                      "text-[10px] font-black px-2 py-0.5 rounded",
+                      selectedStudent.house === 'INDIRA - BLUE' ? "bg-blue-100 text-blue-700" :
+                      selectedStudent.house === 'BHABHA - RED' ? "bg-red-100 text-red-700" :
+                      "bg-slate-100 text-slate-600"
+                    )}>
+                      {selectedStudent.house || 'Not Assigned'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -647,7 +742,8 @@ export default function TeacherStudents() {
               </div>
               <div>
                 <h4 className="font-bold text-slate-800">Step 1: Download Template</h4>
-                <p className="text-xs text-slate-500 mt-1 mb-4">Use our standard format to ensure data consistency.</p>
+                <p className="text-xs text-slate-500 mt-1 mb-2">Use our standard format to ensure data consistency.</p>
+                <p className="text-[10px] font-bold text-brand-600 bg-brand-100/50 px-2 py-1.5 rounded-lg mb-4">💡 System will auto-detect columns if format differs.</p>
                 <button onClick={handleDownloadTemplate} className="btn-secondary py-2 text-xs">Download Excel Template</button>
               </div>
             </div>

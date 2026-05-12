@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 
-const API_URL = import.meta.env.VITE_API_URL?.replace(/\/api$/, '') || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL?.replace(/\/api$/, '') || '';
 
 const getToken = () => {
     try {

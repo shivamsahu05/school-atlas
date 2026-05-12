@@ -111,6 +111,7 @@ export const teachersApi = {
   bulkUpload:    (form)         => api.post('/teachers/bulk-upload', form, {
     headers: { 'Content-Type': 'multipart/form-data' }
   }).then(r => r.data),
+  downloadTemplate: () => api.get('/teachers/template-download', { responseType: 'blob' }),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -122,6 +123,7 @@ export const studentsApi = {
   create:     (data)         => api.post('/students',         data).then(r => r.data),
   update:     (id, data)     => api.put(`/students/${id}`,    data).then(r => r.data),
   delete:     (id)           => api.delete(`/students/${id}`).then(r => r.data),
+  lifecycle:  (id, action, data = {}) => api.post(`/students/${id}/lifecycle`, { action, ...data }).then(r => r.data),
   block:      (id)           => api.put(`/students/${id}/block`).then(r => r.data),
   unblock:    (id)           => api.put(`/students/${id}/unblock`).then(r => r.data),
   bulkUpload: (form)         => api.post('/students/bulk-upload', form, {
@@ -183,6 +185,11 @@ export const syllabusApi = {
   markDone: (id)           => api.put(`/syllabus/${id}`, { is_completed: true }).then(r => r.data),
   downloadTemplate: ()     => api.get('/syllabus/template', { responseType: 'blob' }),
   bulkUpload: (formData)   => api.post('/syllabus/bulk-upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+  // New Syllabus Plan Methods
+  getPlan: (params = {}) => api.get('/syllabus/plan', { params }).then(r => r.data),
+  uploadPlan: (formData) => api.post('/syllabus/upload-syllabus', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+  addMicroSchedule: (data) => api.post('/syllabus/add-micro-schedule', data).then(r => r.data),
+  exportPlan: (params = {}) => api.get('/syllabus/export-syllabus', { params, responseType: 'blob' }),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -215,6 +222,7 @@ export const loApi = {
   getSummary:(params = {})  => api.get('/teacher-lo/summary',  { params }).then(r => r.data),
   getAssignments: ()        => api.get('/teacher-lo/assignments').then(r => r.data),
   getTopics: (cId, sId)     => api.get('/teacher-lo/topics', { params: { class_id: cId, subject_id: sId } }).then(r => r.data),
+  getTeacherAnalytics: (params = {}) => api.get('/lo/teacher', { params }).then(r => r.data),
 }
 
 // Admin LO (award principal scores)
@@ -271,11 +279,14 @@ export const leaveApi = {
 // ═════════════════════════════════════════════════════════════════════════════
 export const scheduleApi = {
   getMySchedule:    (params = {}) => api.get('/teacher/schedule', { params }).then(r => r.data),
+  getTimetable:     ()            => api.get('/teacher/timetable').then(r => r.data),
   getMyAssignments: ()            => api.get('/teacher/schedule/assignments').then(r => r.data),
   markComplete:     (data)        => api.post('/teacher/schedule/update', data).then(r => r.data),
   getMicroSchedule: (params = {}) => api.get('/teacher/schedule/micro-schedule', { params }).then(r => r.data),
   saveMicroSchedule:(data)        => api.post('/teacher/schedule/micro-schedule', data).then(r => r.data),
   getTeacherSubjects: (params = {}) => api.get('/teacher/schedule/subjects', { params }).then(r => r.data),
+  getItemStudents: (itemId, classId, sectionId) => api.get(`/teacher/micro-schedule/item/${itemId}/students`, { params: { class_id: classId, section_id: sectionId } }).then(r => r.data),
+  saveStudentStatus: (itemId, data) => api.post(`/teacher/micro-schedule/item/${itemId}/students/save`, data).then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

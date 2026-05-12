@@ -29,7 +29,7 @@ export default function AdminCompetitions() {
 
   // Forms
   const [form, setForm] = useState({
-    title: '', date: '', location: '', event_type: 'school', target_class: '', classPrefix: '', section: '', subject: '', assigned_teacher: '', description: '', status: 'upcoming'
+    title: '', date: '', location: '', event_type: 'academic_competition', target_class: '', classPrefix: '', section: '', subject: '', assigned_teacher: '', description: '', status: 'upcoming'
   })
 
   // Participants & Winners State
@@ -61,7 +61,7 @@ export default function AdminCompetitions() {
   const [matchedTeachers, setMatchedTeachers] = useState([])
 
   useEffect(() => {
-    if (form.event_type === 'class' && form.classPrefix && form.section && form.subject) {
+    if (form.event_type === 'class_competition' && form.classPrefix && form.section && form.subject) {
       // Logic for assigned teacher: Match based on class (with potential 'Grade ' prefix) and subject.
       const matches = dbTeachers.filter(t => {
         const targetClass = `${form.classPrefix}-${form.section}`
@@ -112,8 +112,19 @@ export default function AdminCompetitions() {
   const fetchEvents = async () => {
     try {
       setLoading(true)
-      const res = await eventApi.getAll()
-      setEvents(res.data.events || [])
+      const res = await eventApi.getAll({ category: 'competition' })
+      const all = res.data?.events || []
+      const autoCompletedEvents = all.map(e => {
+        if (e.event_date) {
+           const eventDate = new Date(e.event_date);
+           eventDate.setHours(23, 59, 59, 999);
+           if (new Date() > eventDate) {
+              e.status = 'completed';
+           }
+        }
+        return e;
+      })
+      setEvents(autoCompletedEvents)
     } catch (err) {
       toast.error('Failed to load events')
     } finally {
@@ -146,7 +157,7 @@ export default function AdminCompetitions() {
     }
     try {
       let finalTargetClass = form.target_class;
-      if (form.event_type === 'class') {
+      if (form.event_type === 'class_competition') {
         finalTargetClass = [form.classPrefix, form.section, form.subject].filter(Boolean).join(' - ');
         if (form.assigned_teacher) {
           finalTargetClass += ` (${form.assigned_teacher})`
@@ -159,6 +170,7 @@ export default function AdminCompetitions() {
         event_date: form.date,
         location: form.location,
         event_type: form.event_type,
+        category: 'competition',
         target_class: finalTargetClass,
         status: form.status
       }
@@ -196,7 +208,7 @@ export default function AdminCompetitions() {
       date: row.event_date ? row.event_date.substring(0, 10) : '',
       location: row.location || '',
       event_type: row.event_type,
-      target_class: row.event_type === 'class' ? '' : (row.target_class || ''),
+      target_class: row.event_type === 'class_competition' ? '' : (row.target_class || ''),
       classPrefix: cp,
       section: sec,
       subject: sub,
@@ -266,8 +278,8 @@ export default function AdminCompetitions() {
         <div className="flex items-center gap-3">
           <div className={clsx(
             "w-10 h-10 rounded-xl flex items-center justify-center border font-bold text-sm",
-            row.event_type === 'annual_sports' ? 'bg-rose-50 text-rose-600 border-rose-100' :
-              row.event_type === 'school' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
+            ['annual_sports', 'sports_competition'].includes(row.event_type) ? 'bg-rose-50 text-rose-600 border-rose-100' :
+              ['school', 'school_competition'].includes(row.event_type) ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
                 'bg-emerald-50 text-emerald-600 border-emerald-100'
           )}>
             <Trophy size={16} />
@@ -279,6 +291,13 @@ export default function AdminCompetitions() {
               {row.target_class ? ` · ${row.target_class}` : ''}
             </span>
           </div>
+        </div>
+      )
+    },
+    { key: 'creator', label: 'Created By', render: (_, row) => (
+        <div className="text-xs">
+          <span className="font-bold text-slate-700">{row.creator?.name || 'Unknown'}</span>
+          <span className="block text-[10px] text-slate-400 capitalize">{row.creator?.role || 'System'}</span>
         </div>
       )
     },
@@ -317,29 +336,29 @@ export default function AdminCompetitions() {
     <div className="space-y-6 animate-fade-in pb-10">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Manage Events</h1>
-          <p className="text-slate-500 font-medium">Coordinate class activities, school festivals, and sports</p>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Competitions</h1>
+          <p className="text-slate-500 font-medium">Manage sports, academic contests, and house matches</p>
         </div>
         <button onClick={() => {
-          setForm({ title: '', date: '', location: '', event_type: 'school', target_class: '', classPrefix: '', section: '', subject: '', assigned_teacher: '', description: '', status: 'upcoming' })
+          setForm({ title: '', date: '', location: '', event_type: 'academic_competition', target_class: '', classPrefix: '', section: '', subject: '', assigned_teacher: '', description: '', status: 'upcoming' })
           setIsModalOpen(true)
         }} className="btn-primary shadow-lg shadow-brand-200 gap-2">
-          <Plus size={18} /> Create Event
+          <Plus size={18} /> New Competition
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard title="Total Events" value={events.length} icon={Trophy} color="brand" />
-        <StatCard title="Upcoming" value={events.filter(e => e.status === 'upcoming').length} icon={Calendar} color="amber" />
-        <StatCard title="Completed" value={events.filter(e => e.status === 'completed').length} icon={CheckCircle} color="emerald" />
+        <StatCard title="Total Contests" value={events.length} icon={Trophy} color="brand" />
+        <StatCard title="Ongoing" value={events.filter(e => e.status === 'ongoing').length} icon={Clock} color="amber" />
+        <StatCard title="Winners Decided" value={events.filter(e => e.status === 'completed').length} icon={CheckCircle} color="emerald" />
       </div>
 
       <div className="bg-slate-100 p-1.5 rounded-xl border border-slate-200/60 inline-flex">
         {[
-          { id: 'all', label: 'All Events' },
-          { id: 'class', label: 'Class Events' },
-          { id: 'school', label: 'School Events' },
-          { id: 'annual_sports', label: 'Annual Sports' }
+          { id: 'all', label: 'All Contests' },
+          { id: 'academic_competition', label: 'Academic' },
+          { id: 'sports_competition', label: 'Sports' },
+          { id: 'inter_house', label: 'Inter-house' }
         ].map(tab => (
           <button
             key={tab.id}
@@ -357,37 +376,24 @@ export default function AdminCompetitions() {
       </div>
 
       {/* CREATE EVENT MODAL */}
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? "Edit Event" : "Create New Event"} size="md">
+      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? "Edit Competition" : "New Competition"} size="md">
         <div className="space-y-4">
-          {/* Type Selection */}
-          <div>
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-1.5 ml-1">1. Select Event Type</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[
-                { id: 'class', icon: Users, label: 'Class Event', desc: 'Internal class activity' },
-                { id: 'school', icon: Trophy, label: 'School Event', desc: 'Festivals, debates' },
-                { id: 'annual_sports', icon: Medal, label: 'Annual Sports', desc: 'Athletics, games' }
-              ].map(type => (
-                <button
-                  key={type.id}
-                  onClick={() => setForm({ ...form, event_type: type.id })}
-                  className={clsx(
-                    "p-2.5 rounded-xl border-2 text-left transition-all flex flex-col items-center sm:items-start text-center sm:text-left",
-                    form.event_type === type.id
-                      ? "border-indigo-500 bg-indigo-50/50"
-                      : "border-slate-100 bg-white hover:border-slate-200"
-                  )}
-                >
-                  <type.icon size={16} className={form.event_type === type.id ? "text-indigo-600 mb-1.5" : "text-slate-400 mb-1.5"} />
-                  <p className={clsx("font-bold text-[11px] leading-tight", form.event_type === type.id ? "text-indigo-900" : "text-slate-700")}>{type.label}</p>
-                  <p className="text-[9px] text-slate-500 mt-0.5 leading-tight">{type.desc}</p>
-                </button>
-              ))}
-            </div>
-          </div>
+          <SelectDropdown
+            label="Competition Category"
+            value={form.event_type}
+            onChange={e => setForm({...form, event_type: e.target.value})}
+            options={[
+              { value: 'academic_competition', label: '🎓 Academic Competition' },
+              { value: 'sports_competition', label: '⚽ Sports Competition' },
+              { value: 'inter_house', label: '🏠 Inter-house Match' },
+              { value: 'class_competition', label: '✍️ Class/Subject Contest' },
+              { value: 'school_competition', label: '🌍 School-wide Event' },
+              { value: 'annual_sports', label: '🏆 Annual Sports Meet' }
+            ]}
+          />
 
           <div className="border-t border-slate-100 pt-3">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 ml-1">2. Event Details</label>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5 ml-1">Competition Details</label>
             <div className="space-y-3">
               <FormInput label="Event Title" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="e.g. Science Fair 2024" />
 
@@ -407,12 +413,12 @@ export default function AdminCompetitions() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <FormInput label="Location" value={form.location} onChange={e => setForm({ ...form, location: e.target.value })} placeholder="e.g. Main Hall" />
-                {form.event_type !== 'class' && (
+                {form.event_type !== 'class_competition' && (
                   <FormInput label="Target Audience" value={form.target_class} onChange={e => setForm({ ...form, target_class: e.target.value })} placeholder="e.g. All Students" />
                 )}
               </div>
 
-              {form.event_type === 'class' && (
+              {form.event_type === 'class_competition' && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <SelectDropdown label="Class" value={form.classPrefix} onChange={e => setForm({ ...form, classPrefix: e.target.value })} options={[{ value: '', label: 'Select Class' }, ...classOptions]} />
@@ -443,14 +449,14 @@ export default function AdminCompetitions() {
           </div>
 
           <div className="flex gap-2 pt-3 border-t border-slate-100">
-            <button onClick={handleSaveEvent} className="btn-primary flex-1 py-2.5 text-sm">{form.id ? 'Save Changes' : 'Create Event'}</button>
+            <button onClick={handleSaveEvent} className="btn-primary flex-1 py-2.5 text-sm">{form.id ? 'Save Changes' : 'Create Competition'}</button>
             <button onClick={() => setIsModalOpen(false)} className="btn-secondary px-6 py-2.5 text-sm">Cancel</button>
           </div>
         </div>
       </Modal>
 
       {/* EVENT MANAGEMENT DETAIL MODAL */}
-      <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title="Event Management" size="xl">
+      <Modal open={isDetailModalOpen} onClose={() => setIsDetailModalOpen(false)} title="Competition Management" size="xl">
         {activeEvent && (
           <div className="space-y-8">
             {/* Header info */}

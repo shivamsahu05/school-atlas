@@ -1,62 +1,67 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
-  RefreshCw, Users, ShieldAlert, FileText, 
-  CheckCircle, ArrowRightCircle, AlertTriangle,
-  History, Settings, Trash2, Database
+  RefreshCw, ShieldAlert, CheckCircle, ArrowRightCircle,
+  Trash2
 } from 'lucide-react'
 import { 
-  StatCard, SectionHeader, StatusBadge, 
+  SectionHeader, StatusBadge, 
   Modal, InfoRow 
 } from '../../components/ui/index.jsx'
+import { systemApi } from '../../services/schoolApi'
+import { toast } from 'react-hot-toast'
 
 /**
  * School Yearly System Tools
- * (Bulk Promotion, Session Reset, Data Archiving)
  */
 export default function AdminSystemTools() {
-  const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false)
-  const [promoteStatus, setPromoteStatus] = useState('Idle') // Idle, Processing, Done
-  
-  const handlePromoteAll = () => {
-    setPromoteStatus('Processing')
-    setTimeout(() => {
-      setPromoteStatus('Done')
-    }, 2000)
+  const [activeSession, setActiveSession] = useState('Loading...')
+
+  useEffect(() => {
+    systemApi.getStatus().then(res => {
+      setActiveSession(res.data.session)
+    }).catch(err => {
+      setActiveSession('Unknown')
+    })
+  }, [])
+
+  const doubleConfirmAction = async (taskName, apiCall) => {
+    if (window.confirm(`WARNING: Are you sure you want to execute [${taskName}]?`)) {
+      if (window.confirm(`FINAL WARNING: This is a critical action and cannot be undone. Are you ABSOLUTELY certain you want to proceed with [${taskName}]?`)) {
+        try {
+          const res = await apiCall()
+          toast.success(res.data.message || 'Task completed successfully.')
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Failed to execute task.')
+        }
+      }
+    }
   }
 
   const TOOLS = [
     {
-      title: 'Yearly Student Promotion',
-      desc: 'Bulk promote all students to next class. Transfers history and generates new Roll numbers.',
-      icon: ArrowRightCircle,
-      color: 'blue',
-      action: () => setIsPromoteModalOpen(true)
+      title: 'Academic Year Rollover',
+      desc: 'Finalize 2023-24 data and prepare system for 2024-25. Archive old logs.',
+      icon: RefreshCw,
+      color: 'purple',
+      action: () => doubleConfirmAction('Academic Year Rollover', systemApi.rolloverYear)
     },
     {
       title: 'Teacher Permission Reset',
       desc: 'Revoke all time-bound module permissions for the new academic session.',
       icon: ShieldAlert,
       color: 'amber',
-      action: () => alert('All permissions have been reset.')
-    },
-    {
-      title: 'Academic Year Rollover',
-      desc: 'Finalize 2023-24 data and prepare system for 2024-25. Archive old logs.',
-      icon: RefreshCw,
-      color: 'purple',
-      action: () => alert('System rollover initiated...')
+      action: () => doubleConfirmAction('Teacher Permission Reset', systemApi.resetPermissions)
     },
     {
       title: 'Bulk Data Cleanup',
       desc: 'Remove duplicate student entries and legacy notification logs.',
       icon: Trash2,
       color: 'red',
-      action: () => alert('Cleanup completed.')
+      action: () => doubleConfirmAction('Bulk Data Cleanup', systemApi.cleanupData)
     }
   ]
 
   const colorMap = {
-    blue: 'bg-blue-50 text-blue-600 border-blue-100',
     amber: 'bg-amber-50 text-amber-600 border-amber-100',
     purple: 'bg-purple-50 text-purple-600 border-purple-100',
     red: 'bg-rose-50 text-rose-600 border-rose-100'
@@ -70,7 +75,7 @@ export default function AdminSystemTools() {
              <p className="text-sm text-slate-500">Critical administration tasks for session rollover and data integrity</p>
           </div>
           <div className="flex items-center gap-2">
-             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded uppercase tracking-widest">Active Session: 2023-24</span>
+             <span className="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded uppercase tracking-widest">Active Session: {activeSession}</span>
           </div>
        </div>
 
@@ -116,52 +121,6 @@ export default function AdminSystemTools() {
           </div>
        </div>
 
-       {/* Promotion Modal */}
-       <Modal open={isPromoteModalOpen} onClose={() => setIsPromoteModalOpen(false)} title="Bulk Student Promotion" size="md">
-          <div className="space-y-6">
-              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200">
-                 <div className="flex gap-3">
-                    <AlertTriangle size={20} className="text-amber-600 flex-shrink-0" />
-                    <div>
-                       <p className="text-xs font-bold text-amber-800">Critical Action Warning</p>
-                       <p className="text-[10px] text-amber-700 leading-relaxed mt-1">
-                         This will move all "Active" students to the next grade (e.g., 8th to 9th). 
-                         Please ensure all results have been finalized before proceeding. This CANNOT be undone easily.
-                       </p>
-                    </div>
-                 </div>
-              </div>
-
-              {promoteStatus === 'Idle' && (
-                <div className="space-y-4">
-                   <InfoRow label="Total Students to Promote" value="840" />
-                   <InfoRow label="Academic Year" value="2023-24 → 2024-25" />
-                   <button onClick={handlePromoteAll} className="btn-primary w-full justify-center py-3">
-                      Confirm & Start Promotion
-                   </button>
-                </div>
-              )}
-
-              {promoteStatus === 'Processing' && (
-                <div className="py-8 text-center space-y-4">
-                  <RefreshCw className="mx-auto text-brand-600 animate-spin" size={32} />
-                  <p className="text-sm font-bold text-slate-700">Moving records, please wait...</p>
-                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                     <div className="bg-brand-500 h-full w-2/3 animate-pulse" />
-                  </div>
-                </div>
-              )}
-
-              {promoteStatus === 'Done' && (
-                <div className="py-8 text-center space-y-4">
-                  <CheckCircle className="mx-auto text-emerald-500" size={48} />
-                  <p className="text-sm font-bold text-slate-700">Promotion Successful!</p>
-                  <p className="text-xs text-slate-400">All student records have been shifted to 2024-25 session.</p>
-                  <button onClick={() => setIsPromoteModalOpen(false)} className="btn-secondary px-8">Close</button>
-                </div>
-              )}
-          </div>
-       </Modal>
     </div>
   )
 }

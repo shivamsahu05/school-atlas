@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -111,6 +111,13 @@ export const observationApi = {
   getOwn: () => api.get('/teacher/observations'),
 
   create: (data) => api.post('/observations', data),
+};
+
+export const systemApi = {
+  getStatus: () => api.get('/admin/system/status'),
+  resetPermissions: () => api.post('/admin/system/reset-permissions'),
+  cleanupData: () => api.post('/admin/system/cleanup'),
+  rolloverYear: () => api.post('/admin/system/rollover'),
 };
 
 export default api;

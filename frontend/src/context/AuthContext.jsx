@@ -80,6 +80,47 @@ export function AuthProvider({ children }) {
     }
   }, [getToken])
 
+  // ─── Inactivity Timeout (5 Minutes) ────────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+
+    const INACTIVITY_LIMIT = 5 * 60 * 1000; // 5 Minutes
+    const LAST_ACTIVE_KEY = 'sams_last_active';
+    
+    // 1. Initial check on mount/login
+    const lastActive = parseInt(localStorage.getItem(LAST_ACTIVE_KEY) || '0');
+    if (lastActive && (Date.now() - lastActive > INACTIVITY_LIMIT)) {
+      console.warn('Session expired due to inactivity across browser sessions.');
+      logout();
+      return;
+    }
+
+    let timeout;
+    const startTimer = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        logout();
+        window.location.href = '/login'; // Force redirect
+      }, INACTIVITY_LIMIT);
+    };
+
+    const handleActivity = () => {
+      localStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
+      startTimer();
+    };
+
+    // Listeners for any user interaction
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(e => window.addEventListener(e, handleActivity));
+
+    handleActivity(); // Set initial timestamp and start timer
+
+    return () => {
+      if (timeout) clearTimeout(timeout);
+      events.forEach(e => window.removeEventListener(e, handleActivity));
+    };
+  }, [user, logout]);
+
   // Auto-sync on mount
   useEffect(() => {
     refreshUser()

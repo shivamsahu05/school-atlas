@@ -119,6 +119,7 @@ export default function AdminPermissions() {
   const handleGrant = async () => {
     const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
     const isStudentModule = selectedModuleKey === 'students_management';
+    const isAllModules = form.module_id === 'ALL';
 
     // Base required fields
     if (!form.teacher_id || !form.module_id || !form.start_date || !form.end_date) {
@@ -126,8 +127,8 @@ export default function AdminPermissions() {
       return
     }
 
-    // Class is required only for non-student modules
-    if (!isStudentModule && !form.class_id) {
+    // Class is required only for non-student modules, unless ALL modules are selected
+    if (!isStudentModule && !isAllModules && !form.class_id) {
       alert('Class Scope is required for this module.')
       return
     }
@@ -192,6 +193,7 @@ export default function AdminPermissions() {
 
   const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
   const isStudentModule = selectedModuleKey === 'students_management';
+  const isAllModules = form.module_id === 'ALL';
 
   // ── Table Config ───────────────────────────────────────────────────────────
 
@@ -390,6 +392,7 @@ export default function AdminPermissions() {
                       onChange={e => setForm({...form, module_id: e.target.value})}
                     >
                       <option value="">Select module...</option>
+                      <option value="ALL" className="font-bold text-brand-600">All Modules (Bulk Access)</option>
                       {Array.isArray(meta.modules) && meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
                     </select>
                     {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -398,7 +401,7 @@ export default function AdminPermissions() {
                  </div>
               </div>
 
-              {/* Class & Section Scope - Hidden for Students Management */}
+              {/* Class & Section Scope - Hidden for Students Management and All Modules (Optional) */}
               {!isEditMode && !isStudentModule && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

@@ -206,6 +206,7 @@ model students {
   email           String?        @db.VarChar(100)
   class_id        Int
   gender          students_gender?
+  house           String?        @db.VarChar(50) @default("Not Assigned")
   father_name     String?        @db.VarChar(100)
   mother_name     String?        @db.VarChar(100)
   mobile          String?        @db.VarChar(20)
@@ -259,20 +260,30 @@ model teacher_subjects {
 model syllabus {
   id                    Int       @id @default(autoincrement())
   class_id              Int
+  section_id            Int?
   subject_id            Int
+  teacher_id            Int?
   chapter               String?   @db.VarChar(100)
   topic                 String    @db.VarChar(255)
+  week                  String?   @db.VarChar(50)
   planned_start_date    DateTime? @db.Date
   planned_end_date      DateTime? @db.Date
   completed_date        DateTime? @db.Date
   is_completed          Boolean   @default(false)
+  status                String    @default("pending") @db.VarChar(50)
+  periods               Int       @default(0)
+  periods_needed        Int       @default(0)
+  learning_status       String?   @db.VarChar(50)
+  learning_outcome      String?   @db.Text
+  notebook_checked      String?   @db.VarChar(20)
+  students_data         Json?
   created_at            DateTime  @default(now())
   updated_at            DateTime  @updatedAt
 
   class   classes  @relation(fields: [class_id],   references: [id], onDelete: Cascade)
   subject subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade)
 
-  @@index([class_id, subject_id], name: "idx_syllabus")
+  @@index([class_id, subject_id, teacher_id], name: "idx_syllabus")
 }
 
 // ─── homework ─────────────────────────────────────────────────────────────────
@@ -421,6 +432,17 @@ enum school_events_type {
   class
   school
   annual_sports
+  academic_competition
+  sports_competition
+  inter_house
+  class_competition
+  school_competition
+  notice
+  celebration
+  meeting
+  workshop
+  seminar
+  science_fair
 }
 
 enum school_events_status {
@@ -529,3 +551,24 @@ model teacher_timetable {
   @@unique([class_number, section, day_of_week, time_slot_id])
 }
 
+
+// ─── syllabus_plan ───────────────────────────────────────────────────────────
+model syllabus_plan {
+  id               Int      @id @default(autoincrement())
+  class            String   @db.VarChar(50)
+  section          String   @db.VarChar(10)
+  subject          String   @db.VarChar(100)
+  month            String   @db.VarChar(20)
+  week             String   @db.VarChar(50)
+  start_date       DateTime @db.Date
+  end_date         DateTime @db.Date
+  periods          Int      @default(0)
+  chapter_topic    String   @db.VarChar(255)
+  learning_outcome String?  @db.Text
+  remarks          String?  @db.Text
+  status           String   @default("pending") @db.VarChar(20) // completed/pending
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([class, section, subject], name: "idx_syllabus_plan_query")
+}

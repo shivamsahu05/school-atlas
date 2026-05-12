@@ -3,7 +3,7 @@ const router       = require('express').Router()
 const asyncHandler = require('express-async-handler')
 const { 
   getStudents, getStudentById, createStudent, updateStudent, deleteStudent,
-  downloadStudentTemplate, bulkUploadStudents 
+  downloadStudentTemplate, bulkUploadStudents, handleLifecycle
 } = require('../controllers/studentsController')
 const { authenticate, roleCheck, permissionCheck } = require('../middleware/auth')
 const upload = require('../middleware/upload')
@@ -25,5 +25,8 @@ router.get('/:id', asyncHandler(getStudentById))
 router.post('/',   validate(createStudentSchema), asyncHandler(createStudent))
 router.put('/:id', validate(updateStudentSchema), asyncHandler(updateStudent))
 router.delete('/:id', asyncHandler(deleteStudent))
+
+// Lifecycle management
+router.post('/:id/lifecycle', asyncHandler(handleLifecycle))
 
 module.exports = router

@@ -270,12 +270,12 @@ exports.updateTeacherStatus = async (req, res) => {
 exports.downloadTeacherTemplate = async (req, res) => {
   try {
     const headers = [
-      'Name', 'Email', 'Mobile', 'Gender', 'Subject', 
-      'Qualification', 'Salary', 'Joining Date', 'Address', 'Status'
+      'Full Name', 'Email', 'Password', 'Phone (used for Login)', 'Mobile', 
+      'Date of Birth', 'Subject', 'Experience', 'Qualification', 'Salary'
     ];
 
     const sampleData = [
-      ['Jane Smith', 'jane.teacher@example.com', '9876543211', 'Female', 'Mathematics', 'M.Sc, B.Ed', '45000', '2023-01-10', '456 Avenue, City', 'active']
+      ['Jane Doe', 'jane@school.com', 'Jane@123#', '9876543210', '9876543211', '1990-05-15', 'Maths', '5 Years', 'M.Sc, B.Ed', '45000']
     ];
 
     const wb = XLSX.utils.book_new();
@@ -284,7 +284,7 @@ exports.downloadTeacherTemplate = async (req, res) => {
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    res.setHeader('Content-Disposition', 'attachment; filename=teachers_template.xlsx');
+    res.setHeader('Content-Disposition', 'attachment; filename=teacher_bulk_template.xlsx');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     return res.send(buf);
   } catch (error) {
@@ -294,12 +294,48 @@ exports.downloadTeacherTemplate = async (req, res) => {
 };
 
 /**
+ * GET /api/teachers/export
+ */
+exports.exportTeachers = async (req, res) => {
+  try {
+    const query = `
+      SELECT u.name, u.email, u.phone as login_phone, '' as password, t.mobile, t.subject, 
+             t.qualification, t.experience, t.salary, u.status
+      FROM users u
+      LEFT JOIN teachers t ON u.id = t.user_id
+      WHERE u.role = 'teacher' AND (t.is_deleted = FALSE OR t.is_deleted IS NULL)
+      ORDER BY u.name ASC
+    `;
+    const [rows] = await pool.execute(query);
+
+    const headers = ['Name', 'Email', 'Login Phone', 'Password', 'Mobile', 'Subject', 'Qualification', 'Experience', 'Salary', 'Status'];
+    const data = rows.map(r => [
+      r.name, r.email, r.login_phone || '', '', r.mobile || '', r.subject || '', 
+      r.qualification || '', r.experience || '', r.salary || '', r.status || 'active'
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+    XLSX.utils.book_append_sheet(wb, ws, "Teachers");
+
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    res.setHeader('Content-Disposition', 'attachment; filename=teachers_export.xlsx');
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.send(buf);
+  } catch (error) {
+    console.error('Teacher Export Error:', error);
+    return res.status(500).json({ success: false, message: 'Failed to export teachers.' });
+  }
+};
+
+/**
  * POST /api/teachers/bulk-upload
  */
 exports.bulkUploadTeachers = async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
+  if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded.' });
 
+  try {
     const workbook = XLSX.read(req.file.buffer, { type: 'buffer' });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(sheet);
@@ -309,47 +345,60 @@ exports.bulkUploadTeachers = async (req, res) => {
     for (const [index, row] of rows.entries()) {
       const connection = await pool.getConnection();
       try {
-        const name = row['Name'];
+        const name = row['Full Name'] || row['Name'];
         const email = row['Email'];
+        const password = row['Password'] || '123456';
+        const phone = row['Phone (used for Login)'] || row['Login Phone'];
         const mobile = row['Mobile'];
-        const gender = row['Gender'] || 'Male';
-        const subject = row['Subject'] || '';
-        const qualification = row['Qualification'] || '';
-        const salary = row['Salary'] || '';
-        const joining_date = row['Joining Date'];
-        const address = row['Address'] || '';
-        const status = row['Status'] || 'active';
+        const dob = row['Date of Birth'] || row['DOB'];
+        const subject = row['Subject'];
+        const experience = row['Experience'];
+        const qualification = row['Qualification'];
+        const salary = row['Salary'];
 
         if (!name || !email) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Name and Email are required.`);
+          results.errors.push(`Row ${index + 2}: Name and Email are mandatory.`);
           continue;
         }
 
+        // Email conflict check
         const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
         if (existing.length > 0) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Email ${email} already exists.`);
+          results.errors.push(`Row ${index + 2}: Email ${email} already registered.`);
           continue;
         }
 
         await connection.beginTransaction();
-        const hashed = await bcrypt.hash('123456', SALT_ROUNDS);
+        const hashed = await bcrypt.hash(String(password), SALT_ROUNDS);
         
+        // 1. Create User
         const [uResult] = await connection.execute(
           'INSERT INTO users (name, email, password, role, phone, status) VALUES (?, ?, ?, ?, ?, ?)',
-          [name, email, hashed, 'teacher', mobile || '', status]
+          [name, email, hashed, 'teacher', String(phone || mobile || ''), 'active']
         );
 
+        const userId = uResult.insertId;
+
+        // 2. Create Profile
+        // Handle Excel Date if numeric
+        let formattedDob = dob;
+        if (typeof dob === 'number') {
+           // Excel serial date to JS date
+           formattedDob = new Date((dob - (25567 + 2)) * 86400 * 1000);
+        }
+
         await connection.execute(
-          `INSERT INTO teachers (user_id, mobile, dob, qualification, experience, salary, subject, joining_date, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [uResult.insertId, mobile || '', null, qualification, '', salary, subject, joining_date ? new Date(joining_date) : null, address]
+          `INSERT INTO teachers (user_id, mobile, dob, qualification, experience, salary, subject) 
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [userId, mobile || '', formattedDob || null, qualification || '', experience || '', salary || '', subject || '']
         );
 
         await connection.commit();
         results.success++;
       } catch (err) {
-        await connection.rollback();
+        if (connection) await connection.rollback();
         results.failed++;
         results.errors.push(`Row ${index + 2}: ${err.message}`);
       } finally {
@@ -357,9 +406,14 @@ exports.bulkUploadTeachers = async (req, res) => {
       }
     }
 
-    return res.status(200).json({ success: true, message: 'Bulk import completed.', results });
+    return res.status(200).json({
+      success: true,
+      message: `Import finished: ${results.success} success, ${results.failed} failed.`,
+      data: results
+    });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Bulk upload failed.' });
+    console.error('[BULK UPLOAD ERROR]:', error);
+    return res.status(500).json({ success: false, message: 'Bulk processing failed: ' + error.message });
   }
 };
 

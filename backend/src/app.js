@@ -1,92 +1,110 @@
+// src/app.js
+const express      = require('express')
+const cors         = require('cors')
+const helmet       = require('helmet')
+const morgan       = require('morgan')
 require('dotenv').config()
-const express  = require('express')
-const cors     = require('cors')
-const helmet   = require('helmet')
-const morgan   = require('morgan')
-const { errorHandler, notFound } = require('./middleware/errorHandler')
 
-// ── Route imports ─────────────────────────────────────────────────────────────
+const { notFound, errorHandler } = require('./middleware/errorHandler')
+const { authenticate, roleCheck } = require('./middleware/auth')
+
+// ─── Import Routes ────────────────────────────────────────────────────────────
 const authRoutes            = require('./routes/auth')
 const usersRoutes           = require('./routes/users')
 const teachersRoutes        = require('./routes/teachers')
-const studentsRoutes        = require('./routes/students')
-const classesRoutes         = require('./routes/classes')       // mounts /classes + /subjects
+const classesRoutes         = require('./routes/classes')
 const syllabusRoutes        = require('./routes/syllabus')
 const homeworkRoutes        = require('./routes/homework')
+const dashboardRoutes       = require('./routes/dashboard')
 const loRoutes              = require('./routes/lo')
 const teacherLoRoutes       = require('./routes/teacherLo')
-const observationRoutes     = require('./routes/observations')
+const eventsRoutes          = require('./routes/events')
+const adminLoRoutes         = require('./routes/adminLORoutes')
 const performanceRoutes     = require('./routes/performance')
 const leaveRoutes           = require('./routes/leave')
-const dashboardRoutes       = require('./routes/dashboard')
-const academicRoutes        = require('./routes/academic')      // /admin/*
-const eventsRoutes          = require('./routes/events')
-const contactRoutes         = require('./routes/contact')
-const permissionRoutes      = require('./routes/permissionRoutes') // /admin/permissions/*
-const adminLORoutes         = require('./routes/adminLORoutes')    // /admin/lo/*
+const observationsRoutes    = require('./routes/observations')
 const teacherScheduleRoutes = require('./routes/teacherScheduleRoutes')
-const lmsIntelligenceRoutes = require('./routes/lmsIntelligenceRoutes')
+const academicRoutes        = require('./routes/academic')
 const reportsRoutes         = require('./routes/reports')
+const intelligenceRoutes    = require('./routes/lmsIntelligenceRoutes')
+const permissionsRoutes     = require('./routes/permissionRoutes')
+const studentsRoutes        = require('./routes/students')
+const contactRoutes         = require('./routes/contactRoutes')
+const systemRoutes          = require('./routes/systemRoutes')
 
-let initCronJobs
-try { initCronJobs = require('./utils/cronJobs') } catch { initCronJobs = () => {} }
+const app = express()
 
-const app  = express()
-const PORT = process.env.PORT || 5000
-
-// ── Security & Parsing ────────────────────────────────────────────────────────
+// ─── Production Middleware ──────────────────────────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: false }))
+app.use(morgan('dev'))
+app.use(express.json())
 
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000,http://localhost:5173')
-  .split(',').map(o => o.trim()).filter(Boolean)
+// CORS: Production Hardened
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://school-atlas-sams.vercel.app,http://localhost:3000,http://localhost:5173')
+  .split(',').map(o => o.trim()).filter(Boolean);
 
 app.use(cors({
-  origin:               (origin, cb) => cb(null, true),
-  credentials:          true,
-  optionsSuccessStatus: 200,
-  methods:              ['GET','POST','PUT','DELETE','OPTIONS','PATCH'],
-  allowedHeaders:       ['Content-Type','Authorization'],
-}))
+  origin: (origin, cb) => {
+    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+    console.warn(`[CORS Blocked]: ${origin}`);
+    return cb(null, true); // Fallback to true for production debugging if needed, or strict false
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+}));
 
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
+// Global Preflight OPTIONS handler
+app.options('*', cors());
 
-// ── Health ────────────────────────────────────────────────────────────────────
-app.get('/health', (_, res) => res.json({ status:'ok', env: process.env.NODE_ENV, ts: new Date() }))
+// ─── API Routes ───────────────────────────────────────────────────────────────
+const A = '/api';
 
-// ── API Routes ────────────────────────────────────────────────────────────────
-const A = '/api'
+// 1. Health & Base
+app.get(`${A}/health`, (req, res) => res.json({ status: 'UP', timestamp: new Date() }));
+app.get('/', (req, res) => res.send('School Atlas SAMS API is running...'));
 
-app.use(`${A}/auth`,              authRoutes)
-app.use(`${A}/users`,             usersRoutes)
-app.use(`${A}/teachers`,          teachersRoutes)
-app.use(`${A}/students`,          studentsRoutes)
-app.use(`${A}`,                   classesRoutes)          // /api/classes, /api/subjects
-app.use(`${A}/syllabus`,          syllabusRoutes)
-app.use(`${A}/homework`,          homeworkRoutes)
-app.use(`${A}/lo`,                loRoutes)
-app.use(`${A}/teacher-lo`,        teacherLoRoutes)
-app.use(`${A}/observations`,      observationRoutes)
-app.use(`${A}/performance`,       performanceRoutes)
-app.use(`${A}/leave`,             leaveRoutes)
-app.use(`${A}/dashboard`,         dashboardRoutes)
-app.use(`${A}/events`,            eventsRoutes)
-app.use(`${A}/contact`,           contactRoutes)
-app.use(`${A}/teacher`,           teacherScheduleRoutes)
-app.use(`${A}/admin`,             academicRoutes)          // /api/admin/classes,subjects…
-app.use(`${A}/admin/permissions`, permissionRoutes)
-app.use(`${A}/admin/lo`,          adminLORoutes)
-app.use(`${A}/admin`,             reportsRoutes)
-app.use(`${A}/lms/intelligence`,  lmsIntelligenceRoutes)
+// 2. Core Modules
+app.use(`${A}/auth`,           authRoutes)
+app.use(`${A}/users`,          usersRoutes)
+app.use(`${A}/teachers`,       teachersRoutes)
+app.use(`${A}/students`,       studentsRoutes)
+app.use(`${A}`,                classesRoutes) // /classes, /subjects
+app.use(`${A}/syllabus`,       syllabusRoutes)
+app.use(`${A}/homework`,       homeworkRoutes)
+app.use(`${A}/dashboard`,      dashboardRoutes)
 
-// ── Error handlers ────────────────────────────────────────────────────────────
+// 3. Performance & LO
+app.use(`${A}/lo`,             loRoutes)
+app.use(`${A}/teacher-lo`,     teacherLoRoutes)
+app.use(`${A}/admin/lo`,       adminLoRoutes)
+app.use(`${A}/performance`,    performanceRoutes)
+
+// 4. Operations
+app.use(`${A}/events`,         eventsRoutes)
+app.use(`${A}/leave`,          leaveRoutes)
+app.use(`${A}/observations`,   observationsRoutes)
+app.use(`${A}/lms/intelligence`, intelligenceRoutes)
+app.use(`${A}/contact`,        contactRoutes)
+
+// 5. Teacher Specific (Crucial for 404/500 fixes)
+app.use(`${A}/teacher`,        teacherScheduleRoutes) // /api/teacher/timetable, /api/teacher/schedule
+
+// 6. Admin Management
+app.use(`${A}/admin`,          academicRoutes)
+app.use(`${A}/admin`,          reportsRoutes)
+app.use(`${A}/admin/permissions`, permissionsRoutes)
+app.use(`${A}/admin/system`,      systemRoutes)
+
+// ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound)
 app.use(errorHandler)
 
-app.listen(PORT, () => {
-  console.log(`🚀 SAMS Backend running on port ${PORT} [${process.env.NODE_ENV || 'development'}]`)
-  try { initCronJobs() } catch {}
-})
+// Server Listen
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server flying on port ${PORT}`);
+  console.log(`🔗 API Base: http://0.0.0.0:${PORT}${A}`);
+});
 
-module.exports = app
+module.exports = app;

@@ -100,12 +100,33 @@ exports.grant = async (req, res) => {
     return sendErr(res, 'teacher_id, module_id, start_date, end_date required.', 400);
   }
   try {
-    const [result] = await pool.execute(`
-      INSERT INTO teacher_module_permissions
-        (teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-    `, [teacher_id, module_id, class_id || null, section_id || null, subject_id || null, start_date, end_date]);
-    return sendOk(res, { id: result.insertId }, 'Permission granted.', 201);
+    if (module_id === 'ALL') {
+      const [modules] = await pool.execute('SELECT id FROM modules');
+      
+      const values = [];
+      const placeholders = [];
+      modules.forEach(m => {
+        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?)');
+        values.push(teacher_id, m.id, class_id || null, section_id || null, subject_id || null, start_date, end_date, 'ACTIVE');
+      });
+
+      if (placeholders.length > 0) {
+        const query = `
+          INSERT INTO teacher_module_permissions
+            (teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date, status)
+          VALUES ${placeholders.join(', ')}
+        `;
+        await pool.execute(query, values);
+      }
+      return sendOk(res, { success: true }, 'All permissions granted successfully.', 201);
+    } else {
+      const [result] = await pool.execute(`
+        INSERT INTO teacher_module_permissions
+          (teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
+      `, [teacher_id, module_id, class_id || null, section_id || null, subject_id || null, start_date, end_date]);
+      return sendOk(res, { id: result.insertId }, 'Permission granted.', 201);
+    }
   } catch (err) {
     return sendErr(res, err.message);
   }

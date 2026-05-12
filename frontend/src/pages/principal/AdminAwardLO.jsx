@@ -37,13 +37,15 @@ export default function AwardLOScores() {
     week: 'Week 1',
     topic: '',
     learning_outcome_id: '',
-    score: ''
+    score: '',
+    lo_status: 'Meeting'
   })
 
   // Dynamic lists
   const [filteredSections, setFilteredSections] = useState([])
   const [filteredSubjects, setFilteredSubjects] = useState([])
   const [filteredTeachers, setFilteredTeachers] = useState([])
+  const [resolvingTopic, setResolvingTopic] = useState(false)
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
@@ -131,6 +133,37 @@ export default function AwardLOScores() {
     setForm(prev => ({ ...prev, teacher_id: '' }))
   }, [form.class_id, form.subject_id])
 
+  // 3. AUTO-RESOLVE TOPIC FROM MICRO-SCHEDULE
+  useEffect(() => {
+    if (!form.teacher_id || !form.class_id || !form.section_id || !form.subject_id || !form.month || !form.week) return
+
+    const resolveTopic = async () => {
+      setResolvingTopic(true)
+      try {
+        const res = await api.get('/admin/lo/resolve-topic', {
+          params: {
+            teacher_id: form.teacher_id,
+            class_id: form.class_id,
+            section_id: form.section_id,
+            subject_id: form.subject_id,
+            month: form.month,
+            week: form.week
+          }
+        })
+        if (res.data.success && res.data.topic) {
+          setForm(prev => ({ ...prev, topic: res.data.topic }))
+        } else {
+          setForm(prev => ({ ...prev, topic: '' }))
+        }
+      } catch (err) {
+        console.error('Topic resolution failed:', err)
+      } finally {
+        setResolvingTopic(false)
+      }
+    }
+    resolveTopic()
+  }, [form.teacher_id, form.class_id, form.section_id, form.subject_id, form.month, form.week])
+
   // ── Logic ──────────────────────────────────────────────────────────────────
   
   const handleAward = async () => {
@@ -152,7 +185,7 @@ export default function AwardLOScores() {
       const res = await api.post('/admin/lo/award', payload)
       if (res.data.success) {
         alert('Score awarded successfully!')
-        setForm(prev => ({ ...prev, score: '', topic: '', learning_outcome_id: '' }))
+        setForm(prev => ({ ...prev, score: '', topic: '', learning_outcome_id: '', lo_status: 'Meeting' }))
         fetchHistory()
       }
     } catch (error) {
@@ -179,7 +212,8 @@ export default function AwardLOScores() {
         score: editItem.score,
         topic: editItem.topic,
         month: editItem.month,
-        week: editItem.week
+        week: editItem.week,
+        lo_status: editItem.lo_status
       })
       if (res.data.success) {
         setEditItem(null)
@@ -197,10 +231,19 @@ export default function AwardLOScores() {
     )},
     { key: 'month', label: 'Period', render: (v, r) => <div className="text-xs">{v}, {r.week}</div> },
     { key: 'topic', label: 'Topic', className: 'max-w-[200px] truncate text-xs' },
-    { key: 'score', label: 'Score', render: (v) => (
-      <span className={clsx('badge', Number(v) >= 75 ? 'badge-green' : Number(v) >= 50 ? 'badge-amber' : 'badge-red')}>
-        {v || 0}%
-      </span>
+    { key: 'score', label: 'Score', render: (v, r) => (
+      <div className="flex flex-col gap-1">
+        <span className={clsx('badge', Number(v) >= 75 ? 'badge-green' : Number(v) >= 50 ? 'badge-amber' : 'badge-red')}>
+          {v || 0}%
+        </span>
+        <span className={clsx('text-[10px] font-bold uppercase px-1.5 py-0.5 rounded text-center', 
+          r.lo_status === 'Exceeding' ? 'bg-emerald-100 text-emerald-700' : 
+          r.lo_status === 'Meeting' ? 'bg-blue-100 text-blue-700' : 
+          'bg-amber-100 text-amber-700'
+        )}>
+          {r.lo_status || 'Meeting'}
+        </span>
+      </div>
     )},
     { key: 'actions', label: 'Actions', className: 'text-right', render: (_, r) => (
       <div className="flex justify-end gap-2">
@@ -362,8 +405,11 @@ export default function AwardLOScores() {
                   </div>
                   <input 
                     type="text"
-                    placeholder="Enter the specific topic or select from below..."
-                    className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/10"
+                    placeholder={resolvingTopic ? "Finding topic from schedule..." : "Enter the specific topic or select from below..."}
+                    className={clsx(
+                      "w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/10 transition-all",
+                      resolvingTopic && "animate-pulse border-brand-200 bg-brand-50/30"
+                    )}
                     value={form.topic}
                     onChange={e => setForm({...form, topic: e.target.value})}
                     list="lo-suggestions"
@@ -371,6 +417,27 @@ export default function AwardLOScores() {
                   <datalist id="lo-suggestions">
                     {Array.isArray(meta.learning_outcomes) && meta.learning_outcomes.map(lo => <option key={lo.id} value={lo.title} />)}
                   </datalist>
+                </div>
+              </div>
+
+              {/* Qualitative Status */}
+              <div className="space-y-1.5 md:col-span-2">
+                <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Learning Outcome Status</label>
+                <div className="flex flex-wrap gap-3">
+                  {['Approaching', 'Meeting', 'Exceeding'].map(status => (
+                    <button
+                      key={status}
+                      onClick={() => setForm({ ...form, lo_status: status })}
+                      className={clsx(
+                        "flex-1 py-3 px-4 rounded-2xl text-sm font-bold transition-all border",
+                        form.lo_status === status 
+                          ? "bg-brand-500 text-white border-brand-500 shadow-md shadow-brand-500/20" 
+                          : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"
+                      )}
+                    >
+                      {status}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -411,16 +478,28 @@ export default function AwardLOScores() {
                 onClick={handleAward}
                 disabled={!isFormValid || submitting}
                 className={clsx(
-                  "w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all shadow-lg shadow-brand-500/10",
+                  "w-full py-4.5 rounded-2xl flex items-center justify-center gap-3 font-black text-base transition-all duration-300 uppercase tracking-[0.2em] relative overflow-hidden group",
                   isFormValid 
-                    ? "bg-brand-500 text-white hover:bg-brand-600 hover:-translate-y-0.5 active:translate-y-0" 
+                    ? "bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 text-white shadow-[0_10px_30px_-10px_rgba(37,99,235,0.5)] hover:shadow-[0_15px_40px_-12px_rgba(37,99,235,0.6)] hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]" 
                     : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                 )}
               >
+                {isFormValid && (
+                  <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:animate-shimmer" />
+                )}
                 {submitting ? (
-                  <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
-                  <><Trophy size={18} /> Award Score Now</>
+                  <div className="flex items-center gap-3 relative z-10">
+                    <Trophy 
+                      size={20} 
+                      className={clsx(
+                        "transition-transform duration-500",
+                        isFormValid && "group-hover:scale-125 group-hover:rotate-[15deg] animate-pulse"
+                      )} 
+                    /> 
+                    <span>Award Score Now</span>
+                  </div>
                 )}
               </button>
             </div>
@@ -491,24 +570,32 @@ export default function AwardLOScores() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="label">Month</label>
-                <select className="select" value={editItem.month} onChange={e => setEditItem({...editItem, month: e.target.value})}>
+                <select className="select" value={editItem.month || ""} onChange={e => setEditItem({...editItem, month: e.target.value})}>
                   {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => <option key={m} value={m}>{m}</option>)}
                 </select>
               </div>
               <div>
                 <label className="label">Week</label>
-                <select className="select" value={editItem.week} onChange={e => setEditItem({...editItem, week: e.target.value})}>
+                <select className="select" value={editItem.week || ""} onChange={e => setEditItem({...editItem, week: e.target.value})}>
                   {['Week 1','Week 2','Week 3','Week 4','Week 5'].map(w => <option key={w} value={w}>{w}</option>)}
                 </select>
               </div>
             </div>
             <div>
               <label className="label">Topic</label>
-              <input className="input" value={editItem.topic} onChange={e => setEditItem({...editItem, topic: e.target.value})} />
+              <input className="input" value={editItem.topic || ""} onChange={e => setEditItem({...editItem, topic: e.target.value})} />
             </div>
             <div>
               <label className="label">Score (%)</label>
-              <input type="number" className="input" value={editItem.score} onChange={e => setEditItem({...editItem, score: e.target.value})} />
+              <input type="number" className="input" value={editItem.score || ""} onChange={e => setEditItem({...editItem, score: e.target.value})} />
+            </div>
+            <div>
+              <label className="label">Status</label>
+              <select className="select" value={editItem.lo_status || ""} onChange={e => setEditItem({...editItem, lo_status: e.target.value})}>
+                <option value="Approaching">Approaching</option>
+                <option value="Meeting">Meeting</option>
+                <option value="Exceeding">Exceeding</option>
+              </select>
             </div>
             <div className="flex gap-3 pt-4">
               <button type="submit" className="btn-primary flex-1">Save Changes</button>

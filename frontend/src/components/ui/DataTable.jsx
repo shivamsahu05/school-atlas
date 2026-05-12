@@ -8,7 +8,7 @@ import { ChevronUp, ChevronDown } from 'lucide-react'
  * rows: array of objects
  * expandableRender: function(row) returning JSX to be shown directly below the row.
  */
-export function DataTable({ columns, rows, emptyMessage = 'No data available.', expandableRender }) {
+export function DataTable({ columns, rows, emptyMessage = 'No data available.', expandableRender, getRowClassName }) {
   const [sort, setSort] = useState({ key: null, dir: 'asc' })
   const [expandedRows, setExpandedRows] = useState(new Set())
 
@@ -81,10 +81,10 @@ export function DataTable({ columns, rows, emptyMessage = 'No data available.', 
               const rowKey = row?.id || row?.key || `row-${i}`;
               return (
               <React.Fragment key={rowKey}>
-                <tr className={clsx("tbl-row transition-colors", expandedRows.has(i) && "bg-slate-50/50")}>
+                <tr className={clsx("tbl-row transition-colors", expandedRows.has(i) && "bg-slate-50/50", getRowClassName && getRowClassName(row))}>
                   {(columns || []).map((col, cIdx) => (
                     <td key={col.key || `col-cell-${cIdx}`} className={clsx('tbl-cell', col.className)}>
-                      {col.render ? col.render(row?.[col.key], row, { toggleExpand: () => toggleExpand(i), isExpanded: expandedRows.has(i) }) : row?.[col.key]}
+                      {col.render ? col.render(row?.[col.key], row, { toggleExpand: () => toggleExpand(i), isExpanded: expandedRows.has(i), rowIndex: i }) : row?.[col.key]}
                     </td>
                   ))}
                 </tr>

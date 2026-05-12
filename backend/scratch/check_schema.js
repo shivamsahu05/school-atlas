@@ -1,12 +1,15 @@
-// scratch/check_schema.js
 const pool = require('../src/config/mysqlDb');
-(async () => {
+
+async function checkSchema() {
   try {
-    const [columns] = await pool.execute('DESCRIBE contact_messages');
-    console.log('Columns in contact_messages:', columns.map(c => c.Field));
+    console.log('Checking schema for syllabus_plan...');
+    const [rows] = await pool.execute('DESCRIBE syllabus_plan');
+    console.table(rows);
     process.exit(0);
   } catch (err) {
-    console.error('Error fetching schema:', err.message);
+    console.error('Error checking schema:', err);
     process.exit(1);
   }
-})();
+}
+
+checkSchema();

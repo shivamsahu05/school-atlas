@@ -1,22 +1,18 @@
-import { useState, useEffect, useCallback } from 'react'
-import { BarChart2, Users, Star, Eye, TrendingUp, Loader2, AlertTriangle } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { BarChart2, Users, Star, Eye, TrendingUp, Loader2, AlertTriangle, BookOpen, Globe, Shield } from 'lucide-react'
 import { StatCard, SectionHeader, ProgressBar } from '../../components/ui/index.jsx'
 import { BarChartWidget } from '../../components/charts/index.jsx'
 import { observationsApi, performanceApi } from '../../api'
+import clsx from 'clsx'
 
-const CHART_TABS = [
-  { value: 'observations', label: 'Observations' },
-  { value: 'syllabus',     label: 'Syllabus'     },
-  { value: 'lo',          label: 'LO Score'      },
-]
+const normalize = (val) => String(val || '').trim().toLowerCase()
+const ACADEMIC_MONTHS = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January']
 
 export default function TeacherAnalytics() {
-  const [performance,   setPerformance]   = useState(null)
-  const [observations,  setObservations]  = useState([])
   const [loading,       setLoading]       = useState(true)
   const [error,         setError]         = useState(null)
-  const [chartTab,      setChartTab]      = useState('observations')
   const [intelPerf,     setIntelPerf]     = useState(null)
+  const [observations,  setObservations]  = useState([])
 
   const fetchData = useCallback(async () => {
     try {
@@ -29,14 +25,8 @@ export default function TeacherAnalytics() {
         intelligenceApi.getTeacherDashboard().catch(() => ({ data: null }))
       ])
 
-      // Handle response from the observations API
-      const obsArray = obsRes?.data || []
-      setObservations(obsArray)
-
-
-      // intelRes shape may be: { data: { data: {...} } } or { data: {...} }
-      const intel = intelRes?.data?.data || intelRes?.data || null
-      setIntelPerf(intel)
+      setObservations(obsRes?.data || [])
+      setIntelPerf(intelRes?.data?.data || intelRes?.data || null)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load data')
     } finally {
@@ -46,36 +36,79 @@ export default function TeacherAnalytics() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Source of Truth mapping
   const metrics = intelPerf?.performance || { syllabus: 0, lo: 0, observation: 0 }
   const overallScore = intelPerf?.overall_score || 0
-
-  const getObservationScore = (obs) => {
-    if (obs.pct) return Number(obs.pct);
-    const total =
-      Number(obs.content_mastery || 0) +
-      Number(obs.pedagogy || 0) +
-      Number(obs.student_engagement || 0) +
-      Number(obs.communication || 0) +
-      Number(obs.assessment || 0);
-    return Math.round((total / 50) * 100);
-  };
-
-  const safeObs = Array.isArray(observations) ? observations : []
-  const obsChartData = safeObs.map(o => ({
-    date:  o.created_at?.slice(0, 10) || '—',
-    score: getObservationScore(o),
-  }))
-
-
-  // Syllabus chart: completed vs pending from intelligence data
-  const sylTotal     = intelPerf?.syllabus?.total     || 0
-  const sylCompleted = intelPerf?.syllabus?.completed || 0
-  const sylChartData = sylTotal > 0
-    ? [{ name: 'Completed', value: sylCompleted }, { name: 'Pending', value: sylTotal - sylCompleted }]
-    : []
-
   const avgObsPct = metrics.observation || 0
+
+  // 1. Calculate Grade
+  const getGrade = (score) => {
+    if (score >= 95) return { label: 'A+', color: 'emerald' }
+    if (score >= 85) return { label: 'A',  color: 'blue' }
+    if (score >= 70) return { label: 'B',  color: 'indigo' }
+    if (score >= 50) return { label: 'C',  color: 'amber' }
+    return { label: 'D', color: 'rose' }
+  }
+  const grade = getGrade(overallScore)
+
+  // 2. Calculate Observation Trend (Simulated based on latest vs historical if available)
+  const calculateObsTrend = () => {
+    if (observations.length < 2) return null
+    const latest = observations[0].pct || 0
+    const prev = observations.slice(1).reduce((acc, o) => acc + (o.pct || 0), 0) / (observations.length - 1)
+    const diff = latest - prev
+    return {
+      value: `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`,
+      positive: diff >= 0
+    }
+  }
+  const obsTrend = calculateObsTrend()
+
+  // Calculate Monthly Performance Trend from Micro Schedule rows
+  const monthlyTrendData = useMemo(() => {
+    const rows = intelPerf?.all_rows || []
+    if (rows.length === 0) return ACADEMIC_MONTHS.map(m => ({ month: m.substring(0,3), score: 0 }))
+
+    return ACADEMIC_MONTHS.map(month => {
+      const monthRows = rows.filter(r => normalize(r.month) === normalize(month))
+      if (monthRows.length === 0) return { month: month.substring(0,3), score: 0 }
+
+      // Calculate Syllabus % for this month
+      const completed = monthRows.filter(r => r.is_completed === 1 || normalize(r.status) === 'completed').length
+      const syllabusPct = Math.round((completed / monthRows.length) * 100)
+
+      // Calculate LO % for this month
+      let loTotal = 0, loWeighted = 0
+      monthRows.forEach(r => {
+        const students = Array.isArray(r.students_data) ? r.students_data : []
+        const classLvl = (r.class_understanding_level || '').toLowerCase()
+        
+        if (students.length > 0) {
+          students.forEach(s => {
+            const slvl = (s.learning_status || classLvl).toLowerCase()
+            if (slvl.includes('approach')) loWeighted += 60
+            else if (slvl.includes('exceed')) loWeighted += 100
+            else if (slvl.includes('meet')) loWeighted += 80
+            loTotal++
+          })
+        } else if (classLvl && classLvl !== '-') {
+          if (classLvl.includes('approach')) loWeighted += 60
+          else if (classLvl.includes('exceed')) loWeighted += 100
+          else if (classLvl.includes('meet')) loWeighted += 80
+          loTotal++
+        }
+      })
+      const loPct = loTotal > 0 ? Math.round(loWeighted / loTotal) : 0
+
+      // Combine with current avg observation score (20% weight)
+      // Overall = (Syllabus * 0.5) + (LO * 0.3) + (Obs * 0.2)
+      const monthlyScore = Math.round((syllabusPct * 0.5) + (loPct * 0.3) + (avgObsPct * 0.2))
+
+      return {
+        month: month.substring(0, 3),
+        score: monthlyScore || 0
+      }
+    })
+  }, [intelPerf, avgObsPct])
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-brand-500"/></div>
   if (error)   return (
@@ -89,127 +122,167 @@ export default function TeacherAnalytics() {
   return (
     <div className="space-y-6 animate-fade-in">
 
-      {/* KPIs */}
+      {/* KPIs - Refined for High Fidelity */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title="Obs. Avg"      value={`${Math.round(avgObsPct)}%`}   icon={Eye}       color="teal"   trend={avgObsPct} />
-        <StatCard title="Syllabus"      value={`${metrics.syllabus}%`}        icon={BarChart2} color="blue"   />
-        <StatCard title="LO Score"      value={`${metrics.lo}%`}              icon={Star}      color="amber"  />
-        <StatCard title="Overall IQ"    value={`${overallScore}%`}            icon={TrendingUp}color="green"  />
+        <StatCard 
+          title="Observations Trend"      
+          value={`${Math.round(avgObsPct)}%`}   
+          icon={Eye}       
+          color="teal"   
+          trend={avgObsPct} 
+        />
+        <StatCard 
+          title="Syllabus Completion"      
+          value={`${metrics.syllabus}%`}        
+          icon={BarChart2} 
+          color="blue"   
+          trend={metrics.syllabus}
+        />
+        <StatCard 
+          title="Overall Weighted Score"    
+          value={`${Math.round(overallScore)}%`}            
+          icon={TrendingUp}
+          color="green"  
+          trend={overallScore}
+        />
+        <StatCard 
+          title="Academic Grade"    
+          value={grade.label}            
+          icon={Star}
+          color={grade.color}  
+          subtitle="Based on performance"
+        />
       </div>
 
-      {/* Chart tabs */}
-      <div className="card p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-          <SectionHeader title="Performance Trends" subtitle="My metrics over time"/>
-          <div className="flex bg-slate-100 rounded-xl p-1 gap-1">
-            {CHART_TABS.map(t => (
-              <button key={t.value} onClick={() => setChartTab(t.value)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                  chartTab === t.value ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-                }`}>{t.label}</button>
-            ))}
-          </div>
+      {/* Monthly Performance Trend - New High Fidelity Card */}
+      <div className="bg-white p-8 md:p-10 rounded-[40px] border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-50">
+        <SectionHeader 
+          title="Monthly Performance Trend" 
+          subtitle="Your overall score over the academic year"
+        />
+        
+        <div className="mt-8">
+          <BarChartWidget 
+            data={monthlyTrendData} 
+            dataKey="score" 
+            xKey="month" 
+            color="#2563eb" 
+            height={300} 
+            name="Overall Score"
+          />
         </div>
-
-        {chartTab === 'observations' && (
-          obsChartData.length > 0
-            ? <BarChartWidget data={obsChartData} dataKey="score" xKey="date" color="#0d9488" height={220} name="Score %"/>
-            : <p className="text-center text-sm text-slate-400 py-16">No observation data yet.</p>
-        )}
-        {chartTab === 'syllabus' && (
-          sylChartData.length > 0
-            ? <BarChartWidget data={sylChartData} dataKey="value" xKey="name" color="#3b82f6" height={220} name="Topics"/>
-            : <p className="text-center text-sm text-slate-400 py-16">No syllabus data yet. Topics will appear once added.</p>
-        )}
-        {chartTab === 'lo' && (() => {
-          const loData = [
-            { name: 'Approaching', value: intelPerf?.lo?.approaching || 0 },
-            { name: 'Meeting',     value: intelPerf?.lo?.meeting     || 0 },
-            { name: 'Exceeding',   value: intelPerf?.lo?.exceeding   || 0 },
-          ]
-          const hasLO = loData.some(d => d.value > 0)
-          return hasLO
-            ? <BarChartWidget data={loData} dataKey="value" xKey="name" color="#10b981" height={220} name="Students"/>
-            : <p className="text-center text-sm text-slate-400 py-16">No LO data yet. Will appear once admin awards LO scores.</p>
-        })()}
       </div>
 
-      {/* Performance scorecard */}
+      {/* Performance Breakdown - New High Fidelity Card */}
       {intelPerf && (
-        <div className="card p-6">
-          <SectionHeader title="Academic Intelligence Scorecard" subtitle="Live weighted scores (50% Syllabus, 30% LO, 20% Obs)"/>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
+        <div className="bg-white p-8 md:p-10 rounded-[40px] border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-50">
+          <SectionHeader 
+            title="Performance Breakdown" 
+            subtitle="Weighted parameter scores contributing to overall rating"
+          />
+          
+          <div className="mt-8 space-y-8">
             {[
-              { label:'Syllabus Execution', value: intelPerf.performance?.syllabus ?? intelPerf.syllabus_score ?? 0, color:'blue'    },
-              { label:'LO Performance',     value: intelPerf.performance?.lo       ?? intelPerf.lo_score       ?? 0, color:'emerald' },
-              { label:'Observation Score',  value: intelPerf.performance?.observation ?? intelPerf.observation_score ?? avgObsPct, color:'teal' },
-              { label:'Overall IQ',         value: intelPerf.overall_score ?? overallScore ?? 0,                                   color:'amber'  },
-            ].map(({ label, value, color }) => (
-              <div key={label} className={`rounded-xl p-4 bg-${color}-50 border border-${color}-100 text-center`}>
-                <p className={`text-2xl font-bold text-${color}-600`}>{Number(value||0).toFixed(1)}%</p>
-                <p className="text-xs text-slate-500 mt-1">{label}</p>
-                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden mt-2">
-                  <div className={`h-full rounded-full bg-${color}-500`} style={{ width:`${Math.min(value||0,100)}%` }}/>
+              { 
+                label: 'Syllabus Completion', 
+                value: metrics.syllabus, 
+                weight: 15, 
+                icon: BookOpen, 
+                color: 'blue' 
+              },
+              { 
+                label: 'LO Achievement', 
+                value: metrics.lo, 
+                weight: 15, 
+                icon: TrendingUp, 
+                color: 'amber' 
+              },
+              { 
+                label: 'Observation Score', 
+                value: metrics.observation, 
+                weight: 25, 
+                icon: Eye, 
+                color: 'emerald' 
+              },
+              { 
+                label: 'Participate Score', 
+                value: intelPerf.participate_score, 
+                weight: 10, 
+                icon: Users, 
+                color: 'rose' 
+              },
+              { 
+                label: 'Other Parameters', 
+                value: intelPerf.other_score, 
+                weight: 20, 
+                icon: AlertTriangle, 
+                color: 'teal' 
+              },
+              { 
+                label: 'Language Proficiency', 
+                value: intelPerf.lang_score, 
+                weight: 15, 
+                icon: Globe, 
+                color: 'indigo' 
+              },
+            ].map((param, idx) => (
+              <div key={idx} className="group flex items-center gap-6">
+                {/* Icon Circle */}
+                <div className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 shadow-sm border ${
+                  param.color === 'blue' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                  param.color === 'amber' ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                  param.color === 'emerald' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' :
+                  param.color === 'rose' ? 'bg-rose-50 text-rose-600 border-rose-100' :
+                  param.color === 'teal' ? 'bg-teal-50 text-teal-600 border-teal-100' :
+                  'bg-indigo-50 text-indigo-600 border-indigo-100'
+                }`}>
+                  <param.icon size={20} strokeWidth={2.5} />
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-black text-slate-700 tracking-tight">{param.label}</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Weight {param.weight}%</span>
+                      <span className="text-sm font-black text-slate-800">{Math.round(param.value)}%</span>
+                    </div>
+                  </div>
+                  <div className="h-2 w-full bg-slate-50 rounded-full border border-slate-100 overflow-hidden shadow-inner">
+                    <div 
+                      className={clsx(
+                        "h-full rounded-full transition-all duration-1000 ease-out shadow-sm",
+                        param.value >= 85 ? "bg-emerald-500" : "bg-amber-500"
+                      )}
+                      style={{ width: `${Math.min(param.value, 100)}%` }}
+                    />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Footer Overall Weighted Score */}
+          <div className="mt-12 pt-8 border-t border-slate-100">
+            <div className="flex items-end justify-between mb-4">
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Overall Weighted Score</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{overallScore}/100</p>
+              </div>
+              <div className="text-right">
+                <span className="text-3xl font-black text-blue-600 tracking-tighter">{Math.round(overallScore)}%</span>
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">{Math.round(overallScore)}%</p>
+              </div>
+            </div>
+            <div className="h-3 w-full bg-slate-50 rounded-full border border-slate-100 overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all duration-1000"
+                style={{ width: `${Math.min(overallScore, 100)}%` }}
+              />
+            </div>
+          </div>
         </div>
       )}
-
-      {/* Observation history */}
-      <div className="card p-6">
-        <SectionHeader title="Classroom Observations" subtitle="Recorded by principal / admin"/>
-        {safeObs.length === 0
-          ? <p className="text-center text-sm text-slate-400 py-10">No observations recorded yet.</p>
-          : (
-            <div className="space-y-4">
-              {safeObs.map(obs => {
-                const pct = getObservationScore(obs)
-                const total = Number(obs.total_score || (Number(obs.content_mastery || 0) + Number(obs.pedagogy || 0) + Number(obs.student_engagement || 0) + Number(obs.communication || 0) + Number(obs.assessment || 0)))
-                const criteria = [
-                  { name: 'Content Mastery', score: obs.content_mastery },
-                  { name: 'Pedagogy', score: obs.pedagogy },
-                  { name: 'Student Engagement', score: obs.student_engagement },
-                  { name: 'Communication', score: obs.communication },
-                  { name: 'Assessment', score: obs.assessment }
-                ]
-                return (
-                  <div key={obs.id} className="border border-slate-100 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-slate-800 text-sm">
-                          {obs.created_at?.slice(0, 10) || '—'}
-                        </p>
-                        <p className="text-xs text-slate-400">
-                          Observed by: {obs.observer_name || '—'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold text-brand-600">{pct}%</p>
-                        <p className="text-xs text-slate-400">{total}/50</p>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 mt-3">
-                      {criteria.map((c, i) => (
-                        <div key={i} className="flex items-center gap-3">
-                          <span className="text-xs text-slate-500 w-40 flex-shrink-0">{c.name}</span>
-                          <div className="flex-1">
-                            <ProgressBar value={c.score} max={10} color="teal" showLabel={false} height="h-1.5"/>
-                          </div>
-                          <span className="text-xs font-semibold text-slate-600 w-10 text-right">{c.score}/10</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )
-
-              })}
-            </div>
-          )
-        }
-      </div>
     </div>
   )
 }

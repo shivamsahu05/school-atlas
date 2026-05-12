@@ -18,7 +18,9 @@ import TeacherLeave     from './pages/teacher/TeacherLeave'
 import TeacherProfile   from './pages/teacher/TeacherProfile'
 import TeacherNotifications from './pages/teacher/TeacherNotifications'
 import TeacherEvents from './pages/teacher/TeacherEvents'
+import TeacherCompetitions from './pages/teacher/TeacherCompetitions'
 import TeacherStudents from './pages/teacher/TeacherStudents'
+import TeacherTimeTable from './pages/teacher/TeacherTimeTable'
 
 // Principal pages
 import AdminDashboard       from './pages/principal/AdminDashboard'
@@ -37,8 +39,8 @@ import AdminContact from './pages/principal/AdminContact'
 import AdminSystemTools from './pages/principal/AdminSystemTools'
 import AdminAcademics from './pages/principal/AdminAcademics'
 import AdminSyllabus from './pages/principal/AdminSyllabus'
-import CompletionReport from './pages/principal/CompletionReport'
 import AdminNotifications from './pages/principal/AdminNotifications'
+import AdminEvents from './pages/principal/AdminEvents'
 import AdminStudentTimetable from './pages/principal/AdminStudentTimetable'
 import ErrorBoundary from './components/ErrorBoundary'
 
@@ -61,10 +63,12 @@ export default function App() {
               <Route path="/teacher/lo"       element={<TeacherLO />} />
               <Route path="/teacher/analytics"element={<TeacherAnalytics />} />
               <Route path="/teacher/schedule" element={<TeacherSchedule />} />
+              <Route path="/teacher/time-table" element={<TeacherTimeTable />} />
               <Route path="/teacher/leave"    element={<TeacherLeave />} />
               <Route path="/teacher/profile"  element={<TeacherProfile />} />
               <Route path="/teacher/notifications" element={<TeacherNotifications />} />
               <Route path="/teacher/events"   element={<TeacherEvents />} />
+              <Route path="/teacher/competitions" element={<TeacherCompetitions />} />
               
               {/* Permission Protected Modules */}
               <Route element={<ModuleRoute module="students_management" />}>
@@ -87,6 +91,7 @@ export default function App() {
               <Route path="/admin/students"       element={<AdminStudents />} />
               <Route path="/admin/permissions"    element={<AdminPermissions />} />
               <Route path="/admin/competitions"   element={<AdminCompetitions />} />
+              <Route path="/admin/events"         element={<AdminEvents />} />
               <Route path="/admin/contact"        element={<AdminContact />} />
               <Route path="/admin/system"         element={<AdminSystemTools />} />
               <Route path="/admin/academics"      element={<AdminAcademics />} />
@@ -94,7 +99,6 @@ export default function App() {
               <Route path="/admin/student-timetable" element={<AdminStudentTimetable />} />
               <Route path="/admin/leave"          element={<AdminLeave />} />
               <Route path="/admin/syllabus"       element={<AdminSyllabus />} />
-              <Route path="/admin/completion-report" element={<CompletionReport />} />
               <Route path="/admin/notifications"  element={<AdminNotifications />} />
             </Route>
           </Route>

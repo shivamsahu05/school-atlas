@@ -15,10 +15,13 @@ router.get('/observations', authenticate, roleCheck('teacher'), asyncHandler(get
 // Teacher Schedule (Legacy prefix)
 
 router.get('/schedule',            authenticate, roleCheck('teacher'), asyncHandler(ctrl.getTeacherSchedule));
+router.get('/timetable',           authenticate, roleCheck('teacher'), asyncHandler(ctrl.getMyTimetable));
 router.get('/schedule/assignments', authenticate, roleCheck('teacher'), asyncHandler(ctrl.getMyAssignments));
 router.post('/schedule/update',     authenticate, roleCheck('teacher'), asyncHandler(ctrl.updateScheduleStatus));
 router.get('/schedule/micro-schedule', authenticate, roleCheck('teacher'), asyncHandler(ctrl.getMicroSchedule));
 router.post('/schedule/micro-schedule', authenticate, roleCheck('teacher'), asyncHandler(ctrl.saveMicroSchedule));
+router.get('/micro-schedule/item/:itemId/students', authenticate, roleCheck('teacher'), asyncHandler(ctrl.getItemStudents));
+router.post('/micro-schedule/item/:itemId/students/save', authenticate, roleCheck('teacher'), asyncHandler(ctrl.saveStudentStatus));
 router.get('/schedule/subjects',       authenticate, roleCheck('teacher'), asyncHandler(ctrl.getTeacherSubjects));
 
 // Admin timetable management

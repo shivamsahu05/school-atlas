@@ -9,15 +9,15 @@ router.use(authenticate)
 // Summary MUST be before /:id to avoid param clash
 router.get('/summary',  asyncHandler(ctrl.getSummary))          // GET /api/teacher-lo/summary
 router.get('/',         asyncHandler(ctrl.getTeacherLO))        // GET /api/teacher-lo
-router.post('/',        asyncHandler(ctrl.submitSelfAssessment)) // POST /api/teacher-lo (teacher self-submit)
-router.get('/:id',      asyncHandler(ctrl.getTeacherLO))        // GET  /api/teacher-lo/:id (fallback to list)
-router.put('/:id',      asyncHandler(ctrl.submitSelfAssessment)) // PUT  /api/teacher-lo/:id (upsert)
-router.delete('/:id',   asyncHandler(ctrl.getTeacherLO))        // DELETE placeholder (noop-safe)
+router.post('/',        roleCheck('admin'), asyncHandler(ctrl.submitSelfAssessment)) // Blocked for teachers
+router.get('/:id',      asyncHandler(ctrl.getTeacherLO))        
+router.put('/:id',      roleCheck('admin'), asyncHandler(ctrl.submitSelfAssessment)) 
+router.delete('/:id',   roleCheck('admin'), asyncHandler(ctrl.getTeacherLO))        
 
 // Explicit named routes
 router.get('/assignments', asyncHandler(ctrl.getAssignedClasses))
 router.get('/topics',      asyncHandler(ctrl.getSyllabusTopics))
-router.post('/self',       asyncHandler(ctrl.submitSelfAssessment))
+router.post('/self',       roleCheck('admin'), asyncHandler(ctrl.submitSelfAssessment))
 router.post('/award',      roleCheck('admin'), asyncHandler(ctrl.awardAdminScore))
 
 module.exports = router

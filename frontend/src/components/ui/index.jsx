@@ -6,53 +6,60 @@ import { createPortal } from 'react-dom'
 /* ─── StatCard ─────────────────────────────────────────────────────────── */
 export function StatCard({ title, value, subtitle, icon: Icon, color = 'blue', trend, loading = false }) {
   const colors = {
-    blue:   'bg-brand-50 text-brand-600',
+    blue:   'bg-blue-50 text-blue-600',
     green:  'bg-emerald-50 text-emerald-600',
     amber:  'bg-amber-50 text-amber-600',
     red:    'bg-rose-50 text-rose-600',
     teal:   'bg-teal-50 text-teal-600',
     purple: 'bg-purple-50 text-purple-600',
+    brand:  'bg-brand-50 text-brand-600',
   }
   const barColors = {
-    blue:'bg-brand-500', green:'bg-emerald-500', amber:'bg-amber-500',
+    blue:'bg-blue-500', green:'bg-emerald-500', amber:'bg-amber-500',
     red:'bg-rose-500', teal:'bg-teal-500', purple:'bg-purple-500',
+    brand:'bg-brand-500',
   }
 
   if (loading) {
     return (
-      <div className="card p-3 sm:p-5 animate-pulse">
-        <div className="flex items-start justify-between">
-          <div className="flex-1 space-y-2">
-            <div className="h-3 w-20 bg-slate-100 rounded" />
-            <div className="h-8 w-12 bg-slate-100 rounded" />
-            <div className="h-3 w-24 bg-slate-100 rounded" />
-          </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
-            <Loader2 className="animate-spin text-slate-300" size={18} />
-          </div>
+      <div className="bg-white rounded-[1.5rem] p-6 shadow-sm border border-slate-100 animate-pulse">
+        <div className="flex items-start justify-between mb-4">
+          <div className="h-3 w-20 bg-slate-100 rounded" />
+          <div className="w-10 h-10 rounded-xl bg-slate-100" />
         </div>
+        <div className="h-8 w-24 bg-slate-100 rounded mb-2" />
+        <div className="h-3 w-32 bg-slate-100 rounded" />
       </div>
     )
   }
 
   return (
-    <div className="card p-3 sm:p-5 animate-slide-up hover:shadow-panel transition-shadow duration-200">
-      <div className="flex items-start justify-between">
-        <div className="flex-1 min-w-0">
-          <p className="text-[10px] sm:text-xs font-semibold text-slate-400 uppercase tracking-wider">{title}</p>
-          <p className="text-xl sm:text-2xl font-bold text-slate-800 mt-0.5 sm:mt-1">{value}</p>
-          {subtitle && <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{subtitle}</p>}
-        </div>
+    <div className="bg-white rounded-[1.5rem] p-5 sm:p-6 shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 group">
+      <div className="flex items-start justify-between mb-2">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] leading-none">{title}</p>
         {Icon && (
-          <div className={clsx('w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center flex-shrink-0', colors[color])}>
-            <Icon size={18} className="sm:size-[20px]" />
+          <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110', colors[color])}>
+            <Icon size={20} />
           </div>
         )}
       </div>
+      
+      <div className="space-y-1">
+        <h4 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tighter">{value}</h4>
+        {subtitle && (
+          <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 leading-none">
+            {subtitle}
+          </p>
+        )}
+      </div>
+
       {trend !== undefined && (
-        <div className="mt-2 sm:mt-3">
-          <div className="h-1 sm:h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className={clsx('h-full rounded-full transition-all', barColors[color])} style={{ width: `${Math.min(trend,100)}%` }} />
+        <div className="mt-5">
+          <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
+            <div 
+              className={clsx('h-full rounded-full transition-all duration-1000', barColors[color])} 
+              style={{ width: `${Math.min(trend, 100)}%` }} 
+            />
           </div>
         </div>
       )}

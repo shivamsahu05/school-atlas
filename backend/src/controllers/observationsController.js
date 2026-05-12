@@ -62,11 +62,17 @@ const getObservations = async (req, res) => {
         SELECT o.*,
                u_teacher.name AS teacher_name, u_teacher.email AS teacher_email,
                u_observer.name AS observer_name,
+               ac.name AS class_name,
+               asec.name AS section_name,
+               sub.name AS subject_name,
                ROUND((o.total_score / 50) * 100) AS pct
         FROM class_observations o
         LEFT JOIN teachers t ON o.teacher_id = t.id
         LEFT JOIN users u_teacher ON t.user_id = u_teacher.id
         LEFT JOIN users u_observer ON o.observer_id = u_observer.id
+        LEFT JOIN academic_classes ac ON o.class_id = ac.id
+        LEFT JOIN acad_sections asec ON o.section_id = asec.id
+        LEFT JOIN subjects sub ON o.subject_id = sub.id
         ORDER BY o.created_at DESC
         LIMIT ? OFFSET ?
       `;
@@ -92,6 +98,12 @@ const getObservations = async (req, res) => {
       ],
       teacher:  { id: o.teacher_id, name: o.teacher_name  || '—', email: o.teacher_email || '' },
       observer: { id: o.observer_id, name: o.observer_name || '—' },
+      class_name: o.class_name,
+      section_name: o.section_name,
+      subject_name: o.subject_name,
+      class_id: o.class_id,
+      section_id: o.section_id,
+      subject_id: o.subject_id
     }));
 
     const scores = normalized.map(o => o.pct).filter(v => v > 0);
@@ -174,8 +186,8 @@ const createObservation = async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      `INSERT INTO class_observations (teacher_id, observer_id, total_score, content_mastery, pedagogy, student_engagement, communication, assessment) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO class_observations (teacher_id, observer_id, total_score, content_mastery, pedagogy, student_engagement, communication, assessment, class_id, section_id, subject_id) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         tId, 
         observerId, 
@@ -184,7 +196,10 @@ const createObservation = async (req, res) => {
         criteria.pedagogy || 0, 
         criteria.student_engagement || 0, 
         criteria.communication || 0, 
-        criteria.assessment || 0
+        criteria.assessment || 0,
+        req.body.class_id ? Number(req.body.class_id) : null,
+        req.body.section_id ? Number(req.body.section_id) : null,
+        req.body.subject_id ? Number(req.body.subject_id) : null
       ]
     );
 

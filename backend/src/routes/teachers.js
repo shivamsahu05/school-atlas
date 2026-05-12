@@ -15,6 +15,7 @@ router.use(authenticate, roleCheck('admin'))
 
 // Static routes MUST come before dynamic :id routes
 router.get('/template-download', asyncHandler(downloadTeacherTemplate))
+router.get('/export',            asyncHandler(require('../controllers/teachersController').exportTeachers))
 router.post('/bulk-upload',      upload.single('file'), asyncHandler(bulkUploadTeachers))
 
 router.get('/',    asyncHandler(getTeachers))

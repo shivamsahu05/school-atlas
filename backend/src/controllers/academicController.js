@@ -1,5 +1,6 @@
 // src/controllers/academicController.js
 const prisma = require('../config/db')
+const pool = require('../config/mysqlDb')
 const { sendSuccess, sendError } = require('../utils/response')
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -638,35 +639,59 @@ const assignTimetableEntry = async (req, res) => {
 
   const finalSection = section ? String(section) : "";
 
-  // Upsert assignment (unique on teacher_id, day_of_week, time_slot_id)
-  await prisma.teacher_timetable.upsert({
-    where: {
-      teacher_id_day_of_week_time_slot_id: {
+  try {
+    // 1. Check if the class is already booked with another teacher at this exact time
+    const conflict = await prisma.teacher_timetable.findUnique({
+      where: {
+        class_number_section_day_of_week_time_slot_id: {
+          class_number: String(classNumber),
+          section: finalSection,
+          day_of_week: dayOfWeek.toUpperCase(),
+          time_slot_id: Number(timeSlotId)
+        }
+      }
+    });
+
+    if (conflict && conflict.teacher_id !== Number(teacherId)) {
+      return sendError(res, `Class ${classNumber}${finalSection ? '-' + finalSection : ''} is already scheduled with another teacher at this time.`, 409);
+    }
+
+    // 2. Upsert assignment (unique on teacher_id, day_of_week, time_slot_id)
+    await prisma.teacher_timetable.upsert({
+      where: {
+        teacher_id_day_of_week_time_slot_id: {
+          teacher_id: Number(teacherId),
+          day_of_week: dayOfWeek.toUpperCase(),
+          time_slot_id: Number(timeSlotId),
+        }
+      },
+      update: {
+        class_number: String(classNumber),
+        section: finalSection,
+        stream_id: streamId ? Number(streamId) : null,
+        subject_id: Number(subjectId),
+        room_number: roomNumber || null,
+      },
+      create: {
         teacher_id: Number(teacherId),
         day_of_week: dayOfWeek.toUpperCase(),
         time_slot_id: Number(timeSlotId),
+        class_number: String(classNumber),
+        section: finalSection,
+        stream_id: streamId ? Number(streamId) : null,
+        subject_id: Number(subjectId),
+        room_number: roomNumber || null,
       }
-    },
-    update: {
-      class_number: String(classNumber),
-      section: finalSection,
-      stream_id: streamId ? Number(streamId) : null,
-      subject_id: Number(subjectId),
-      room_number: roomNumber || null,
-    },
-    create: {
-      teacher_id: Number(teacherId),
-      day_of_week: dayOfWeek.toUpperCase(),
-      time_slot_id: Number(timeSlotId),
-      class_number: String(classNumber),
-      section: finalSection,
-      stream_id: streamId ? Number(streamId) : null,
-      subject_id: Number(subjectId),
-      room_number: roomNumber || null,
-    }
-  })
+    })
 
-  return res.json({ success: true, message: 'Timetable entry assigned' })
+    return res.json({ success: true, message: 'Timetable entry assigned successfully' })
+  } catch (error) {
+    console.error('[TIMETABLE ASSIGN ERROR]:', error);
+    if (error.code === 'P2002') {
+      return sendError(res, 'Schedule conflict detected. Please check existing timetables.', 409);
+    }
+    return sendError(res, 'Internal server error while saving assignment.', 500);
+  }
 }
 
 const deleteTimetableEntry = async (req, res) => {

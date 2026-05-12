@@ -2,26 +2,48 @@
 const mysql = require('mysql2/promise');
 require('dotenv').config();
 
-// Create a connection pool to MySQL
-const pool = mysql.createPool({
-  host: process.env.DB_HOST || '127.0.0.1',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'atlas_sams_db',
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
+/**
+ * PRODUCTION-READY MYSQL POOL
+ * Handles both DATABASE_URL (Prisma style) and individual DB_* variables.
+ * SSOT: Centralized connection logic for mysql2.
+ */
 
-// Test the connection
-(async () => {
-  try {
-    const connection = await pool.getConnection();
-    console.log('✅ MySQL Connected successfully via mysql2');
-    connection.release();
-  } catch (error) {
-    console.error('❌ MySQL Connection Error:', error.message);
+let pool;
+
+try {
+  const dbConfig = {
+    host:               process.env.DB_HOST,
+    user:               process.env.DB_USER,
+    password:           process.env.DB_PASSWORD,
+    database:           process.env.DB_NAME,
+    port:               process.env.DB_PORT || 3306,
+    waitForConnections: true,
+    connectionLimit:    15,
+    queueLimit:         0,
+    enableKeepAlive:    true,
+    keepAliveInitialDelay: 0
+  };
+
+  // If DATABASE_URL is present, use it as priority for production compatibility
+  if (process.env.DATABASE_URL) {
+    console.log('📡 [DB]: Using DATABASE_URL for connection');
+    pool = mysql.createPool(process.env.DATABASE_URL + "?waitForConnections=true&connectionLimit=15");
+  } else {
+    console.log('📡 [DB]: Using individual DB_* environment variables');
+    pool = mysql.createPool(dbConfig);
   }
-})();
+
+  // Health Check
+  pool.getConnection().then(conn => {
+    console.log('✅ [DB]: MySQL Pool initialized and connected');
+    conn.release();
+  }).catch(err => {
+    console.error('❌ [DB]: MySQL Initial Connection Failed:', err.message);
+  });
+
+} catch (error) {
+  console.error('❌ [DB]: MySQL Initialization Error:', error.message);
+  process.exit(1); // Critical failure
+}
 
 module.exports = pool;

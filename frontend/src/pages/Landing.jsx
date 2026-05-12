@@ -162,20 +162,20 @@ export default function Landing() {
               {/* Decorative backgrounds */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-brand-400/30 rounded-full blur-3xl" />
               <div className="absolute top-1/4 right-0 w-60 h-60 bg-emerald-400/20 rounded-full blur-3xl" />
-              
+
               {/* Floating UI Elements */}
               <div className="relative w-full aspect-square max-w-lg mx-auto pointer-events-auto">
                 {/* Main Card */}
                 <div className="absolute inset-0 bg-white/10 backdrop-blur-md rounded-3xl border border-white/20 p-6 shadow-2xl flex flex-col justify-between transform -rotate-2 hover:rotate-0 transition-transform duration-500">
                   <div className="flex justify-between items-center mb-6">
                     <div className="flex gap-2">
-                       <div className="w-3 h-3 rounded-full bg-rose-400/80" />
-                       <div className="w-3 h-3 rounded-full bg-amber-400/80" />
-                       <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
+                      <div className="w-3 h-3 rounded-full bg-rose-400/80" />
+                      <div className="w-3 h-3 rounded-full bg-amber-400/80" />
+                      <div className="w-3 h-3 rounded-full bg-emerald-400/80" />
                     </div>
                     <div className="text-white/50 text-xs font-semibold px-3 py-1 bg-white/5 rounded-full">SAMS Performance</div>
                   </div>
-                  
+
                   <div className="space-y-4 flex-1">
                     <div className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/10">
                       <div className="flex items-center gap-3">
@@ -200,16 +200,16 @@ export default function Landing() {
                     </div>
                   </div>
                 </div>
-                
+
                 {/* Overlapping small card element */}
                 <div className="absolute -bottom-6 -left-8 bg-slate-900 border border-slate-700/50 rounded-2xl p-5 shadow-2xl shadow-slate-900/50 transform rotate-3 z-20 w-48 hover:-rotate-1 transition-transform">
                   <div className="flex items-center gap-3 mb-2">
                     <div className="w-8 h-8 rounded-full bg-brand-500 flex items-center justify-center"><CheckCircle size={14} className="text-white" /></div>
-                    <p className="text-white text-xs font-bold leading-tight">Sync<br/>Complete</p>
+                    <p className="text-white text-xs font-bold leading-tight">Sync<br />Complete</p>
                   </div>
                   <p className="text-slate-400 text-[10px] mt-2">All daily parameters logged.</p>
                 </div>
-                
+
                 <div className="absolute -top-8 -right-6 bg-emerald-500/20 backdrop-blur-md border border-emerald-400/30 rounded-2xl p-4 shadow-2xl transform rotate-[10deg] animate-pulse z-20 hover:scale-105 transition-transform cursor-default">
                   <div className="flex items-center gap-2">
                     <TrendingUp size={24} className="text-emerald-400" />
@@ -239,24 +239,51 @@ export default function Landing() {
             <div>
               <p className="text-brand-600 font-semibold text-sm uppercase tracking-wider mb-3">About the School</p>
               <h2 className="font-display text-3xl lg:text-4xl text-slate-800 mb-6 leading-tight">
-                Committed to Academic Excellence Since 1985
+                Building Future-Ready Learners Since 1985
               </h2>
-              <p className="text-slate-500 leading-relaxed mb-6">
-                Our institution has been a beacon of quality education for nearly four decades.
-                With a dedicated faculty, rigorous curriculum, and a nurturing environment, we shape
-                students into confident, capable individuals ready to meet the challenges of tomorrow.
-              </p>
-              <p className="text-slate-500 leading-relaxed mb-8">
-                SAMS (School Academic Management System) — powered by the ATLAS framework —
-                brings our internal academic processes into the digital age, giving teachers
-                and administrators unprecedented visibility into every aspect of academic delivery.
-              </p>
+              <div className="space-y-4 text-slate-500 leading-relaxed mb-8 text-sm lg:text-base">
+                <p>
+                  Our institution is committed to delivering quality education through innovation,
+                  discipline, and student-focused learning.
+                </p>
+                <p>
+                  We believe education is not just about academics, but about developing skills,
+                  confidence, and curiosity in every learner.
+                </p>
+                <p>
+                  With a dedicated faculty and structured curriculum, we aim to create an
+                  environment where students can grow academically and personally.
+                </p>
+              </div>
+
+              <div className="mb-8 p-6 bg-brand-50/50 border border-brand-100 rounded-2xl">
+                <p className="font-bold text-brand-900 mb-3 text-sm">ABOUT SAMS / ATLAS</p>
+                <p className="text-slate-600 text-xs mb-4 leading-relaxed">
+                  SAMS (School Academic Management System), powered by the ATLAS framework,
+                  digitizes everyday academic operations. It enables schools to:
+                </p>
+                <ul className="grid grid-cols-1 md:grid-cols-2 gap-y-2 gap-x-4">
+                  {[
+                    'Monitor syllabus completion in real time',
+                    'Track student learning outcomes',
+                    'Improve homework discipline',
+                    'Evaluate teacher performance fairly',
+                    'Generate academic insights and reports'
+                  ].map(item => (
+                    <li key={item} className="flex items-center gap-2 text-xs text-slate-500">
+                      <div className="w-1.5 h-1.5 rounded-full bg-brand-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  ['NAAC Grade A+', 'Accreditation'],
-                  ['38 Years', 'Established'],
-                  ['12,000+', 'Alumni'],
-                  ['Award-winning', 'Faculty'],
+                  ['Quality Education', 'Our Commitment'],
+                  ['38 Years', 'Legacy'],
+                  ['Structured', 'Curriculum'],
+                  ['Personalized', 'Growth'],
                 ].map(([val, label]) => (
                   <div key={label} className="p-4 rounded-xl bg-slate-50 border border-slate-100">
                     <p className="font-bold text-slate-800">{val}</p>

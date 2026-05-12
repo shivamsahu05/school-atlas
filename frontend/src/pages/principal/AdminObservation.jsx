@@ -112,21 +112,9 @@ export default function AdminObservation() {
 
   const filteredObsList = useMemo(() => {
     return obsList.filter(obs => {
-      const teacher = obs.teacher
-      if (!teacher) return true
-      
-      if (listFilters.subject !== 'All' && teacher.subject !== listFilters.subject) return false
-      
-      if (listFilters.classPrefix !== 'All') {
-        const hasClass = teacher.assignedClasses?.some(c => c.includes(`${listFilters.classPrefix}-`))
-        if (!hasClass) return false
-      }
-      
-      if (listFilters.section !== 'All') {
-        const hasSection = teacher.assignedClasses?.some(c => c.includes(`-${listFilters.section}`))
-        if (!hasSection) return false
-      }
-      
+      if (listFilters.classPrefix !== 'All' && String(obs.class_id) !== String(listFilters.classPrefix)) return false
+      if (listFilters.section !== 'All' && String(obs.section_id) !== String(listFilters.section)) return false
+      if (listFilters.subject !== 'All' && String(obs.subject_id) !== String(listFilters.subject)) return false
       return true
     })
   }, [obsList, listFilters])
@@ -181,6 +169,36 @@ export default function AdminObservation() {
     return () => { isMounted = false; };
   }, [form.classId, form.sectionId])
 
+  // 3. AUTO-RESOLVE TEACHER
+  useEffect(() => {
+    let isMounted = true;
+    const resolveTeacher = async () => {
+      if (form.classId && form.subjectId) {
+        try {
+          const res = await academicApi.resolveTeacher({
+            class_id: form.classId,
+            section_id: form.sectionId,
+            subject_id: form.subjectId
+          })
+          
+          if (isMounted && res.data?.teacher) {
+            const t = res.data.teacher;
+            setForm(f => ({ ...f, teacherId: t.id, teacherName: t.name }))
+          } else if (isMounted) {
+            // Only reset if it wasn't pre-selected
+            if (!preSelectedId) {
+              setForm(f => ({ ...f, teacherId: '', teacherName: '' }))
+            }
+          }
+        } catch (err) {
+          if (isMounted) console.error('Failed to resolve teacher:', err)
+        }
+      }
+    }
+    resolveTeacher()
+    return () => { isMounted = false; };
+  }, [form.classId, form.sectionId, form.subjectId])
+
   const handleSave = async () => {
     if (!form.teacherId || !form.teacherName) {
       toast.error('Please select a valid class, section, and subject that has an assigned teacher.')
@@ -198,6 +216,9 @@ export default function AdminObservation() {
     try {
       await observationApi.create({
         teacher_id: form.teacherId,
+        class_id: form.classId,
+        section_id: form.sectionId,
+        subject_id: form.subjectId,
         total_score: total,
         max_score: max,
         criteria_scores
@@ -283,10 +304,11 @@ export default function AdminObservation() {
                     <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50/80">
                       <div>
                         <h4 className="font-bold text-slate-800 text-base">{obs.teacher?.name}</h4>
-                        <div className="flex gap-2 items-center mt-1 text-slate-400 text-xs font-semibold">
+                        <div className="flex flex-wrap gap-y-1 gap-x-3 items-center mt-1 text-slate-400 text-[10px] font-bold uppercase tracking-wider">
+                          <span className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{obs.class_name} {obs.section_name && `- ${obs.section_name}`}</span>
+                          <span className="bg-brand-50 px-1.5 py-0.5 rounded text-brand-600">{obs.subject_name}</span>
                           <span>{new Date(obs.observation_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
-                          <span>•</span>
-                          <span>Observed by: {obs.observer?.name}</span>
+                          <span className="normal-case font-medium text-slate-400">Observed by: {obs.observer?.name}</span>
                         </div>
                       </div>
                       <div className="text-right">

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom'
-import { Menu, Bell, Search, CheckCircle, Info, Calendar, AlertTriangle } from 'lucide-react'
+import { Menu, Bell, Search, CheckCircle, Info, Calendar, AlertTriangle, Home } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { useAuth } from '../context/AuthContext'
 import { Footer } from '../components/ui'
@@ -28,9 +28,11 @@ function getTitle(pathname) {
     '/teacher/lo':            'Learning Outcomes',
     '/teacher/analytics':     'Performance Analytics',
     '/teacher/schedule':      'Micro Schedule',
+    '/teacher/time-table':    'Time Table',
     '/teacher/leave':         'Leave Management',
     '/teacher/profile':       'My Profile',
-    '/teacher/notifications': 'Notifications Center',
+    '/teacher/events':        'Events & Notices',
+    '/teacher/competitions':  'Competitions Management',
     '/admin':                 'School Overview',
     '/admin/syllabus':        'Syllabus Status',
     '/admin/award-lo':        'Award LO Scores',
@@ -40,7 +42,6 @@ function getTitle(pathname) {
     '/admin/users':           'User Management',
     '/admin/timetable':       'Timetable & Marks',
     '/admin/leave':           'Leave Approval',
-    '/admin/completion-report': 'Completion Report',
     '/admin/notifications':   'Admin Notifications',
   }
   return map[pathname] ?? 'SAMS'
@@ -175,7 +176,7 @@ export function DashboardLayout() {
           if (userRole === 'teacher') link = '/teacher/notifications'
           else {
             if (n.type === 'leave') link = '/admin/leave'
-            if (n.type === 'alert') link = '/admin/completion-report'
+            if (n.type === 'alert') link = '/admin/notifications'
             if (n.type === 'event') link = '/admin/syllabus'
           }
           return {
@@ -266,11 +267,14 @@ export function DashboardLayout() {
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Search bar */}
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 text-slate-400 text-sm w-48">
-              <Search size={14} />
-              <span>Search…</span>
-            </div>
+            {/* Dashboard Home Shortcut */}
+            <Link
+              to={user?.role === 'admin' ? '/admin' : '/teacher'}
+              className="p-2 rounded-xl hover:bg-slate-100 text-slate-500 transition-colors flex items-center justify-center"
+              title="Return to Dashboard"
+            >
+              <Home size={18} />
+            </Link>
 
             {/* Bell button — wrapped in div with ref for portal anchor */}
             <div ref={bellRef}>

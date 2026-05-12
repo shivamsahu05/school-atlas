@@ -5,7 +5,16 @@ const { parsePagination } = require('../utils/pagination')
 const notificationEventService = require('../utils/notificationEventService')
 
 const INCLUDE = {
-  user: { select: { id: true, name: true, email: true, role: true } },
+  user: { 
+    select: { 
+      id: true, 
+      name: true, 
+      email: true, 
+      role: true,
+      phone: true,
+      teacher_profile: { select: { mobile: true } }
+    } 
+  },
 }
 
 /** GET /api/leave?status=&user_id=&month=Jan&year=2026 */

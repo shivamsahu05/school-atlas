@@ -155,10 +155,31 @@ export default function AdminLeave() {
 
   const filtered = filter === 'All' ? leaves : leaves.filter(l => l.status === filter)
 
+  const sendWhatsAppNotification = (leave, status) => {
+    const phone = leave.user?.teacher_profile?.mobile || leave.user?.phone;
+    if (!phone) return;
+
+    // Clean phone number
+    let cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length === 10) cleanPhone = '91' + cleanPhone; 
+
+    const dateRange = `${formatDate(leave.from_date)} to ${formatDate(leave.to_date)}`;
+    const message = status === 'Approved' 
+      ? `*School Management System*\n\nDear ${leave.user?.name},\nYour leave request for *${dateRange}* has been *APPROVED* ✅.\n\nThank you.`
+      : `*School Management System*\n\nDear ${leave.user?.name},\nYour leave request for *${dateRange}* has been *REJECTED* ❌.\n\nPlease contact administration for details.`;
+
+    const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+    window.open(waUrl, '_blank');
+  }
+
   const updateStatus = async (id, status) => {
     setActionLoading(id)
     try {
       await leaveApi.update(id, { status })
+      const updatedLeave = leaves.find(l => l.id === id);
+      if (updatedLeave && (status === 'Approved' || status === 'Rejected')) {
+        sendWhatsAppNotification(updatedLeave, status);
+      }
       setLeaves(prev => prev.map(l => l.id === id ? { ...l, status } : l))
       loadLeaves() // reload for summary
     } catch (err) {

@@ -1,356 +1,411 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Brain, TrendingUp, Download, Plus, Loader2, AlertTriangle } from 'lucide-react'
-import { StatCard, SectionHeader, FilterChips, StatusBadge, Modal } from '../../components/ui/index.jsx'
-import { DataTable } from '../../components/ui/DataTable.jsx'
-import { LODonut, MultiBarChart } from '../../components/charts/index.jsx'
-import { loApi, classesApi } from '../../api'
-
-function downloadCSV(rows) {
-  const safeRows = Array.isArray(rows) ? rows : []
-  const cols = ['teacher','class','subject','topic','teacherScore','principalScore','status','month']
-  const header = cols.join(',')
-  const body   = safeRows.map(r => cols.map(c => `"${r[c] ?? ''}"`).join(',')).join('\n')
-  const blob   = new Blob([header + '\n' + body], { type:'text/csv' })
-  const a      = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download:'lo-entries.csv' })
-  a.click()
-}
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { 
+  Brain, TrendingUp, Download, Plus, Loader2, AlertTriangle, 
+  Calendar, Users, ChevronDown, ChevronRight, CheckCircle2, 
+  Clock, Award, BarChart3, Filter, Search, UserMinus, Trophy
+} from 'lucide-react'
+import { StatCard, SectionHeader, Modal } from '../../components/ui/index.jsx'
+import { loApi, intelligenceApi } from '../../api'
+import clsx from 'clsx'
+import { toast } from 'react-hot-toast'
 
 export default function TeacherLO() {
-  const [entries,    setEntries]    = useState([])
-  const [summary,    setSummary]    = useState({ approaching:0, meeting:0, exceeding:0 })
-  const [classes,    setClasses]    = useState([]) // Original filter classes
-  const [assignedClasses, setAssignedClasses] = useState([]) // For Add Modal
-  const [topics,     setTopics]     = useState([])
-  const [loading,    setLoading]    = useState(true)
-  const [error,      setError]      = useState(null)
-  const [filter,     setFilter]     = useState('All')
-  const [filterCls,  setFilterCls]  = useState('')
-  const [filterMon,  setFilterMon]  = useState('')
-  const [modalOpen,  setModalOpen]  = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [form, setForm] = useState({ class_id:'', subject_id:'', topic:'', teacher_score:'', month:'', week:'', status:'Meeting', section:'' })
-  const [intelData, setIntelData] = useState([])
-  const [intelLoading, setIntelLoading] = useState(false)
+  const [data, setData] = useState(null)
+  const [loIntel, setLoIntel] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  
+  // Filters
+  const [selectedClass, setSelectedClass] = useState('')
+  const [selectedSection, setSelectedSection] = useState('')
+  const [selectedSubject, setSelectedSubject] = useState('')
+  
+  // UI State
+  const [expandedWeeks, setExpandedWeeks] = useState({}) // weekId -> boolean
+  
+  // Filter timeline by selected month chip
+  const [activeMonth, setActiveMonth] = useState('All')
+  const ACADEMIC_MONTHS = useMemo(() => ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March'], [])
 
-  const fetchData = useCallback(async () => {
+  const filteredMonths = useMemo(() => {
+    const timeline = data?.timeline || {};
+    if (activeMonth === 'All') return Object.keys(timeline).sort((a,b) => ACADEMIC_MONTHS.indexOf(a) - ACADEMIC_MONTHS.indexOf(b));
+    return [activeMonth].filter(m => timeline[m]);
+  }, [data, activeMonth, ACADEMIC_MONTHS])
+
+  const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true)
-      setError(null)
-      
-      const { intelligenceApi } = await import('../../api')
-      const [loRes, clsRes, intelRes, assignRes] = await Promise.all([
-        loApi.getAll({
-          class_id:   filterCls || undefined,
-          month:      filterMon || undefined,
+      const [res, intelRes] = await Promise.all([
+        loApi.getTeacherAnalytics({
+          class_id: selectedClass || undefined,
+          section_id: selectedSection || undefined,
+          subject_id: selectedSubject || undefined
         }),
-        classesApi.getAll(),
-        intelligenceApi.getTeacherDashboard().catch(() => ({ data: null })),
-        loApi.getAssignments()
+        intelligenceApi.getLOIntelligence().catch(() => ({ data: null }))
       ])
 
-      // ── New Intelligence Source of Truth ──────────────────────────────────
-      const loIntel = intelRes?.data?.lo || { approaching: 0, meeting: 0, exceeding: 0 }
-      setSummary(loIntel)
-
-      setIntelLoading(true)
-      try {
-        const intel = await intelligenceApi.getLOIntelligence()
-        setIntelData(intel.data || [])
-      } catch (e) { console.error(e) }
-      setIntelLoading(false)
-
-      // SAFE API RESPONSE HANDLING
-      const safeData = Array.isArray(loRes?.data) ? loRes.data : (Array.isArray(loRes?.data?.data) ? loRes.data.data : [])
-      console.log("[LO FRONTEND] API response:", safeData)
-      setEntries(safeData)
-
-      const rawCls = clsRes?.data?.data || clsRes?.data || clsRes?.classes || []
-      setClasses(Array.isArray(rawCls) ? rawCls : [])
-      setAssignedClasses(assignRes?.data || [])
+      if (res.success) {
+        setData(res.data)
+        setLoIntel(intelRes?.data)
+      } else {
+        setError(res.message || 'Failed to fetch analytics')
+      }
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load data')
+      console.error("Fetch Error:", err)
+      setError(err.response?.data?.message || 'Failed to load academic intelligence data')
     } finally {
       setLoading(false)
     }
-  }, [filterCls, filterMon])
+  }, [selectedClass, selectedSection, selectedSubject])
 
-  useEffect(() => { fetchData() }, [fetchData])
+  useEffect(() => {
+    fetchAnalytics()
+  }, [fetchAnalytics])
 
-  const handleAdd = async (e) => {
-    e.preventDefault()
-    try {
-      setSubmitting(true)
-      await loApi.create(form)
-      setModalOpen(false)
-      setForm({ class_id:'', subject_id:'', topic:'', teacher_score:'', month:'', week:'', status:'Meeting' })
-      fetchData()
-    } catch (err) {
-      alert(err.response?.data?.message || 'Failed to add entry.')
-    } finally {
-      setSubmitting(false)
+  const toggleWeek = (id) => {
+    setExpandedWeeks(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  // Helper for status colors
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'Perfect': return 'text-emerald-600 bg-emerald-50 border-emerald-100'
+      case 'Partial': return 'text-amber-600 bg-amber-50 border-amber-100'
+      case 'Critical': return 'text-rose-600 bg-rose-50 border-rose-100'
+      default: return 'text-slate-600 bg-slate-50 border-slate-100'
     }
   }
 
-  // SAFE ARRAY WRAPPERS
-  const safeEntries = Array.isArray(entries) ? entries : []
-  const safeClasses = Array.isArray(classes) ? classes : []
+  const getProgressColor = (pct) => {
+    if (pct === 100) return 'bg-emerald-500'
+    if (pct >= 75) return 'bg-brand-500'
+    if (pct >= 50) return 'bg-amber-500'
+    return 'bg-rose-500'
+  }
 
-  // Simplify filtering - mostly handled by backend
-  const filtered = safeEntries.filter(e => {
-    if (filter !== 'All' && e.status !== filter) return false
-    return true
-  })
+  if (loading && !data) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96 gap-4">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-brand-100 border-t-brand-600 rounded-full animate-spin"></div>
+          <Brain className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-brand-600 animate-pulse" size={24} />
+        </div>
+        <p className="text-slate-500 font-bold animate-pulse tracking-widest text-xs uppercase">Initializing Intelligence Engine...</p>
+      </div>
+    )
+  }
 
-  // Build T vs P chart from top 8 entries
-  const chartData = filtered.slice(0, 8).map(e => ({
-    name:             `${e.class || 'Class'}-${e.section || ''}`,
-    'Teacher Score':  Number(e.teacherScore   ?? 0),
-    'Principal Score':Number(e.principalScore ?? 0),
-  }))
+  if (error) {
+    return (
+      <div className="card p-12 text-center max-w-md mx-auto mt-20">
+        <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
+          <AlertTriangle size={32} />
+        </div>
+        <h3 className="text-lg font-bold text-slate-800 mb-2">Sync Failed</h3>
+        <p className="text-slate-500 text-sm mb-6">{error}</p>
+        <button onClick={fetchAnalytics} className="btn-primary w-full justify-center py-3">Retry Sync</button>
+      </div>
+    )
+  }
 
-  const columns = [
-    { key:'class',           label:'Class',      sortable:true,
-      render: (_,r) => `${r.class || ''}${r.section ? '-'+r.section : ''}` },
-    { key:'subject',         label:'Subject',    sortable:true,
-      render: (_,r) => r.subject || '—' },
-    { key:'topic',           label:'Topic',      sortable:true },
-    { key:'week',            label:'Week',       sortable:true },
-    { key:'teacherScore',   label:'T Score',    sortable:true,
-      render: v => <span className="font-semibold text-brand-600">{v !== null && v !== undefined ? v : 'Not Submitted'}</span> },
-    { key:'principalScore', label:'P Score',    sortable:true,
-      render: v => <span className="font-semibold text-emerald-600">{v !== null && v !== undefined ? v : 'Not Awarded'}</span> },
-    { key:'month',           label:'Month',      sortable:true },
-  ]
-
-  const SELECT = 'text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300'
-  const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-
-  if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-brand-500"/></div>
-  if (error)   return (
-    <div className="card p-8 text-center">
-      <AlertTriangle size={28} className="text-rose-500 mx-auto mb-3"/>
-      <p className="text-slate-600">{error}</p>
-      <button onClick={fetchData} className="btn-primary btn mt-4">Retry</button>
-    </div>
-  )
+  const { stats, timeline = {}, rankings, observations, meta } = data || {}
 
   return (
-    <div className="space-y-6 animate-fade-in">
-
-      {/* KPI */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard title="Approaching" value={summary.approaching || 0} icon={AlertTriangle} color="amber"/>
-        <StatCard title="Meeting"     value={summary.meeting     || 0} icon={Brain}         color="blue"/>
-        <StatCard title="Exceeding"   value={summary.exceeding   || 0} icon={TrendingUp}    color="green"/>
-      </div>
-
-      {/* Charts */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="card p-6">
-          <SectionHeader title="LO Distribution" subtitle="My overall student distribution"/>
-          <LODonut approaching={summary.approaching} meeting={summary.meeting} exceeding={summary.exceeding} height={220}/>
+    <div className="space-y-8 animate-in fade-in duration-700 p-4 lg:p-8 bg-slate-50 min-h-screen">
+      
+      {/* HEADER SECTION */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div>
+          <h1 className="text-3xl font-black text-[#0d225c] tracking-tight flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-brand-600 text-white flex items-center justify-center shadow-lg shadow-brand-100">
+              <BarChart3 size={28} />
+            </div>
+            Academic Intelligence
+          </h1>
+          <p className="text-slate-500 text-sm font-medium mt-1 pl-16">Real-time learning outcomes & assignment tracking</p>
         </div>
 
-        <div className="card p-6">
-          <SectionHeader title="Teacher vs Principal Scores" subtitle="Comparison by class"/>
-          <div className="flex gap-4 mb-3">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-brand-500 inline-block"/>
-              <span className="text-xs text-slate-500">Teacher</span>
+        {/* Compact Global Header Filters */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 bg-white p-1.5 rounded-[1.5rem] border border-slate-200 shadow-sm">
+            <div className="flex items-center px-4 py-2 border-r border-slate-100">
+              <Filter size={14} className="text-brand-600 mr-2" />
+              <select 
+                className="text-[11px] font-black text-slate-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
+                value={selectedClass}
+                onChange={(e) => { setSelectedClass(e.target.value); setSelectedSection(''); }}
+              >
+                <option value="">Select Class</option>
+                {[...new Set(meta?.assigned?.map(a => a.class_id))].map(id => {
+                  const name = meta.assigned.find(a => a.class_id === id).class_name;
+                  return <option key={id} value={id}>Class {name}</option>
+                })}
+              </select>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-500 inline-block"/>
-              <span className="text-xs text-slate-500">Principal</span>
+
+            <div className="flex items-center px-4 py-2">
+              <Brain size={14} className="text-brand-600 mr-2" />
+              <select 
+                className="text-[11px] font-black text-slate-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
+                value={selectedSubject}
+                onChange={(e) => setSelectedSubject(e.target.value)}
+              >
+                <option value="">Select Subject</option>
+                {[...new Set(meta?.assigned?.map(a => a.subject_id))].map(id => {
+                  const name = meta.assigned.find(a => a.subject_id === id).subject_name;
+                  return <option key={id} value={id}>{name}</option>
+                })}
+              </select>
             </div>
           </div>
-          {chartData.length > 0
-            ? <MultiBarChart
-                data={chartData}
-                bars={[{key:'Teacher Score',label:'Teacher'},{key:'Principal Score',label:'Principal'}]}
-                xKey="name"
-                height={200}
-              />
-            : <p className="text-center text-sm text-slate-400 py-12">No comparison data yet.</p>
-          }
-        </div>
-      </div>
 
-      {/* Intelligence Engine: Student Grouping */}
-      <div className="card p-6 border-brand-100 bg-brand-50/10">
-        <SectionHeader 
-          title="Academic Intelligence: Student Grouping" 
-          subtitle="Real-time analysis of student performance levels per topic" 
-        />
-        <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {intelLoading ? (
-            <div className="col-span-full py-10 flex flex-col items-center gap-2">
-              <Loader2 className="animate-spin text-brand-500" size={24} />
-              <span className="text-xs font-bold text-slate-400">Computing Intelligence...</span>
-            </div>
-          ) : intelData.length === 0 ? (
-             <p className="col-span-full text-center py-10 text-sm text-slate-400 italic">No LO intelligence data found.</p>
-          ) : intelData.map((item, i) => (
-            <div key={i} className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-              <p className="text-xs font-black text-brand-600 uppercase tracking-widest mb-1">{item.subject}</p>
-              <h4 className="text-sm font-bold text-slate-800 line-clamp-1 mb-3">{item.topic}</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-rose-500">Approaching</span>
-                  <span>{item.approaching} students</span>
-                </div>
-                <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                  <div className="bg-rose-500 h-full" style={{ width: `${(item.approaching / (item.approaching + item.meeting + item.exceeding)) * 100}%` }} />
-                </div>
-                
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-brand-500">Meeting</span>
-                  <span>{item.meeting} students</span>
-                </div>
-                <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                  <div className="bg-brand-500 h-full" style={{ width: `${(item.meeting / (item.approaching + item.meeting + item.exceeding)) * 100}%` }} />
-                </div>
-
-                <div className="flex justify-between items-center text-[10px] font-bold">
-                  <span className="text-emerald-500">Exceeding</span>
-                  <span>{item.exceeding} students</span>
-                </div>
-                <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500 h-full" style={{ width: `${(item.exceeding / (item.approaching + item.meeting + item.exceeding)) * 100}%` }} />
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="card p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
-          <SectionHeader
-            title="LO Records"
-            subtitle={
-              safeEntries.length > 0
-                ? `${filtered.length} of ${safeEntries.length} entries${filtered.length < safeEntries.length ? ' (filtered)' : ''}`
-                : '0 entries'
-            }
-          />
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Filters */}
-            <select value={filterCls} onChange={e => setFilterCls(e.target.value)} className={SELECT}>
-              <option value="">All Classes</option>
-              {safeClasses.map(c => <option key={c.id} value={c.id}>{c.class_name}-{c.section}</option>)}
-            </select>
-            <select value={filterMon} onChange={e => setFilterMon(e.target.value)} className={SELECT}>
-              <option value="">All Months</option>
-              {MONTHS.map(m => <option key={m}>{m}</option>)}
-            </select>
-            <FilterChips
-              options={['All','Approaching','Meeting','Exceeding']}
-              value={filter}
-              onChange={setFilter}
-            />
-            <button onClick={() => downloadCSV(filtered)} className="btn-secondary btn btn-sm gap-1.5">
-              <Download size={13}/> Export
-            </button>
-            <button onClick={() => setModalOpen(true)} className="btn-primary btn btn-sm gap-1.5">
-              <Plus size={13}/> Add
-            </button>
-          </div>
-        </div>
-
-        {/* RULE: Only show true empty state if backend returned 0 rows */}
-        {safeEntries.length === 0 ? (
-          <p className="text-center text-sm text-slate-400 py-10">No LO entries found. Ask admin to award LO scores.</p>
-        ) : filtered.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-sm text-slate-400 mb-3">No entries match the current filters.</p>
-            <button
-              onClick={() => { setFilter('All'); setFilterCls(''); setFilterMon('') }}
-              className="text-xs font-semibold text-brand-600 hover:underline"
+          {(selectedClass || selectedSubject || selectedSection) && (
+            <button 
+              onClick={() => { setSelectedClass(''); setSelectedSection(''); setSelectedSubject(''); setActiveMonth('All'); }}
+              className="px-4 py-3 bg-slate-100 text-slate-500 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-50 hover:text-rose-600 transition-all flex items-center gap-2"
             >
-              Clear all filters ({safeEntries.length} total records)
+              Reset
             </button>
-          </div>
-        ) : (
-          <DataTable columns={columns} rows={filtered} emptyMessage="No LO entries match your filters."/>
-        )}
+          )}
+        </div>
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add LO Entry">
-        <form onSubmit={handleAdd} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Assigned Class *</label>
-              <select className="select" value={form.class_id}
-                onChange={async e => {
-                  const cId = e.target.value
-                  const assign = assignedClasses.find(a => String(a.class_id) === String(cId))
-                  console.log("Selected Class:", cId)
-                  setForm(f=>({...f, class_id:cId, subject_id:assign?.subject_id||'', section:assign?.section||''}))
-                  if (cId && assign) {
-                    const topicsRes = await loApi.getTopics(cId, assign.subject_id)
-                    console.log("Topics Loaded:", topicsRes.data)
-                    setTopics(topicsRes.data || [])
-                  } else {
-                    setTopics([])
-                  }
-                }} required>
-                <option value="">Select assigned class…</option>
-                {assignedClasses.map((c,i) => (
-                   <option key={i} value={c.class_id}>{c.class_name}-{c.section} ({c.subject_name})</option>
-                ))}
-              </select>
+      {/* MAIN TWO-COLUMN INTELLIGENCE HUB */}
+      <div className="grid lg:grid-cols-3 gap-8">
+        
+        {/* LEFT COLUMN: WEEKLY ASSIGNMENT DEFAULTERS (2/3 Width) */}
+        <div className="lg:col-span-2 space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <SectionHeader title="Weekly Assignment Defaulters" subtitle="Identifying students with missing submissions" />
+            <div className="flex items-center gap-2">
+               <button className="btn bg-white border-slate-200 text-slate-600 hover:bg-slate-50 text-[10px] font-black uppercase tracking-widest px-4 py-2 rounded-xl flex items-center gap-2 shadow-sm">
+                 <Download size={14} className="text-brand-600" /> Export
+               </button>
             </div>
-            <div>
-              <label className="label">Month *</label>
-              <select className="select" value={form.month}
-                onChange={e => setForm(f=>({...f,month:e.target.value}))} required>
-                <option value="">Select month…</option>
-                {MONTHS.map(m => <option key={m}>{m}</option>)}
-              </select>
+          </div>
+
+          {/* Compact Section & Month Filter Bar */}
+          <div className="flex flex-wrap items-center gap-3 pb-2">
+            {/* Section Switcher Pill */}
+            <div className="flex items-center bg-white border border-slate-200 rounded-2xl p-1 shadow-sm">
+               <div className="px-3 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest border-r border-slate-100 flex items-center gap-2">
+                 <Users size={12} className="text-brand-600" /> Section
+               </div>
+               <select 
+                className="bg-transparent text-[10px] font-black text-brand-700 outline-none px-3 cursor-pointer uppercase"
+                value={selectedSection}
+                onChange={(e) => setSelectedSection(e.target.value)}
+                disabled={!selectedClass}
+               >
+                 <option value="">All</option>
+                 {(() => {
+                    const assigned = meta?.assigned || [];
+                    const filtered = assigned.filter(a => !selectedClass || String(a.class_id) === String(selectedClass));
+                    return [...new Set(filtered.map(a => a.section_id))].map(sid => {
+                      const sname = filtered.find(a => a.section_id === sid).section_name;
+                      return <option key={sid} value={sid}>{sname}</option>;
+                    });
+                  })()}
+               </select>
             </div>
+
+            <div className="h-6 w-px bg-slate-200 mx-1" />
+
+            {['All', ...ACADEMIC_MONTHS.filter(m => timeline[m]), ...(timeline['Unplanned'] ? ['Unplanned'] : [])].map(m => (
+              <button
+                key={m}
+                onClick={() => setActiveMonth(m)}
+                className={clsx(
+                  "px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all",
+                  activeMonth === m 
+                    ? "bg-[#0d225c] text-white shadow-lg shadow-blue-100" 
+                    : "bg-white text-slate-400 border border-slate-200 hover:border-brand-200 hover:text-brand-600"
+                )}
+              >
+                {m}
+              </button>
+            ))}
           </div>
           
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Topic *</label>
-              <select className="select" value={form.topic}
-                onChange={e => setForm(f=>({...f,topic:e.target.value}))} 
-                disabled={!form.class_id} required>
-                <option value="">{form.class_id ? 'Select topic from syllabus…' : 'Select class first'}</option>
-                {topics.map((t,i) => <option key={i} value={t}>{t}</option>)}
-              </select>
+          {filteredMonths.length === 0 ? (
+            <div className="bg-white rounded-[2.5rem] p-20 text-center border border-dashed border-slate-200">
+              <Search size={48} className="text-slate-200 mx-auto mb-4" />
+              <p className="text-slate-400 font-bold tracking-tight">No assignment data found for the selected month.</p>
             </div>
-            <div>
-              <label className="label">Week *</label>
-              <select className="select" value={form.week}
-                onChange={e => setForm(f=>({...f,week:e.target.value}))} required>
-                <option value="">Select week…</option>
-                {[1,2,3,4,5].map(w => <option key={w} value={`Week ${w}`}>Week {w}</option>)}
-              </select>
-            </div>
-          </div>
+          ) : (
+            <div className="space-y-6">
+              {filteredMonths.map(month => (
+                <div key={month} className="space-y-4">
+                  {timeline[month].map((week) => (
+                    <div key={week.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+                      <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div className="flex-1 space-y-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black text-brand-600 bg-brand-50 px-3 py-1 rounded-lg uppercase tracking-widest">
+                              {month} · {week.week}
+                            </span>
+                            {week.submissionPct === 100 && (
+                              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg uppercase tracking-widest flex items-center gap-1">
+                                <CheckCircle2 size={12} /> ALL SUBMITTED ✓
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <h4 className="text-xl font-black text-slate-800 leading-tight group-hover:text-brand-600 transition-colors">
+                              {week.topic}
+                            </h4>
+                            {week.understanding_level && week.understanding_level !== '-' && week.understanding_level !== 'awaiting status' && (
+                              <span className={clsx(
+                                "text-[10px] font-black px-2.5 py-1 rounded-md uppercase tracking-widest",
+                                week.understanding_level?.toLowerCase().includes('exceed') ? "bg-emerald-100 text-emerald-700" :
+                                week.understanding_level?.toLowerCase().includes('approach') ? "bg-amber-100 text-amber-700" :
+                                "bg-blue-100 text-blue-700"
+                              )}>
+                                {week.understanding_level}
+                              </span>
+                            )}
+                          </div>
+                          {week.learning_outcome && (
+                            <p className="text-sm font-medium text-slate-600 italic border-l-2 border-slate-200 pl-3 py-0.5">
+                              "{week.learning_outcome}"
+                            </p>
+                          )}
+                          <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                            <span className="flex items-center gap-1.5"><Calendar size={12} /> Class: {week.class_name}</span>
+                            <span>•</span>
+                            <span className="text-brand-600">{week.subject || 'Academic'}</span>
+                          </div>
+                        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="label">Teacher Score (0–100) *</label>
-              <input className="input" type="number" min={0} max={100} placeholder="e.g. 78"
-                value={form.teacher_score} onChange={e => setForm(f=>({...f,teacher_score:e.target.value}))} required/>
-            </div>
-            <div>
-              <label className="label">Subject (Auto)</label>
-              <input className="input bg-slate-50" value={assignedClasses.find(a => String(a.class_id) === String(form.class_id))?.subject_name || ''} readOnly disabled />
-            </div>
-          </div>
+                        <div className="flex items-center gap-8">
+                          <div className="text-right space-y-1.5">
+                            <div className="flex items-baseline justify-end gap-1.5">
+                              <span className="text-2xl font-black text-slate-800 tracking-tighter">{week.submissionPct}%</span>
+                              {week.missingCount > 0 && <span className="text-xs font-black text-rose-500 uppercase">{week.missingCount} missing</span>}
+                            </div>
+                            <div className="w-32 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div 
+                                className={clsx("h-full transition-all duration-1000", getProgressColor(week.submissionPct))} 
+                                style={{ width: `${week.submissionPct}%` }} 
+                              />
+                            </div>
+                          </div>
 
-          <div className="flex gap-3 pt-2">
-            <button type="submit" disabled={submitting} className="btn-primary btn flex-1 justify-center disabled:opacity-60">
-              {submitting ? <Loader2 size={14} className="animate-spin mr-2"/> : null} Save LO Assessment
-            </button>
-            <button type="button" onClick={() => setModalOpen(false)} className="btn-secondary btn px-4">Cancel</button>
+                          <button 
+                            onClick={() => toggleWeek(week.id)}
+                            className={clsx(
+                              "w-12 h-12 rounded-2xl flex items-center justify-center transition-all",
+                              expandedWeeks[week.id] ? "bg-brand-600 text-white shadow-lg shadow-brand-200" : "bg-slate-50 text-slate-400 hover:bg-brand-50 hover:text-brand-600"
+                            )}
+                          >
+                            {expandedWeeks[week.id] ? <ChevronDown size={24} /> : <ChevronRight size={24} />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* STUDENT DRILLDOWN */}
+                      {expandedWeeks[week.id] && (
+                        <div className="bg-slate-50/50 border-t border-slate-100 p-6 md:p-8 animate-in slide-in-from-top-4 duration-500">
+                          <h5 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
+                            <Users size={16} className="text-rose-500" />
+                            Missing Submissions ({week.missingCount})
+                          </h5>
+                          
+                          {week.missingStudents.length === 0 ? (
+                            <div className="bg-emerald-50 text-emerald-700 p-8 rounded-[1.5rem] border border-dashed border-emerald-200 text-center">
+                              <p className="text-sm font-black uppercase">100% Completion Achievement!</p>
+                              <p className="text-[10px] font-bold opacity-70 mt-1">Excellent! All students have completed their work for this topic.</p>
+                            </div>
+                          ) : (
+                            <div className="grid sm:grid-cols-2 gap-4">
+                              {week.missingStudents.map((s, idx) => (
+                                <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-brand-200 transition-all">
+                                  <div className="flex items-center gap-4">
+                                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-sm font-black text-slate-400">
+                                      {s.name?.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div>
+                                      <p className="text-xs font-black text-slate-800 tracking-tight">{s.name}</p>
+                                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        Roll: {s.roll_no} • {s.contact || 'No Contact'}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <span className={clsx(
+                                    "text-[9px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest",
+                                    s.reason?.includes('Homework') ? "text-amber-600 bg-amber-50" :
+                                    s.reason?.includes('Notebook') ? "text-rose-600 bg-rose-50" :
+                                    "text-slate-600 bg-slate-50"
+                                  )}>
+                                    {s.reason || 'Pending'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* RIGHT COLUMN: PRINCIPAL OBSERVATIONS (1/3 Width) */}
+        <div className="space-y-6">
+          <SectionHeader title="Principal Observations" subtitle="Admin evaluation results" />
+          <div className="space-y-4">
+            {observations?.length === 0 ? (
+              <div className="bg-white rounded-[2rem] p-10 text-center border border-slate-100 shadow-sm">
+                <Award size={48} className="text-slate-100 mx-auto mb-4" />
+                <p className="text-xs font-black text-slate-300 uppercase tracking-widest">No evaluation records</p>
+              </div>
+            ) : (
+              observations?.map((obs) => (
+                <div key={obs.id} className="bg-white rounded-[2rem] p-6 md:p-8 border border-slate-100 shadow-sm hover:shadow-lg transition-all relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-700" />
+                  
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-8">
+                      <div>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">Evaluation Date</p>
+                        <h5 className="text-sm font-black text-slate-800">{new Date(obs.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' })}</h5>
+                      </div>
+                      <div className={clsx(
+                        "w-16 h-16 rounded-2xl flex items-center justify-center text-xl font-black shadow-lg",
+                        obs.pct >= 80 ? "bg-emerald-500 text-white shadow-emerald-200" : "bg-brand-600 text-white shadow-blue-200"
+                      )}>
+                        {obs.pct}%
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                      {Object.entries(obs.breakdown).map(([key, val]) => (
+                        <div key={key}>
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{key}</span>
+                            <span className="text-xs font-black text-slate-800">{val}/10</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div className={clsx("h-full transition-all duration-1000", obs.pct >= 80 ? "bg-emerald-500" : "bg-brand-500")} style={{ width: `${(val / 10) * 100}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+            <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pt-4">
+               ℹ️ Data is read-only. Awarded by Admin.
+            </p>
           </div>
-        </form>
-      </Modal>
+        </div>
+
+      </div>
     </div>
   )
 }
