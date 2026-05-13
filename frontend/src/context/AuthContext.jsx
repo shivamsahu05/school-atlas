@@ -25,14 +25,35 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     try {
       setSyncing(true)
+
+      // Step 1: Lean login — only validates credentials, returns basic user + token
       const res = await axios.post(`${API_BASE}/auth/login`, { username, password })
       const { token, user: userData } = res.data.data
 
+      // Step 2: Persist token immediately so refreshUser() can use it
       const session = { token, user: userData }
       localStorage.setItem(SESSION_KEY, JSON.stringify(session))
       localStorage.setItem('token', token)
-      
+      localStorage.setItem('sams_last_active', Date.now().toString())
       setUser({ ...userData, token })
+
+      // Step 3: Fetch full profile (permissions, subjects, etc.) from /auth/me
+      // This runs in background — login is already marked successful
+      try {
+        const meRes = await axios.get(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (meRes.data.success) {
+          const fullUser = meRes.data.data
+          const fullSession = { token, user: fullUser }
+          localStorage.setItem(SESSION_KEY, JSON.stringify(fullSession))
+          setUser({ ...fullUser, token })
+        }
+      } catch (meErr) {
+        // Non-fatal: user is logged in with basic data, permissions load later
+        console.warn('[AUTH] /me enrichment failed after login:', meErr.message)
+      }
+
       setSyncing(false)
       return { ok: true, role: userData.role }
 
