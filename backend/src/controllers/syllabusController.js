@@ -661,8 +661,12 @@ const uploadSyllabusPlan = async (req, res) => {
   
   try {
     const userId = req.user.id;
-    const [teachers] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
-    const teacherId = teachers[0]?.id || userId; // Fallback to userId if not found
+    // If Admin, they might not have a teacher record, so we allow fallback
+    let teacherContextId = userId;
+    if (req.user.role === 'teacher') {
+      const [teachers] = await pool.execute('SELECT user_id FROM teachers WHERE user_id = ?', [userId]);
+      teacherContextId = teachers[0]?.user_id || userId;
+    }
 
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -751,7 +755,7 @@ const uploadSyllabusPlan = async (req, res) => {
             class_id, section_id, subject_id, teacher_id, topic, week, month,
             planned_start_date, planned_end_date, periods, periods_needed, learning_outcome, status
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [clsId, secId || null, subId, teacherId, topic, weekClean, monthClean, startDate, endDate, periods, periods, loRaw]
+          [clsId, secId || null, subId, teacherContextId, topic, weekClean, monthClean, startDate, endDate, periods, periods, loRaw]
         );
 
         results.inserted++;
@@ -775,12 +779,14 @@ const uploadSyllabusPlan = async (req, res) => {
 /** POST /api/syllabus/add-micro-schedule */
 const addMicroSchedule = async (req, res) => {
   const { 
-    class_id, section_id, subject_id, topic, week, month, periods, status,
+    class_id, section_id, subject_id, teacher_id, topic, week, month, periods, status,
     learning_outcome, notebook_checked
   } = req.body;
 
   try {
     const userId = req.user.id;
+    // CRITICAL: Use teacher_id from body if provided (Admin case), else use logged-in user (Teacher case)
+    const finalTeacherId = teacher_id ? Number(teacher_id) : userId;
 
     if (!class_id || !subject_id || !topic || !week || !month) {
       return res.status(400).json({ success: false, message: 'Missing required fields.' });
@@ -809,7 +815,7 @@ const addMicroSchedule = async (req, res) => {
         learning_outcome, notebook_checked
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        class_id, section_id, subject_id, userId, topic, week, month,
+        class_id, section_id, subject_id, finalTeacherId, topic, week, month,
         startDate, endDate, Number(periods || 0), Number(periods || 0), finalStatus,
         learning_outcome || '', notebook_checked || 'No'
       ]
