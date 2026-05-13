@@ -28,14 +28,18 @@ const lmsIntelligenceController = {
     };
 
     try {
-      const teacherId = req.user?.id;
-      if (!teacherId) return res.json({ success: true, data: result });
+      const userId = req.user?.id; 
+      if (!userId) return res.json({ success: true, data: result });
 
-      // 1. Fetch Syllabus/Micro-Schedule Data
-      const [rows] = await pool.execute(`
+      // 1. Fetch Teacher Data & Assignments
+      const [teacherRows] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
+      const teacherProfileId = teacherRows[0]?.id;
+
+      const [syllabusRows] = await pool.execute(`
         SELECT 
           s.id, s.topic, s.week, s.month, s.is_completed, s.status, s.students_data,
-          s.periods, s.periods_needed, s.learning_status as class_understanding_level, s.notebook_checked,
+          s.periods, s.periods_needed, s.class_understanding_level, s.notebook_checked,
+          s.planned_end_date, s.completed_date,
           s.class_id, s.section_id, s.subject_id,
           ac.class_number, asec.name as section_name, sub.name as subject_name
         FROM syllabus s
@@ -43,133 +47,142 @@ const lmsIntelligenceController = {
         LEFT JOIN acad_sections asec ON s.section_id = asec.id
         LEFT JOIN subjects sub ON s.subject_id = sub.id
         WHERE s.teacher_id = ?
-      `, [teacherId]);
+      `, [userId]);
 
-      let loWeightedSum = 0;
-      let loTotalCount = 0;
-      let extraPeriodsCount = 0;
+      // 2. Syllabus Completion & LO Achievement Logic
+      let totalTasks = 0;
+      let completedTasks = 0;
+      let onTimeTopics = 0;
+      let totalPeriodsPlanned = 0;
+      let totalPeriodsNeeded = 0;
 
-      rows.forEach(row => {
+      syllabusRows.forEach(row => {
         result.syllabus.total++;
         const isTopicDone = row.is_completed === 1 || row.status === 'completed';
-        if (isTopicDone) result.syllabus.completed++;
+        if (isTopicDone) {
+          result.syllabus.completed++;
+          // Timeliness check
+          if (row.completed_date && row.planned_end_date) {
+            if (new Date(row.completed_date) <= new Date(row.planned_end_date)) {
+              onTimeTopics++;
+            }
+          } else {
+            onTimeTopics++; // Assume on time if no dates but completed
+          }
+        }
 
-        if (row.periods_needed > 0) extraPeriodsCount++;
+        totalPeriodsPlanned += (row.periods || 0);
+        totalPeriodsNeeded += (row.periods_needed || 0);
 
         const students = safeParse(row.students_data);
         const classLvl = (row.class_understanding_level || '').toLowerCase();
         
-        // Calculate LO Score for this topic based on student data
-        if (isTopicDone) {
-          let topicLOPoints = 0;
-          let topicStudentCount = 0;
+        // LO Distribution
+        if (isTopicDone && classLvl && classLvl !== '-' && classLvl !== 'awaiting status') {
+          if (classLvl.includes('approach')) result.lo.approaching++;
+          else if (classLvl.includes('exceed')) result.lo.exceeding++;
+          else if (classLvl.includes('meet')) result.lo.meeting++;
+          result.lo.total++;
+        }
 
-          if (students.length > 0) {
-            students.forEach(s => {
-              const slvl = (s.learning_status || classLvl).toLowerCase();
-              let points = 80; // Default Meeting
-              if (slvl.includes('approach')) points = 60;
-              else if (slvl.includes('exceed')) points = 100;
-              
-              // Penalize if homework or notebook is not done
-              if (s.homework === false || s.homework_status === 'PENDING') points -= 10;
-              if (row.notebook_checked === 'No') points -= 5;
+        // Detailed LO / Work Compliance (Homework + Notebook)
+        if (students.length > 0) {
+          students.forEach(s => {
+            totalTasks += 2; // 1 for homework, 1 for notebook
+            if (s.homework === true || s.homework_status === 'COMPLETED') completedTasks++;
+            if (s.notebook === true || s.notebook_status === 'CHECKED') completedTasks++;
 
-              topicLOPoints += Math.max(0, points);
-              topicStudentCount++;
-
-              // Track alerts
-              if (s.homework === false || s.homework_status === 'PENDING') {
-                result.not_done_students.push({
-                  id: row.id, topic: row.topic, week: row.week,
-                  class: `${row.class_number || 'N/A'}-${row.section_name || 'N/A'}`, subject: row.subject_name,
-                  status: 'Homework Pending', name: s.name || 'N/A'
-                });
-              }
-            });
-          } else if (classLvl && classLvl !== '-' && classLvl !== 'awaiting status') {
-            let points = 80;
-            if (classLvl.includes('approach')) points = 60;
-            else if (classLvl.includes('exceed')) points = 100;
-            topicLOPoints += points;
-            topicStudentCount = 1;
-          }
-
-          if (topicStudentCount > 0) {
-            loWeightedSum += (topicLOPoints / topicStudentCount);
-            loTotalCount++;
-          }
+            // Execution Alerts
+            if (s.homework === false || s.homework_status === 'PENDING') {
+              result.not_done_students.push({
+                id: row.id, topic: row.topic, week: row.week,
+                class: `${row.class_number || 'N/A'}-${row.section_name || 'N/A'}`, subject: row.subject_name,
+                status: 'Homework Pending', name: s.name || 'N/A'
+              });
+            }
+          });
+        } else if (isTopicDone) {
+          // If no student data, use row level indicators
+          totalTasks += 1;
+          if (row.notebook_checked === 'Yes') completedTasks++;
         }
       });
 
-      const syllabusPct = result.syllabus.total > 0 ? (result.syllabus.completed / result.syllabus.total) * 100 : 0;
-      const loPct = loTotalCount > 0 ? (loWeightedSum / loTotalCount) : 0;
+      result.syllabus.percentage = result.syllabus.total > 0 
+        ? Math.round((result.syllabus.completed / result.syllabus.total) * 100) : 0;
 
-      // 2. Fetch Observation Data (Observation Score 25% + Language Proficiency 15%)
+      const loAchievementPct = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
+
+      // 3. Observation Score & Language Proficiency
       const [obsRows] = await pool.execute(`
         SELECT 
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs,
-          AVG((communication / 10) * 100) AS avg_lang
-        FROM class_observations 
-        WHERE teacher_id = ?
-      `, [teacherId]);
-
-      const obsPct = obsRows[0]?.avg_obs || 0;
-      const langPct = obsRows[0]?.avg_lang || 0;
-
-      // 3. Participation Score (10%)
-      // Count participants from students in teacher's assigned classes
-      const [partRows] = await pool.execute(`
-        SELECT COUNT(DISTINCT ep.roll_no, ep.student_class) as participant_count
-        FROM event_participants ep
-        JOIN students st ON ep.roll_no = st.roll_no
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        WHERE ts.teacher_id = ?
-      `, [teacherId]);
+          AVG(content_mastery) as avg_content,
+          AVG(pedagogy) as avg_pedagogy,
+          AVG(student_engagement) as avg_engagement,
+          AVG(communication) as avg_comm,
+          AVG(assessment) as avg_assess,
+          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS total_avg
+        FROM class_observations WHERE teacher_id = ?
+      `, [userId]);
       
-      const [totalStudentsRows] = await pool.execute(`
-        SELECT COUNT(DISTINCT st.id) as total_students
-        FROM students st
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        WHERE ts.teacher_id = ?
-      `, [teacherId]);
+      const observationScore = obsRows[0]?.total_avg || 0;
+      const langProficiency = obsRows[0]?.avg_comm ? (obsRows[0].avg_comm / 10) * 100 : 0;
 
-      const totalStudents = totalStudentsRows[0]?.total_students || 1;
-      const participatePct = Math.min(100, ((partRows[0]?.participant_count || 0) / totalStudents) * 500); // Scaled: 20% participation = 100% score
+      // 4. Participate Score
+      // Find students in classes assigned to this teacher
+      let participatePct = 0;
+      if (teacherProfileId) {
+        const [assignments] = await pool.execute('SELECT class_id, section_id FROM teacher_class_assignments WHERE teacher_id = ?', [teacherProfileId]);
+        if (assignments.length > 0) {
+          const classIds = assignments.map(a => a.class_id);
+          const [participantCount] = await pool.execute(`
+            SELECT COUNT(DISTINCT student_name) as count 
+            FROM event_participants 
+            WHERE student_class IN (SELECT name FROM academic_classes WHERE id IN (${classIds.join(',')}))
+          `);
+          // Score calculation: 5+ participants = 100%, otherwise ratio
+          participatePct = Math.min((participantCount[0]?.count || 0) * 20, 100);
+        }
+      }
 
-      // 4. Other Parameters (20%) - Deductions for extra periods and leaves
-      const [leaveRows] = await pool.execute(`
-        SELECT COUNT(*) as leave_count FROM leave_requests 
-        WHERE user_id = ? AND status IN ('Approved', 'Pending')
-      `, [teacherId]);
+      // 5. Other Parameters (Timeliness, Efficiency, Leaves)
+      const timelinessScore = result.syllabus.total > 0 ? (onTimeTopics / result.syllabus.total) * 100 : 100;
+      const efficiencyScore = (totalPeriodsPlanned + totalPeriodsNeeded) > 0 
+        ? (totalPeriodsPlanned / (totalPeriodsPlanned + totalPeriodsNeeded)) * 100 : 100;
+      
+      const [leaveRows] = await pool.execute('SELECT COUNT(*) as count FROM leave_requests WHERE user_id = ? AND status = "Approved"', [userId]);
+      const leaveScore = Math.max(100 - ((leaveRows[0]?.count || 0) * 10), 0); // 10% penalty per approved leave
 
-      const leaveCount = leaveRows[0]?.leave_count || 0;
-      let otherScore = 100 - (extraPeriodsCount * 5) - (leaveCount * 2);
-      otherScore = Math.max(0, otherScore);
+      const otherParametersScore = (timelinessScore * 0.4) + (efficiencyScore * 0.4) + (leaveScore * 0.2);
 
-      // Final Weighted Aggregation
-      // Syllabus (15%) + LO (15%) + Obs (25%) + Participate (10%) + Other (20%) + Language (15%)
-      const totalWeighted = 
-        (syllabusPct * 0.15) + 
-        (loPct * 0.15) + 
-        (obsPct * 0.25) + 
-        (participatePct * 0.10) + 
-        (otherScore * 0.20) + 
-        (langPct * 0.15);
-
-      result.syllabus.percentage = Math.round(syllabusPct);
-      result.overall_score = parseFloat(totalWeighted.toFixed(1));
-      result.performance = { 
-        syllabus: Math.round(syllabusPct), 
-        lo: Math.round(loPct), 
-        observation: Math.round(obsPct) 
+      // 6. FINAL WEIGHTED CALCULATION
+      // 1. Syllabus (15%)
+      // 2. LO Achievement (15%)
+      // 3. Observation (25%)
+      // 4. Participate (10%)
+      // 5. Other (20%)
+      // 6. Language (15%)
+      
+      result.performance = {
+        syllabus: Math.round(result.syllabus.percentage),
+        lo: Math.round(loAchievementPct),
+        observation: Math.round(observationScore)
       };
       result.participate_score = Math.round(participatePct);
-      result.other_score = Math.round(otherScore);
-      result.lang_score = Math.round(langPct);
-      
+      result.other_score = Math.round(otherParametersScore);
+      result.lang_score = Math.round(langProficiency);
+
+      result.overall_score = parseFloat((
+        (result.performance.syllabus * 0.15) +
+        (result.performance.lo * 0.15) +
+        (result.performance.observation * 0.25) +
+        (result.participate_score * 0.10) +
+        (result.other_score * 0.20) +
+        (result.lang_score * 0.15)
+      ).toFixed(1));
+
       result.not_done_students = result.not_done_students.slice(0, 15);
-      res.json({ success: true, data: { ...result, all_rows: rows } });
+      res.json({ success: true, data: { ...result, all_rows: syllabusRows } });
     } catch (error) {
       console.error("DASHBOARD ERROR:", error);
       res.status(500).json({ success: false, message: error.message });
@@ -219,123 +232,6 @@ const lmsIntelligenceController = {
       });
       res.json({ success: true, data });
     } catch (e) { res.status(500).json({ success: false, message: e.message }); }
-  },
-
-  getTopPerformersList: async (req, res) => {
-    try {
-      // 1. Fetch all active teachers
-      const [teachers] = await pool.execute(`
-        SELECT u.id, u.name 
-        FROM users u 
-        JOIN teachers t ON u.id = t.user_id 
-        WHERE u.role = 'teacher' AND t.status = 'active' AND t.is_deleted = 0
-      `);
-
-      // 2. Fetch all required bulk data for all teachers to avoid N+1 queries
-      const [syllabusStats] = await pool.execute(`
-        SELECT 
-          teacher_id,
-          COUNT(*) as total,
-          SUM(CASE WHEN is_completed = 1 OR status = 'completed' THEN 1 ELSE 0 END) as completed,
-          SUM(CASE WHEN periods_needed > 0 THEN 1 ELSE 0 END) as extra_periods
-        FROM syllabus GROUP BY teacher_id
-      `);
-
-      const [obsStats] = await pool.execute(`
-        SELECT 
-          teacher_id,
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs,
-          AVG((communication / 10) * 100) AS avg_lang
-        FROM class_observations GROUP BY teacher_id
-      `);
-
-      const [leaveStats] = await pool.execute(`
-        SELECT user_id as teacher_id, COUNT(*) as leave_count 
-        FROM leave_requests WHERE status IN ('Approved', 'Pending') 
-        GROUP BY user_id
-      `);
-
-      const [participationStats] = await pool.execute(`
-        SELECT ts.teacher_id, COUNT(DISTINCT ep.roll_no, ep.student_class) as participant_count
-        FROM event_participants ep
-        JOIN students st ON ep.roll_no = st.roll_no
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        GROUP BY ts.teacher_id
-      `);
-
-      const [classSizeStats] = await pool.execute(`
-        SELECT ts.teacher_id, COUNT(DISTINCT st.id) as total_students
-        FROM students st
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        GROUP BY ts.teacher_id
-      `);
-
-      const [loStats] = await pool.execute(`
-        SELECT 
-          teacher_id,
-          AVG(
-            CASE 
-              WHEN learning_status LIKE '%exceed%' THEN 100
-              WHEN learning_status LIKE '%meet%' THEN 80
-              WHEN learning_status LIKE '%approach%' THEN 60
-              ELSE 0 
-            END
-          ) as avg_lo
-        FROM syllabus 
-        WHERE (is_completed = 1 OR status = 'completed') 
-        AND learning_status IS NOT NULL 
-        AND learning_status NOT IN ('-', 'awaiting status')
-        GROUP BY teacher_id
-      `);
-
-      // Map data for quick lookup
-      const syllabusMap = syllabusStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
-      const obsMap = obsStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
-      const leaveMap = leaveStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.leave_count }), {});
-      const partMap = participationStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.participant_count }), {});
-      const sizeMap = classSizeStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.total_students }), {});
-      const loMap = loStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.avg_lo }), {});
-
-      const rankedTeachers = teachers.map(t => {
-        const s = syllabusMap[t.id] || { total: 0, completed: 0, extra_periods: 0 };
-        const o = obsMap[t.id] || { avg_obs: 0, avg_lang: 0 };
-        const leaves = leaveMap[t.id] || 0;
-        const parts = partMap[t.id] || 0;
-        const totalStu = sizeMap[t.id] || 1;
-        const loVal = loMap[t.id] || 0;
-
-        const syllabusPct = s.total > 0 ? (s.completed / s.total) * 100 : 0;
-        const loPct = loVal || 0;
-        const obsPct = o.avg_obs || 0;
-        const partPct = Math.min(100, (parts / totalStu) * 500);
-        const otherScore = Math.max(0, 100 - (s.extra_periods * 5) - (leaves * 2));
-        const langPct = o.avg_lang || 0;
-
-        const weightedScore = 
-          (syllabusPct * 0.15) + 
-          (loPct * 0.15) + 
-          (obsPct * 0.25) + 
-          (partPct * 0.10) + 
-          (otherScore * 0.20) + 
-          (langPct * 0.15);
-
-        return {
-          teacher_id: t.id,
-          teacher_name: t.name,
-          weighted_score: parseFloat(weightedScore.toFixed(1)),
-          details: { syllabusPct, loPct, obsPct, partPct, otherScore, langPct }
-        };
-      });
-
-      rankedTeachers.sort((a, b) => b.weighted_score - a.weighted_score);
-      
-      if (res) res.json({ success: true, data: rankedTeachers.slice(0, 10) });
-      return rankedTeachers;
-    } catch (error) {
-      console.error("TOP PERFORMERS ERROR:", error);
-      if (res) res.status(500).json({ success: false, message: error.message });
-      return [];
-    }
   },
 
   getAnalytics: async (req, res) => lmsIntelligenceController.getTeacherDashboard(req, res),

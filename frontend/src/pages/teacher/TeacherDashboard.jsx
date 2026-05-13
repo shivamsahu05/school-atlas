@@ -109,7 +109,15 @@ export default function TeacherDashboard() {
   const syllabusStats = intelData?.syllabus || { completed: 0, total: 0, percentage: 0 }
   const loSummary = intelData?.lo || { approaching: 0, meeting: 0, exceeding: 0, total: 0 }
   const pendingAlerts = intelData?.not_done_students || []
-  const isTopPerformer = (data?.topPerformers || []).some(p => p.teacher_id === user?.id);
+  const topPerformers = data?.topPerformers || []
+  const myRank = topPerformers.findIndex(p => p.teacher_id === user?.id) // 0-based index
+  const rankBadge = myRank === 0
+    ? { label: '🏆 Top Performer', cls: 'bg-amber-400/20 text-amber-300 border-amber-400/30' }
+    : myRank === 1
+    ? { label: '🥈 Top 2nd Performer', cls: 'bg-slate-300/20 text-slate-200 border-slate-300/30' }
+    : myRank === 2
+    ? { label: '🥉 Top 3rd Performer', cls: 'bg-orange-400/20 text-orange-300 border-orange-400/30' }
+    : null
 
   const primaryAssignment = data?.assignments?.[0] || {};
   const currentYear = new Date().getFullYear();
@@ -127,34 +135,25 @@ export default function TeacherDashboard() {
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Hello,</p>
-              {(() => {
-                const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
-                if (rankIndex === 0) return <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-amber-400/30 uppercase tracking-tighter">🏆 Top Performer</span>;
-                if (rankIndex === 1) return <span className="bg-blue-400/20 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-400/30 uppercase tracking-tighter">🥈 Top Second Performer</span>;
-                if (rankIndex === 2) return <span className="bg-slate-400/20 text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-slate-400/30 uppercase tracking-tighter">🥉 Top Third Performer</span>;
-                return null;
-              })()}
+              {rankBadge && <span className={`text-[9px] font-black px-2 py-0.5 rounded-lg border uppercase tracking-tighter ${rankBadge.cls}`}>{rankBadge.label}</span>}
             </div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Dear <span className="text-white">{user?.name || 'Teacher'}</span></h1>
             <div className="space-y-1">
               <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — YOU ARE THE STAR PERFORMER 🌟</p>
-              <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
+              <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · Class {primaryAssignment.class_name || 'N/A'} · {academicYear}</p>
             </div>
           </div>
           <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
-          <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+            <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
         </div>
       </div>
 
       {/* KPI StatCards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard title="Topics Completed" value={`${syllabusStats.completed}/${syllabusStats.total}`} subtitle={`${syllabusStats.percentage}% of syllabus`} icon={BookOpen} color="brand" trend={syllabusStats.percentage} />
-        {(() => {
-          const loPct = loSummary.total > 0 ? Math.round(((loSummary.exceeding * 100) + (loSummary.meeting * 80) + (loSummary.approaching * 60)) / loSummary.total) : 0;
-          return <StatCard title="LO Achievement" value={`${loPct}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={loPct} />;
-        })()}
+        <StatCard title="LO Achievement" value={`${loSummary.total > 0 ? Math.round(((loSummary.exceeding * 100) + (loSummary.meeting * 80) + (loSummary.approaching * 60)) / loSummary.total) : 0}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={overallPerf} />
         <StatCard title="Latest Obs." value={`${latestObs.pct}%`} subtitle="Classroom observation" icon={Eye} color="teal" trend={latestObs.pct} />
-        <StatCard title="Overall Performance" value={`${Math.round(overallPerf)}%`} subtitle="Weighted score" icon={TrendingUp} color="amber" trend={overallPerf} />
+        <StatCard title="Overall Performance" value={`${overallPerf}%`} subtitle="Weighted Score" icon={Trophy} color="amber" trend={overallPerf} />
       </div>
 
       {/* Birthday Celebration - Premium Soft Blue Design (Relocated) */}
@@ -163,7 +162,7 @@ export default function TeacherDashboard() {
           {/* Subtle Festive Accents */}
           <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
           <div className="absolute top-0 left-0 w-3 h-full bg-indigo-500/60 rounded-l-[2rem] pointer-events-none" />
-
+          
           <div className="flex items-center gap-4 shrink-0 md:border-r border-indigo-100 md:pr-8 relative z-10">
             <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center border border-blue-100 shadow-sm">
               <Gift className="text-indigo-500 animate-bounce" size={24} />
@@ -213,8 +212,8 @@ export default function TeacherDashboard() {
                 return (
                   <div key={i} className="flex items-center gap-3 bg-white/60 border border-indigo-50 px-3 py-1.5 rounded-xl hover:bg-white hover:border-indigo-200 transition-all group/item min-w-[140px] shadow-sm">
                     <div className="bg-white rounded-lg p-1 px-2 border border-indigo-50 group-hover/item:border-indigo-100 text-center">
-                      <p className="text-[7px] font-black text-slate-300 uppercase leading-none">{monthName}</p>
-                      <p className="text-xs font-black text-indigo-500 leading-none mt-0.5">{dayNum}</p>
+                       <p className="text-[7px] font-black text-slate-300 uppercase leading-none">{monthName}</p>
+                       <p className="text-xs font-black text-indigo-500 leading-none mt-0.5">{dayNum}</p>
                     </div>
                     <div className="flex flex-col leading-tight overflow-hidden">
                       <p className="text-[10px] font-black text-slate-700 uppercase tracking-tight truncate">{stu.name}</p>

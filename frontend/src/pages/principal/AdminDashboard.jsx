@@ -216,25 +216,27 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Top performers table — now teacher-based with 70/30 score */}
+        {/* Top performers table — 6-parameter weighted score */}
         <div className="card p-6">
-          <SectionHeader title="Top Performers" subtitle="Dynamic: Weighted score across 6 parameters" />
+          <SectionHeader title="Top Performers" subtitle="Syllabus 15% · LO 15% · Observation 25% · Participate 10% · Other 20% · Language 15%" />
           <div className="space-y-3 mt-2">
             {topPerformers.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-10">No performance data available</p>
             ) : topPerformers.map((p, i) => (
-              <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50/50 border border-slate-100/30">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black
-                  ${i === 0 ? 'bg-amber-400 text-white shadow-sm' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-orange-400 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
+              <div key={i} className="flex items-center gap-3">
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold
+                  ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-100 text-slate-500'}`}>
                   {i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name || '—'}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Academic Excellence</p>
+                  <p className="text-sm font-medium text-slate-800 truncate">{p.teacher_name || p.name || '—'}</p>
+                  <p className="text-xs text-slate-400">
+                    Syllabus: {Number(p.syllabus_score || 0).toFixed(0)}% · Obs: {Number(p.obs_score || 0).toFixed(0)}%
+                  </p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                    {Number(p.weighted_score).toFixed(1)}%
+                  <p className="text-sm font-bold text-emerald-600">
+                    {Number(p.weighted_score ?? p.avgScore ?? 0).toFixed(1)}%
                   </p>
                 </div>
               </div>
@@ -292,13 +294,18 @@ export default function AdminDashboard() {
 // D. Notification Summary Panel
 // ────────────────────────────────────────────────────────────────────────────
 function NotificationPanel({ data, notifications = [] }) {
-  const m = data?.management || {}
-  
+  const pendingLeaves = notifications.filter(n => n.type === 'leave').length
+  const todayBdays = (data?.birthdays || []).filter(isToday).length
+  const pendingHW = notifications.filter(n => n.type === 'alert').length
+  const overdueSyl = notifications.filter(n => n.type === 'alert' && n.text.toLowerCase().includes('syllabus')).length
+  const permExpiring = notifications.filter(n => n.type === 'message' && n.text.toLowerCase().includes('expiring')).length
+
   const NOTIFS = [
-    { label: 'Pending Homework', count: m.pendingHomework || 0, color: 'amber', icon: FileText, to: '/admin/followups' },
-    { label: 'Overdue Syllabus', count: m.overdueSyllabus || 0, color: 'red', icon: BookOpen, to: '/admin/syllabus' },
-    { label: 'Birthday Today', count: m.birthdayToday || 0, color: 'purple', icon: Cake, to: '#birthdays' },
-    { label: 'Leave Pending', count: m.pendingLeaves || 0, color: 'blue', icon: Clock, to: '/admin/leave' },
+    { label: 'Pending Homework', count: pendingHW, color: 'amber', icon: FileText, to: '/admin/followups' },
+    { label: 'Overdue Syllabus', count: overdueSyl, color: 'red', icon: BookOpen, to: '/admin/syllabus' },
+    { label: 'Birthday Today', count: todayBdays, color: 'purple', icon: Cake, to: '#birthdays' },
+    { label: 'Leave Pending', count: pendingLeaves, color: 'blue', icon: Clock, to: '/admin/leave' },
+    { label: 'Permission Expiring', count: permExpiring, color: 'teal', icon: AlertTriangle, to: '/admin/users' },
   ]
 
   const colMap = {
@@ -306,6 +313,7 @@ function NotificationPanel({ data, notifications = [] }) {
     red: { badge: 'bg-rose-500', icon: 'bg-rose-50 text-rose-600', border: 'border-rose-200' },
     purple: { badge: 'bg-purple-500', icon: 'bg-purple-50 text-purple-600', border: 'border-purple-200' },
     blue: { badge: 'bg-brand-500', icon: 'bg-brand-50 text-brand-600', border: 'border-brand-200' },
+    teal: { badge: 'bg-teal-500', icon: 'bg-teal-50 text-teal-600', border: 'border-teal-200' },
   }
 
   return (
@@ -314,7 +322,7 @@ function NotificationPanel({ data, notifications = [] }) {
         title="Notifications"
         subtitle="Items requiring your attention (Live Data)"
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {NOTIFS.map(({ label, count, color, icon: Icon, to }) => {
           const c = colMap[color]
           return (

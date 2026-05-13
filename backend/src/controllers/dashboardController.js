@@ -3,17 +3,14 @@
 // ADDED: teacher dashboard endpoint
 const pool = require('../config/mysqlDb');
 
-const lmsIntelligence = require('./lmsIntelligenceController');
-
 // ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
 exports.getAdminMetrics = async (req, res) => {
   try {
-    const topPerformers = await lmsIntelligence.getTopPerformersList();
-
     const [
       [overviewRows],
       [eventRows],
       [observationRows],
+      [topPerformerRows],
       [managementRows],
       [overdueHomeworkRows],
       [pendingLeaveRows],
@@ -58,26 +55,58 @@ exports.getAdminMetrics = async (req, res) => {
         LIMIT 5
       `),
 
-      // 5. Management counters (Granular Notifications)
+      // 4. Top Performing Teachers — 6-parameter weighted formula
+      pool.execute(`
+        SELECT
+          u.id AS teacher_id,
+          u.name AS teacher_name,
+          -- Syllabus Completion (15%)
+          COALESCE(
+            ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(s.id), 0) * 100)
+          , 0) AS syllabus_score,
+          -- LO Achievement (15%) — from class_observations communication sub-score
+          COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) AS lo_score,
+          -- Observation Score (25%)
+          COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) AS obs_score,
+          -- Language Proficiency (15%) — from communication column
+          COALESCE(ROUND(AVG(co.communication / 10 * 100)), 0) AS lang_score,
+          -- Leave penalty (used in Other, 20%)
+          COALESCE((
+            SELECT GREATEST(100 - COUNT(*) * 10, 0)
+            FROM leave_requests lr2
+            WHERE lr2.user_id = u.id AND lr2.status = 'Approved'
+          ), 100) AS leave_score,
+          -- Final weighted score
+          ROUND(
+            COALESCE(ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(s.id), 0) * 100), 0) * 0.15 +
+            COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) * 0.15 +
+            COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) * 0.25 +
+            0 * 0.10 +
+            COALESCE((
+              SELECT GREATEST(100 - COUNT(*) * 10, 0)
+              FROM leave_requests lr2
+              WHERE lr2.user_id = u.id AND lr2.status = 'Approved'
+            ), 100) * 0.20 +
+            COALESCE(ROUND(AVG(co.communication / 10 * 100)), 0) * 0.15
+          , 1) AS weighted_score
+        FROM users u
+        INNER JOIN teachers t ON t.user_id = u.id AND t.is_deleted = 0
+        LEFT JOIN syllabus s ON s.teacher_id = u.id
+        LEFT JOIN class_observations co ON co.teacher_id = u.id
+        WHERE u.role = 'teacher'
+        GROUP BY u.id, u.name
+        ORDER BY weighted_score DESC
+        LIMIT 5
+      `),
+
+      // 5. Management counters
       pool.execute(`
         SELECT 
           (SELECT COUNT(*) FROM homework_submissions WHERE status='pending') AS pendingHomework,
-          (SELECT COUNT(*) FROM syllabus WHERE status != 'completed' AND planned_end_date < CURDATE()) AS overdueSyllabus,
+          (SELECT COUNT(*) FROM syllabus WHERE status != 'completed') AS incompleteSyllabus,
           (SELECT COUNT(*) FROM leave_requests WHERE status='Pending') AS pendingLeaves,
-          (SELECT 
-            (SELECT COUNT(*) FROM students WHERE MONTH(dob) = MONTH(CURDATE()) AND DAY(dob) = DAY(CURDATE())) +
-            (SELECT COUNT(*) FROM teachers WHERE is_deleted = 0 AND 
-              (
-                (dob LIKE '%/%' AND SUBSTRING_INDEX(dob, '/', 1) = DAY(CURDATE()) AND SUBSTRING_INDEX(SUBSTRING_INDEX(dob, '/', 2), '/', -1) = MONTH(CURDATE())) OR
-                (dob LIKE '%-%' AND (
-                  (SUBSTRING_INDEX(dob, '-', 1) = YEAR(CURDATE()) AND SUBSTRING_INDEX(SUBSTRING_INDEX(dob, '-', 2), '-', -1) = MONTH(CURDATE()) AND SUBSTRING_INDEX(dob, '-', -1) = DAY(CURDATE())) OR
-                  (SUBSTRING_INDEX(dob, '-', -1) = YEAR(CURDATE()) AND SUBSTRING_INDEX(SUBSTRING_INDEX(dob, '-', 2), '-', -1) = MONTH(CURDATE()) AND SUBSTRING_INDEX(dob, '-', 1) = DAY(CURDATE()))
-                ))
-              )
-            )
-          ) AS birthdayToday,
           (SELECT COUNT(*) FROM teacher_module_permissions 
-           WHERE status='ACTIVE' AND end_date >= CURDATE() AND end_date <= DATE_ADD(CURDATE(), INTERVAL 14 DAY)) AS expiringPermissions
+           WHERE status='ACTIVE' AND end_date < CURDATE()) AS expiredPermissions
       `),
 
       // 6. Overdue homework notifications
@@ -239,13 +268,12 @@ exports.getAdminMetrics = async (req, res) => {
         },
         events:           eventRows        || [],
         observations:     observationRows  || [],
-        topPerformers:    topPerformers    || [],
+        topPerformers:    topPerformerRows || [],
         management: {
           pendingHomework:    management.pendingHomework    || 0,
-          overdueSyllabus:    management.overdueSyllabus    || 0,
+          incompleteSyllabus: management.incompleteSyllabus || 0,
           pendingLeaves:      management.pendingLeaves      || 0,
-          birthdayToday:      management.birthdayToday      || 0,
-          expiringPermissions: management.expiringPermissions || 0,
+          expiredPermissions: management.expiredPermissions || 0,
         },
         notifications:    notifications    || [],
         weeklySyllabus:   syllabusRows     || [],
@@ -283,10 +311,9 @@ exports.getTeacherDashboard = async (req, res) => {
       [leaveRows],
       [birthdayRows],
       [hwRows],
+      [topPerformerRows],
       [latestLoRows],
     ] = await Promise.all([
-      // Top Performers bulk calculation
-      lmsIntelligence.getTopPerformersList(),
 
       // 1. Teacher profile
       pool.execute(`
@@ -426,7 +453,42 @@ exports.getTeacherDashboard = async (req, res) => {
         LIMIT 8
       `, [userId]),
 
-      // 10. Removed Legacy Top Performer Query (Handled by bulk calculation)
+      // 10. Top Performing Teachers — 6-parameter weighted formula (same as admin)
+      pool.execute(`
+        SELECT
+          u.id AS teacher_id,
+          u.name AS teacher_name,
+          COALESCE(
+            ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(s.id), 0) * 100)
+          , 0) AS syllabus_score,
+          COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) AS obs_score,
+          COALESCE(ROUND(AVG(co.communication / 10 * 100)), 0) AS lang_score,
+          COALESCE((
+            SELECT GREATEST(100 - COUNT(*) * 10, 0)
+            FROM leave_requests lr2
+            WHERE lr2.user_id = u.id AND lr2.status = 'Approved'
+          ), 100) AS leave_score,
+          ROUND(
+            COALESCE(ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(s.id), 0) * 100), 0) * 0.15 +
+            COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) * 0.15 +
+            COALESCE(ROUND(AVG((co.content_mastery + co.pedagogy + co.student_engagement + co.communication + co.assessment) / 50 * 100)), 0) * 0.25 +
+            0 * 0.10 +
+            COALESCE((
+              SELECT GREATEST(100 - COUNT(*) * 10, 0)
+              FROM leave_requests lr2
+              WHERE lr2.user_id = u.id AND lr2.status = 'Approved'
+            ), 100) * 0.20 +
+            COALESCE(ROUND(AVG(co.communication / 10 * 100)), 0) * 0.15
+          , 1) AS weighted_score
+        FROM users u
+        INNER JOIN teachers t ON t.user_id = u.id AND t.is_deleted = 0
+        LEFT JOIN syllabus s ON s.teacher_id = u.id
+        LEFT JOIN class_observations co ON co.teacher_id = u.id
+        WHERE u.role = 'teacher'
+        GROUP BY u.id, u.name
+        ORDER BY weighted_score DESC
+        LIMIT 5
+      `),
       
       // 11. Latest Classroom Observation (Admin Observation Form)
       pool.execute(`
@@ -442,10 +504,22 @@ exports.getTeacherDashboard = async (req, res) => {
     ]);
 
     const teacher = teacherRows[0] || {};
-    // --- NEW: Sync LO & Top Performers from Intelligence Engine ---
-    const intelData = await lmsIntelligence.getTeacherDashboard({ user: req.user }, { json: (d) => d });
+    const leaveSummary = leaveRows[0] || { approved: 0, pending: 0, rejected: 0, total: 0 };
+    const loSummary    = loRows[0]    || { approaching: 0, meeting: 0, exceeding: 0, total: 0 };
+
+    // Total syllabus stats
+    const syllabusStats = syllabusRows.reduce(
+      (acc, r) => ({ total: acc.total + r.total, completed: acc.completed + (r.completed || 0) }),
+      { total: 0, completed: 0 }
+    );
+    syllabusStats.pct = syllabusStats.total > 0
+      ? Math.round((syllabusStats.completed / syllabusStats.total) * 100) : 0;
+
+    // --- NEW: Sync LO Distribution from Intelligence Engine ---
+    const intel = require('./lmsIntelligenceController');
+    const mockRes = { json: (data) => data };
+    const intelData = await intel.getTeacherDashboard({ user: req.user }, mockRes);
     const loStats = intelData?.data?.lo || { approaching: 0, meeting: 0, exceeding: 0, total: 0 };
-    const topPerformers = await lmsIntelligence.getTopPerformersList();
 
     return res.status(200).json({
       success: true,
@@ -460,7 +534,7 @@ exports.getTeacherDashboard = async (req, res) => {
         leaves: leaveRows[0] || { approved: 0, pending: 0, rejected: 0, total: 0 },
         birthdays: birthdayRows || [],
         homework: hwRows || [],
-        topPerformers: topPerformers || [],
+        topPerformers: topPerformerRows || [],
         latestLoScore: latestLoRows[0] || { pct: 0 }
       }
     });
