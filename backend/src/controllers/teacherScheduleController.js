@@ -157,7 +157,7 @@ exports.getMicroSchedule = async (req, res) => {
   const { class_id, section_id, subject_id, month, week } = req.query;
   try {
     let sql = `
-      SELECT syl.*, ac.class_number, asec.name as section_name, sub.name as subject_name
+      SELECT syl.*, syl.homework_status as homework_checked, ac.class_number, asec.name as section_name, sub.name as subject_name
       FROM syllabus syl
       JOIN academic_classes ac ON syl.class_id = ac.id
       JOIN acad_sections asec ON syl.section_id = asec.id
@@ -194,7 +194,7 @@ exports.saveMicroSchedule = async (req, res) => {
       const { 
         syllabus_id, class_number, section, subject_id, month, week,
         topic, periods_planned, learning_status, class_understanding_level,
-        learning_outcome, notebook_checked, students_status
+        learning_outcome, notebook_checked, homework_checked, students_status
       } = item;
 
       const finalStatusRaw = (item.status || learning_status || 'pending').toLowerCase();
@@ -219,6 +219,7 @@ exports.saveMicroSchedule = async (req, res) => {
              periods_needed = COALESCE(periods_needed, 0) + ?,
              learning_outcome = ?, 
              notebook_checked = ?, 
+             homework_status = ?,
              class_understanding_level = ?, 
              updated_at = NOW()
            WHERE id = ?`,
@@ -231,6 +232,7 @@ exports.saveMicroSchedule = async (req, res) => {
             incomingPeriods,
             learning_outcome || null, 
             notebook_checked || 'No', 
+            homework_checked || 'Incomplete',
             finalIsCompleted ? class_understanding_level : null, 
             syllabus_id
           ]

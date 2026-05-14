@@ -631,6 +631,7 @@ const getSyllabusPlan = async (req, res) => {
       status: r.status || (r.is_completed ? 'completed' : 'pending'),
       learning_outcome: r.learning_outcome || '',
       notebook_checked: r.notebook_checked || 'No',
+      homework_checked: r.homework_status || 'Incomplete',
       is_completed: Boolean(r.is_completed),
       startDate: r.planned_start_date ? new Date(r.planned_start_date).toISOString().split('T')[0] : null,
       endDate: r.planned_end_date ? new Date(r.planned_end_date).toISOString().split('T')[0] : null,

@@ -250,7 +250,10 @@ export default function AwardLOScores() {
         setEditItem(null)
         fetchHistory()
       }
-    } catch (e) { alert('Update failed') }
+    } catch (e) { 
+      console.error('Update Error:', e);
+      alert(e.response?.data?.message || 'Update failed');
+    }
   }
 
   const columns = [
@@ -485,8 +488,8 @@ export default function AwardLOScores() {
                     value={form.score}
                     onChange={e => setForm({...form, score: e.target.value})}
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-300 pointer-events-none">
-                    PERCENT
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-300 pointer-events-none">
+                    %
                   </div>
                 </div>
                 <div className="flex justify-between px-1 mt-2">

@@ -199,13 +199,22 @@ exports.updateTeacher = async (req, res) => {
   try {
     await connection.beginTransaction();
     const id = req.params.id;
-    const { name, email, phone, mobile, dob, qualification, experience, salary, subject } = req.body;
+    const { name, email, phone, mobile, dob, qualification, experience, salary, subject, password } = req.body;
 
     // Update User (Safe Partial)
-    await connection.execute(
-      'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), phone = COALESCE(?, phone) WHERE id = ?',
-      [name ?? null, email ?? null, (phone || mobile) ?? null, id]
-    );
+    let userQuery = 'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), phone = COALESCE(?, phone)';
+    const userParams = [name ?? null, email ?? null, (phone || mobile) ?? null];
+
+    if (password && password.trim() !== '') {
+      const hashed = await bcrypt.hash(password, SALT_ROUNDS);
+      userQuery += ', password = ?';
+      userParams.push(hashed);
+    }
+
+    userQuery += ' WHERE id = ?';
+    userParams.push(id);
+
+    await connection.execute(userQuery, userParams);
 
     // Update or Insert Profile
     const [existingProfile] = await connection.execute('SELECT id FROM teachers WHERE user_id = ?', [id]);

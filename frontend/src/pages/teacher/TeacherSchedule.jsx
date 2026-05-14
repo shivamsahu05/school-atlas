@@ -211,7 +211,7 @@ export default function TeacherSchedule() {
                 value={form.section_id} onChange={e => setForm({ ...form, section_id: e.target.value, subject_id: '' })} disabled={!form.class_id} required>
                 <option value="">Select assigned section…</option>
                 {form.class_id && [...new Set(assignments.assignments.filter(a => String(a.classId) === String(form.class_id)).map(a => a.sectionId))]
-                  .map(id => ({ id, name: assignments.assignments.find(a => a.sectionId === id)?.sectionName }))
+                  .map(id => ({ id, name: String(assignments.assignments.find(a => a.sectionId === id)?.sectionName || '').trim() }))
                   .filter(sec => sec.name && sec.name.trim() !== '')
                   .map(sec => <option key={sec.id} value={sec.id}>{sec.name}</option>)}
               </select>

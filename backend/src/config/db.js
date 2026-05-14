@@ -25,11 +25,19 @@ try {
 } catch (err) {
   console.warn('⚠️ [Prisma]: Client init failed (non-fatal, mysql2 pool is primary):', err.message);
   // Return a proxy that throws a clear error when any method is called
-  prisma = new Proxy({}, {
-    get: (_, prop) => () => {
-      throw new Error(`Prisma not available (DATABASE_URL missing?). Use mysql2 pool instead. Method: ${prop}`);
-    }
-  });
+  // Proxy handler for nested property access when Prisma fails to init
+  const createProxy = (path = '') => {
+    return new Proxy(() => {}, {
+      get: (target, prop) => {
+        if (prop === 'then' || prop === 'constructor') return undefined;
+        return createProxy(path ? `${path}.${String(prop)}` : String(prop));
+      },
+      apply: (target, thisArg, args) => {
+        throw new Error(`Prisma not available (DATABASE_URL missing?). Fallback to mysql2 pool. Attempted: ${path}`);
+      }
+    });
+  };
+  prisma = createProxy();
 }
 
 module.exports = prisma;

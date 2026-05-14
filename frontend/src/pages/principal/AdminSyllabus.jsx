@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
-import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw } from 'lucide-react'
+import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2 } from 'lucide-react'
 import { StatCard, SectionHeader, StatusBadge, ProgressBar, Modal } from '../../components/ui/index.jsx'
 import { DataTable } from '../../components/ui/DataTable.jsx'
 import { BarChartWidget } from '../../components/charts/index.jsx'
@@ -282,6 +282,22 @@ export default function AdminSyllabus() {
     setFilterDone('')
   }
 
+  const handleDelete = async (row) => {
+    const confirmMsg = `Are you sure you want to delete this topic?\n\nClass: ${row.class?.class_name}-${row.class?.section}\nTimeline: ${row.week} ${row.month}\nTopic: ${row.topic}`;
+    if (window.confirm(confirmMsg)) {
+      try {
+        setDataLoading(true);
+        await syllabusApi.delete(row.id);
+        alert("✅ Deleted Successfully");
+        fetchSyllabus();
+      } catch (err) {
+        alert("❌ Delete Failed: " + (err.response?.data?.message || err.message));
+      } finally {
+        setDataLoading(false);
+      }
+    }
+  };
+
   const columns = [
     { 
       key: 'teacher', 
@@ -340,6 +356,20 @@ export default function AdminSyllabus() {
           </div>
         )
       }
+    },
+    {
+      key: 'actions',
+      label: 'Actions',
+      textRight: true,
+      render: (_, r) => (
+        <button 
+          onClick={() => handleDelete(r)}
+          className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
+          title="Delete Topic"
+        >
+          <Trash2 size={16} />
+        </button>
+      )
     }
   ]
 

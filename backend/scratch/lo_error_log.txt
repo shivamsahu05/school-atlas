@@ -33,3 +33,13 @@ STACK: Error: Unknown column 'is_deleted' in 'where clause'
 STACK: Error: Unknown column 'is_deleted' in 'where clause'
     at exports.getTeacherLOAnalytics (C:\xampp\htdocs\school_web_parnab\backend\src\controllers\loController.js:259:38)
     at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+[2026-05-14T19:04:02.638Z] ERROR: Unknown column 'std.phone' in 'field list'
+STACK: Error: Unknown column 'std.phone' in 'field list'
+    at exports.getTeacherLOAnalytics (C:\xampp\htdocs\school\backend\src\controllers\loController.js:387:44)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+
+[2026-05-14T19:04:02.672Z] ERROR: Unknown column 'std.phone' in 'field list'
+STACK: Error: Unknown column 'std.phone' in 'field list'
+    at exports.getTeacherLOAnalytics (C:\xampp\htdocs\school\backend\src\controllers\loController.js:387:44)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)

@@ -130,15 +130,15 @@ export default function AdminPermissions() {
 
   const handleGrant = async () => {
     const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-    const isStudentModule = selectedModuleKey === 'students_management';
-    const isAllModules = form.module_id === 'ALL';
+    const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
+    const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
 
     if (!form.teacher_id || !form.module_id || !form.start_date || !form.end_date) {
       alert('Please fill in all required fields.')
       return
     }
 
-    if (!isStudentModule && !isAllModules && !form.class_id) {
+    if (!isGlobalModule && !isAllModules && !form.class_id) {
       alert('Class Scope is required for this module.')
       return
     }
@@ -202,7 +202,7 @@ export default function AdminPermissions() {
   }
 
   const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-  const isStudentModule = selectedModuleKey === 'students_management';
+  const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
 
   // ── Table Config ───────────────────────────────────────────────────────────
 
@@ -398,7 +398,8 @@ export default function AdminPermissions() {
                       onChange={e => setForm({...form, module_id: e.target.value})}
                     >
                       <option value="">Select module...</option>
-                      <option value="ALL" className="font-bold text-brand-600">All Modules (Bulk Access)</option>
+                      <option value="ALL_ACADEMIC" className="font-bold text-brand-600">All Academic (Excludes Students Mgt.)</option>
+                      <option value="ALL_FULL" className="font-bold text-rose-600">Full System (Includes Students Mgt.)</option>
                       {Array.isArray(meta.modules) && meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
                     </select>
                     {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -408,7 +409,7 @@ export default function AdminPermissions() {
               </div>
 
               {/* Class & Section Scope - Hidden for Students Management and All Modules (Optional) */}
-              {!isEditMode && !isStudentModule && (
+              {!isEditMode && !isGlobalModule && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="relative group">

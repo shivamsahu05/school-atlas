@@ -810,31 +810,76 @@ const getResolvedTeacher = async (req, res) => {
     
     console.log(`[RESOLVE] Inputs: class=${class_id}(${classNum}), section=${section_id}(${sectionName}), subject=${subject_id}`);
 
-    const [rows] = await pool.execute(`
-      SELECT DISTINCT t.id, u.name 
-      FROM teacher_timetable tt
-      LEFT JOIN teachers t ON (tt.teacher_id = t.id OR tt.teacher_id = t.user_id)
-      LEFT JOIN users u ON (u.id = t.user_id OR u.id = tt.teacher_id)
-      WHERE (tt.class_number = ? OR tt.class_number = ? OR tt.class_number = REPLACE(?, 'class ', '') OR tt.class_number = CONCAT('class ', ?))
-        AND (
-          tt.section = ? 
-          OR tt.section = REPLACE(?, 'Section ', '') 
-          OR tt.section = REPLACE(?, 'Sec ', '')
-          OR tt.section = '' 
-          OR ? IS NULL
-        )
-        AND tt.subject_id = ?
-        AND u.name IS NOT NULL
-      ORDER BY tt.section DESC
-      LIMIT 1
-    `, [classNum, className, className, classNum, sectionName, sectionName, sectionName, sectionName || null, Number(subject_id)]);
+    // Resolve teacher from timetable
+    try {
+        console.log(`[RESOLVE] Attempting Prisma for classNum=${classNum}, subject=${subject_id}`);
+        const timetableEntry = await prisma.teacher_timetable.findFirst({
+          where: {
+            OR: [
+              { class_number: String(classNum) },
+              { class_number: String(className) },
+              { class_number: String(className).replace(/^class\s+/i, '') },
+              { class_number: { startsWith: 'class ', contains: String(classNum) } }
+            ],
+            AND: [
+              {
+                OR: [
+                  { section: String(sectionName) },
+                  { section: String(sectionName).replace(/^section\s+/i, '') },
+                  { section: String(sectionName).replace(/^sec\s+/i, '') },
+                  { section: '' },
+                  { section: null }
+                ]
+              },
+              { subject_id: Number(subject_id) }
+            ]
+          },
+          orderBy: { section: 'desc' }
+        });
 
-    if (!rows || rows.length === 0) {
-      return res.json({ success: true, teacher: null, message: "No teacher assigned in timetable" });
+        if (timetableEntry) {
+          const user = await prisma.users.findFirst({
+            where: {
+              OR: [
+                { id: timetableEntry.teacher_id },
+                { teacher_profile: { id: timetableEntry.teacher_id } }
+              ]
+            },
+            select: { id: true, name: true }
+          });
+          if (user) {
+            console.log(`[RESOLVE] Prisma Success: ${user.name}`);
+            return res.json({ success: true, teacher: user });
+          }
+        }
+        console.log(`[RESOLVE] Prisma found nothing, trying pool fallback...`);
+        throw new Error('Prisma resolution failed or returned no results');
+
+    } catch (prismaError) {
+        console.warn(`[RESOLVE TEACHER] Fallback to pool for class=${classNum}:`, prismaError.message);
+        try {
+          const [rows] = await pool.execute(`
+            SELECT DISTINCT t.id, u.name 
+            FROM teacher_timetable tt
+            LEFT JOIN teachers t ON (tt.teacher_id = t.id OR tt.teacher_id = t.user_id)
+            LEFT JOIN users u ON (u.id = t.user_id OR u.id = tt.teacher_id)
+            WHERE (tt.class_number = ? OR tt.class_number = ? OR tt.class_number = REPLACE(?, 'class ', '') OR tt.class_number = CONCAT('class ', ?))
+              AND (tt.section = ? OR tt.section = REPLACE(?, 'Section ', '') OR tt.section = REPLACE(?, 'Sec ', '') OR tt.section = '' OR ? IS NULL)
+              AND tt.subject_id = ?
+              AND u.name IS NOT NULL
+            ORDER BY tt.section DESC LIMIT 1
+          `, [String(classNum), String(className), String(className), String(classNum), sectionName, sectionName, sectionName, sectionName || null, Number(subject_id)]);
+
+          if (rows && rows.length > 0) {
+            console.log(`[RESOLVE] Pool Success: ${rows[0].name}`);
+            return res.json({ success: true, teacher: rows[0] });
+          }
+          return res.json({ success: true, teacher: null, message: "No teacher found in timetable" });
+        } catch (poolErr) {
+          console.error('[RESOLVE] Pool also failed:', poolErr.message);
+          throw poolErr;
+        }
     }
-
-    return res.json({ success: true, teacher: rows[0] });
-
   } catch (error) {
     console.error('getResolvedTeacher Error:', error);
     return sendError(res, error.message, 500);

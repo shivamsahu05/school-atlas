@@ -172,21 +172,30 @@ export default function AdminLeave() {
     window.open(waUrl, '_blank');
   }
 
+  const [confirmModal, setConfirmModal] = useState({ show: false, leave: null, status: null, sendWA: true });
+
   const updateStatus = async (id, status) => {
     setActionLoading(id)
     try {
       await leaveApi.update(id, { status })
       const updatedLeave = leaves.find(l => l.id === id);
-      if (updatedLeave && (status === 'Approved' || status === 'Rejected')) {
+      
+      if (updatedLeave && confirmModal.sendWA && (status === 'Approved' || status === 'Rejected')) {
         sendWhatsAppNotification(updatedLeave, status);
       }
+      
       setLeaves(prev => prev.map(l => l.id === id ? { ...l, status } : l))
       loadLeaves() // reload for summary
+      setConfirmModal({ show: false, leave: null, status: null, sendWA: true });
     } catch (err) {
       alert('Failed to update leave: ' + (err.response?.data?.message || err.message))
     } finally {
       setActionLoading(null)
     }
+  }
+
+  const openConfirmModal = (leave, status) => {
+    setConfirmModal({ show: true, leave, status, sendWA: true });
   }
 
   const handleExportCSV = () => {
@@ -280,7 +289,7 @@ export default function AdminLeave() {
                     <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-slate-50">
                       {leave.status !== 'Approved' && (
                         <button
-                          onClick={() => updateStatus(leave.id, 'Approved')}
+                          onClick={() => openConfirmModal(leave, 'Approved')}
                           disabled={actionLoading === leave.id}
                           className="btn-success px-4 py-2 text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
                         >
@@ -289,7 +298,7 @@ export default function AdminLeave() {
                       )}
                       {leave.status !== 'Rejected' && (
                         <button
-                          onClick={() => updateStatus(leave.id, 'Rejected')}
+                          onClick={() => openConfirmModal(leave, 'Rejected')}
                           disabled={actionLoading === leave.id}
                           className="bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 rounded-xl px-4 py-2 text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
                         >
@@ -317,6 +326,81 @@ export default function AdminLeave() {
             )}
           </div>
         </>
+      )}
+
+      {/* Confirmation Modal */}
+      {confirmModal.show && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-fade-in"
+            onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+          />
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-zoom-in">
+            <div className={clsx(
+              "h-2 w-full",
+              confirmModal.status === 'Approved' ? "bg-emerald-500" : "bg-rose-500"
+            )} />
+            
+            <div className="p-8 text-center">
+              <div className={clsx(
+                "w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6",
+                confirmModal.status === 'Approved' ? "bg-emerald-50 text-emerald-500" : "bg-rose-50 text-rose-500"
+              )}>
+                {confirmModal.status === 'Approved' ? <CheckCircle size={40} /> : <XCircle size={40} />}
+              </div>
+              
+              <h3 className="text-2xl font-display font-bold text-slate-800 mb-2">
+                Confirm {confirmModal.status}
+              </h3>
+              <p className="text-slate-500 text-sm mb-8 leading-relaxed">
+                Are you sure you want to mark this leave request from <b>{confirmModal.leave?.user?.name}</b> as <b>{confirmModal.status}</b>?
+              </p>
+
+              {/* WhatsApp Toggle */}
+              <div className="bg-slate-50 rounded-2xl p-4 mb-8 flex items-center justify-between group cursor-pointer" onClick={() => setConfirmModal({ ...confirmModal, sendWA: !confirmModal.sendWA })}>
+                <div className="flex items-center gap-3">
+                  <div className={clsx(
+                    "w-10 h-10 rounded-xl flex items-center justify-center transition-all",
+                    confirmModal.sendWA ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200" : "bg-slate-200 text-slate-400"
+                  )}>
+                    <MessageCircle size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold text-slate-700">WhatsApp Notification</p>
+                    <p className="text-[10px] text-slate-400">Notify teacher automatically</p>
+                  </div>
+                </div>
+                <div className={clsx(
+                  "w-10 h-5 rounded-full relative transition-all",
+                  confirmModal.sendWA ? "bg-emerald-500" : "bg-slate-300"
+                )}>
+                  <div className={clsx(
+                    "absolute top-1 w-3 h-3 bg-white rounded-full transition-all",
+                    confirmModal.sendWA ? "right-1" : "left-1"
+                  )} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setConfirmModal({ ...confirmModal, show: false })}
+                  className="px-6 py-3 rounded-2xl text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => updateStatus(confirmModal.leave.id, confirmModal.status)}
+                  className={clsx(
+                    "px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all",
+                    confirmModal.status === 'Approved' ? "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200" : "bg-rose-500 hover:bg-rose-600 shadow-rose-200"
+                  )}
+                >
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
