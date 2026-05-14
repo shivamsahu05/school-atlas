@@ -32,7 +32,7 @@ model users {
   leave_requests       leave_requests[]
   teacher_lo_entries   teacher_performance_lo[] @relation("TeacherPerformanceLO")
   teacher_profile      teachers?
-  observations_given   class_observations[] @relation("ObserverClassObs")
+  class_observations_given class_observations[] @relation("ObserverClassObs")
 
   @@index([role], name: "idx_user_role")
 }
