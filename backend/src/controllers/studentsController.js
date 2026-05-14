@@ -139,9 +139,9 @@ exports.createStudent = async (req, res) => {
 
     const sql = `
       INSERT INTO students (
-        name, roll_no, email, class_id, section_id, gender, dob, house,
+        name, roll_no, email, class_id, section_id, gender, dob, 
         father_name, mother_name, mobile, optional_mobile, 
-        address, remarks, status
+        house, address, remarks, status
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
@@ -157,10 +157,10 @@ exports.createStudent = async (req, res) => {
       safeValue(mother_name),
       String(mobile).trim(),
       safeValue(optional_mobile),
+      safeValue(house) || 'Not Assigned',
       safeValue(address),
       safeValue(remarks),
-      safeValue(status) || 'Active',
-      safeValue(house) || 'Not Assigned'
+      safeValue(status) || 'Active'
     ]);
 
     return sendResponse(res, true, [{ id: result.insertId }], 'Student created.', 201);
@@ -401,13 +401,6 @@ exports.bulkUploadStudents = async (req, res) => {
       dob: ['dob', 'dateofbirth']
     };
 
-    const insertSql = `
-      INSERT INTO students (
-        name, roll_no, class_id, section_id, father_name, mother_name, 
-        mobile, optional_mobile, address, gender, dob, house, remarks
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `;
-
     for (const [index, rawRow] of rawRows.entries()) {
       try {
         const row = {};
@@ -428,31 +421,32 @@ exports.bulkUploadStudents = async (req, res) => {
 
         if (!name || !mobile || !cNameRaw) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Missing mandatory fields (Name, Mobile, or Class).`);
+          results.errors.push(`Row ${index + 2}: Missing mandatory fields (Name, Mobile 1, or Class).`);
           continue;
         }
 
         let cName = String(cNameRaw).trim();
         let cSection = cSecRaw ? String(cSecRaw).trim() : '';
 
-        // Clean prefixes
+        // Safely parse formats like "Class 1" -> "1", "class 1" -> "1", "sec A" -> "A"
         cName = cName.replace(/^(class|cls)\s*/i, '').trim();
         cSection = cSection.replace(/^(section|sec|-)\s*/i, '').trim();
 
+        // If user provided Class as "1-A" or "Class 1 - A" and Section is empty
         if (cName.includes('-') && !cSection) {
           const parts = cName.split('-');
-          cName = parts[0].trim();
-          cSection = parts[1].trim();
+          cName = parts[0].replace(/^(class|cls)\s*/i, '').trim();
+          cSection = parts[1].replace(/^(section|sec)\s*/i, '').trim();
         }
 
         const [classes] = await pool.execute(
-          'SELECT id, name FROM academic_classes WHERE name = ? OR class_number = ? LIMIT 1',
+          'SELECT id FROM academic_classes WHERE name = ? OR class_number = ? LIMIT 1',
           [cName, cName]
         );
         
         if (classes.length === 0) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Class '${cName}' does not exist in Academic Structure. Please create it first.`);
+          results.errors.push(`Row ${index + 2}: Class '${cName}' not found in database.`);
           continue;
         }
 
@@ -467,6 +461,7 @@ exports.bulkUploadStudents = async (req, res) => {
           }
         }
 
+        // Generate sequential roll number if missing
         let finalRollNo = row.roll_no ? String(row.roll_no).trim() : null;
         if (!finalRollNo) {
           const [maxRollResult] = await pool.execute(
@@ -480,9 +475,7 @@ exports.bulkUploadStudents = async (req, res) => {
           finalRollNo = String(nextRollNo);
         }
 
-        const houseVal = row.house ? String(row.house).trim() : 'Not Assigned';
-
-        await pool.execute(insertSql, [
+        await pool.execute(sql, [
           String(name).trim(), 
           finalRollNo,
           classes[0].id, 
@@ -500,17 +493,12 @@ exports.bulkUploadStudents = async (req, res) => {
 
         results.success++;
       } catch (err) {
-        console.error(`Row ${index + 2} failed:`, err);
         results.failed++;
         results.errors.push(`Row ${index + 2}: ${err.message}`);
       }
     }
 
-    return res.status(200).json({ 
-      success: true, 
-      message: 'Bulk processing finished.', 
-      data: results // Return results directly, not in an array
-    });
+    return res.status(200).json({ success: true, message: 'Bulk processing finished.', data: [results] });
   } catch (error) {
     console.error('Bulk Upload Error:', error);
     return res.status(500).json({ success: false, data: [], message: 'Critical failure during upload.' });

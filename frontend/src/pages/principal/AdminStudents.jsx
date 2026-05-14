@@ -100,19 +100,15 @@ export default function AdminStudents() {
     setUploadLoading(true)
     try {
       const res = await studentsApi.bulkUpload(formData)
-      const summary = res.data || {}
-      
+      const summary = res.data?.[0] || res.data || res.results || {};
       setUploadResults({
-        total: summary?.total || 0,
-        success: summary?.success || 0,
-        failed: summary?.failed || 0,
-        errors: Array.isArray(summary?.errors) ? summary.errors : []
+        total: summary.total || summary.totalRows || summary.inserted || 0,
+        success: summary.success || summary.inserted || 0,
+        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0
       });
-      
-      toast.success(res.message || 'Bulk processing finished')
+      toast.success(res.message || 'Upload successful')
       await fetchAllData()
     } catch (err) {
-      console.error('Bulk Upload Error:', err)
       toast.error(err.response?.data?.message || 'Bulk upload failed')
     } finally {
       setUploadLoading(false)
@@ -236,24 +232,6 @@ export default function AdminStudents() {
           fetchAllData()
         } catch (err) {
           toast.error('Failed to block student')
-        }
-      }
-    });
-  }
-
-  const handleDelete = (id) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Delete Student Permanently",
-      message: "This will PERMANENTLY remove the student and all their history. This action cannot be undone.",
-      type: "danger",
-      onConfirm: async () => {
-        try {
-          await studentsApi.delete(id)
-          toast.success('Student deleted permanently')
-          fetchAllData()
-        } catch (err) {
-          toast.error('Failed to delete student')
         }
       }
     });
@@ -389,13 +367,6 @@ export default function AdminStudents() {
             title="Block"
           >
             <Ban size={15} />
-          </button>
-          <button
-            onClick={() => handleDelete(row.id)}
-            className="p-1.5 rounded-lg hover:bg-rose-100 text-rose-600 transition-colors"
-            title="Delete Permanently"
-          >
-            <Trash2 size={15} />
           </button>
         </div>
       )
@@ -539,12 +510,20 @@ export default function AdminStudents() {
                 setForm(prev => ({ ...prev, class_id: selectedClass ? selectedClass.id : '', section_id: '' }))
               }} 
             />
-            {form.class_id && availableSectionsForForm.length > 0 && (
+            {form.class_id && (
               <SelectDropdown 
                 label="Section *" 
-                options={['', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
-                value={availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || ''} 
+                options={['Select section...', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
+                value={
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || 
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || 
+                  (selectedStudent?.class?.section && !form.section_id ? selectedStudent.class.section : 'Select section...')
+                } 
                 onChange={e => {
+                  if (e.target.value === 'Select section...') {
+                    setForm(prev => ({ ...prev, section_id: '' }));
+                    return;
+                  }
                   const selectedSection = availableSectionsForForm.find(s => (s.section_name || s.name) === e.target.value);
                   setForm(prev => ({ ...prev, section_id: selectedSection ? (selectedSection.section_id || selectedSection.id) : '' }))
                 }} 
@@ -844,7 +823,7 @@ export default function AdminStudents() {
                   </div>
                </div>
 
-               {uploadResults?.errors?.length > 0 && (
+               {uploadResults.errors.length > 0 && (
                  <div className="max-h-40 overflow-y-auto bg-rose-50/50 rounded-2xl p-4 border border-rose-100">
                     <p className="text-[10px] font-black text-rose-700 uppercase mb-2">Error Details</p>
                     <ul className="space-y-1">

@@ -295,12 +295,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
       [selectedTopic.id]: studentList
     }));
     setIsModalOpen(false);
-    // Use a safe check for toast or fallback to alert
-    if (typeof toast !== 'undefined' && toast.success) {
-      toast.success("Progress buffered locally.");
-    } else {
-      alert("✅ Progress buffered locally. Remember to click 'Save' on the row to commit changes.");
-    }
+    toast?.success?.("Student progress buffered. Remember to click 'Save' on the row to commit changes.") || alert("✅ Progress buffered locally.");
   };
 
   const toggleStudentStatus = (studentId, field) => {
@@ -345,7 +340,9 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
           <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Sections</option>}
             {!isAllView && <option value="">Select section…</option>}
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections || []).map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
+            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
+              .filter(s => s.sectionName && s.sectionName.trim() !== '')
+              .map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">

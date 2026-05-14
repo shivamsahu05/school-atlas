@@ -135,7 +135,8 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
     if (user?.role === 'admin') return ADMIN_NAV;
 
     const hasStudentAccess = user?.permissions?.some(p => {
-      if (p.module !== 'students_management') return false;
+      const modName = (p.module || '').toLowerCase().replace(/\s+/g, '_');
+      if (modName !== 'students_management') return false;
       if (!p.expiresAt) return true;
       const expiry = new Date(p.expiresAt);
       expiry.setHours(23, 59, 59, 999);

@@ -1,13 +1,13 @@
 // src/controllers/syllabusController.js
-const prisma   = require('../config/db')
-const pool     = require('../config/mysqlDb')
-const xlsx     = require('xlsx')
+const prisma = require('../config/db')
+const pool = require('../config/mysqlDb')
+const xlsx = require('xlsx')
 const { sendSuccess, sendError, paginated } = require('../utils/response')
 const { parsePagination } = require('../utils/pagination')
 const { calculateDates, sanitize } = require('../utils/syllabusUtils')
 
 const INCLUDE = {
-  class:   { select: { id: true, class_name: true, section: true } },
+  class: { select: { id: true, class_name: true, section: true } },
   subject: { select: { id: true, name: true } },
 }
 
@@ -65,16 +65,16 @@ const getSyllabus = async (req, res) => {
   if (className) { sql += ' AND ac.class_number = ?'; values.push(className); }
   if (section) { sql += ' AND asec.name = ?'; values.push(section); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
-  if (is_completed !== undefined) { 
-    sql += ' AND s.is_completed = ?'; 
-    values.push(is_completed === 'true' ? 1 : 0); 
+  if (is_completed !== undefined) {
+    sql += ' AND s.is_completed = ?';
+    values.push(is_completed === 'true' ? 1 : 0);
   } else if (req.query.status) {
     sql += ' AND s.status = ?';
     values.push(req.query.status);
   }
   if (search) { sql += ' AND s.topic LIKE ?'; values.push(`%${search}%`); }
   if (month && month !== 'All') { sql += ' AND MONTHNAME(s.planned_start_date) = ?'; values.push(month); }
-  
+
   if (teacher_id) {
     const tId = Number(teacher_id);
     sql += ' AND (u_direct.id = ? OR u_match.id = ? OR u_sub.id = ?)';
@@ -91,7 +91,7 @@ const getSyllabus = async (req, res) => {
   values.push(take, skip);
 
   const [items] = await pool.execute(sql, values);
-  
+
   // Debug logs for verification
   if (req.user.role === 'teacher') {
     console.log(`[SYLLABUS] Fetching for teacher ID: ${req.user.id}. Found ${items.length} items.`);
@@ -147,7 +147,7 @@ const getSyllabus = async (req, res) => {
   const statsValues = values.slice(0, -2); // Remove take and skip
 
   const [statsRows] = await pool.execute(statsSql, statsValues);
-  
+
   const s = statsRows[0];
   const totalItems = Number(s.total) || 0;
   const completedItems = Number(s.completed) || 0;
@@ -156,11 +156,11 @@ const getSyllabus = async (req, res) => {
 
   return sendSuccess(res, {
     ...paginated(formattedItems, total, page, limit),
-    stats: { 
-      total: totalItems, 
-      completed: completedItems, 
-      pending: pendingItems, 
-      completionPct 
+    stats: {
+      total: totalItems,
+      completed: completedItems,
+      pending: pendingItems,
+      completionPct
     },
   })
 }
@@ -187,7 +187,7 @@ const getSyllabusMetadata = async (req, res) => {
     `, req.user.role === 'teacher' ? [class_id, subject_id, req.user.id] : [class_id, subject_id]);
 
     const months = [...new Set(rows.map(r => r.month))].filter(Boolean);
-    
+
     return sendSuccess(res, {
       months,
       syllabus: rows // Full rows to help frontend map weeks to dates
@@ -200,23 +200,23 @@ const getSyllabusMetadata = async (req, res) => {
 /** GET /api/syllabus/:id */
 const getSyllabusById = async (req, res) => {
   const item = await prisma.syllabus.findUnique({
-    where:   { id: Number(req.params.id) },
+    where: { id: Number(req.params.id) },
     include: INCLUDE,
   })
   if (!item) return sendError(res, 'Syllabus item not found.', 404)
-  
+
   // Ownership check
   if (req.user.role === 'teacher' && item.teacher_id !== req.user.id) {
     return sendError(res, 'Unauthorized access to this syllabus item.', 403)
   }
-  
+
   return sendSuccess(res, item)
 }
 
 /** POST /api/syllabus */
 const createSyllabus = async (req, res) => {
-  let { 
-    class_id, section_id, subject_id, 
+  let {
+    class_id, section_id, subject_id,
     chapter, topic, week, month,
     planned_start_date, planned_end_date,
     fromDate, toDate,
@@ -240,8 +240,8 @@ const createSyllabus = async (req, res) => {
   }
 
   const startDate = parseDate(planned_start_date || fromDate);
-  const endDate   = parseDate(planned_end_date || toDate);
-  const compDate  = parseDate(completed_date);
+  const endDate = parseDate(planned_end_date || toDate);
+  const compDate = parseDate(completed_date);
 
   // 2. Resolve IDs from Strings if missing
   // Handle "Class 1 - A"
@@ -298,8 +298,8 @@ const createSyllabus = async (req, res) => {
   }
 
   // 5. Determine teacher_id: admin can assign to a specific teacher
-  const finalTeacherId = (req.user.role === 'admin' && bodyTeacherId) 
-    ? Number(bodyTeacherId) 
+  const finalTeacherId = (req.user.role === 'admin' && bodyTeacherId)
+    ? Number(bodyTeacherId)
     : req.user.id;
 
   // 6. Insert
@@ -310,7 +310,7 @@ const createSyllabus = async (req, res) => {
       is_completed, status, periods, periods_needed, learning_outcome
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-  
+
   const [result] = await pool.execute(sql, [
     Number(class_id),
     section_id ? Number(section_id) : null,
@@ -336,7 +336,7 @@ const createSyllabus = async (req, res) => {
 /** PUT /api/syllabus/:id */
 /** PUT /api/syllabus/:id */
 const updateSyllabus = async (req, res) => {
-  const { 
+  const {
     class_id, section_id, subject_id, chapter, topic, week, month,
     planned_start_date, planned_end_date, completed_date, is_completed, status,
     periods, periods_needed, learning_status, notebook_checked, learning_outcome, homework_status, students_data
@@ -345,7 +345,7 @@ const updateSyllabus = async (req, res) => {
 
   const updates = []
   const values = []
-  
+
   if (req.user.role === 'teacher') {
     updates.push('teacher_id=?');
     values.push(req.user.id);
@@ -354,11 +354,11 @@ const updateSyllabus = async (req, res) => {
   if (class_id !== undefined) { updates.push('class_id=?'); values.push(class_id ? Number(class_id) : null); }
   if (section_id !== undefined) { updates.push('section_id=?'); values.push(section_id ? Number(section_id) : null); }
   if (subject_id !== undefined) { updates.push('subject_id=?'); values.push(subject_id ? Number(subject_id) : null); }
-  
+
   if (chapter !== undefined) { updates.push('chapter=?'); values.push(chapter || null); }
   if (topic !== undefined) { updates.push('topic=?'); values.push(topic || null); }
   if (week !== undefined) { updates.push('week=?'); values.push(week || null); }
-  
+
   // Date Logic for Micro Schedule
   if (month && week && (!planned_start_date || !planned_end_date)) {
     const { startDate, endDate } = calculateDates(month, week);
@@ -370,7 +370,7 @@ const updateSyllabus = async (req, res) => {
   }
 
   if (completed_date !== undefined) { updates.push('completed_date=?'); values.push(completed_date ? new Date(completed_date) : null); }
-  
+
   // Tracking fields
   if (periods !== undefined) { updates.push('periods=?'); values.push(Number(periods) || 0); }
   if (periods_needed !== undefined) { updates.push('periods_needed=?'); values.push(Number(periods_needed) || 0); }
@@ -388,7 +388,7 @@ const updateSyllabus = async (req, res) => {
     if (finalStatus === 'completed') {
       updates.push('is_completed=1');
       if (completed_date === undefined) {
-         updates.push('completed_date=NOW()');
+        updates.push('completed_date=NOW()');
       }
     } else {
       updates.push('is_completed=0');
@@ -399,7 +399,7 @@ const updateSyllabus = async (req, res) => {
   if (updates.length === 0) return res.status(400).json({ success: false, message: 'No fields to update' });
 
   updates.push('updated_at=NOW()');
-  
+
   let sql = `UPDATE syllabus SET ${updates.join(', ')} WHERE id = ?`;
   values.push(id);
 
@@ -422,14 +422,14 @@ const updateSyllabus = async (req, res) => {
 
 const deleteSyllabus = async (req, res) => {
   const { id } = req.params;
-  
+
   if (req.user.role === 'teacher') {
     const [result] = await pool.execute('DELETE FROM syllabus WHERE id = ? AND teacher_id = ?', [id, req.user.id]);
     if (result.affectedRows === 0) return sendError(res, 'Syllabus item not found or unauthorized.', 403);
   } else {
     await pool.execute('DELETE FROM syllabus WHERE id = ?', [id]);
   }
-  
+
   return sendSuccess(res, null, 'Syllabus item deleted.')
 }
 
@@ -473,12 +473,12 @@ const bulkUploadSyllabus = async (req, res) => {
         const clsName = String(row.Class || row.class || '').trim();
         const subName = String(row.Subject || row.subject || '').trim();
         const secName = String(row.Section || row.section || '').trim();
-        const tName   = String(row.Teacher || row.teacher || '').trim();
-        const month   = String(row.Month || row.month || '').trim();
-        const week    = String(row.Week || row.week || '').trim();
-        const topic   = String(row['Chapter & Topic'] || row.topic || '').trim();
+        const tName = String(row.Teacher || row.teacher || '').trim();
+        const month = String(row.Month || row.month || '').trim();
+        const week = String(row.Week || row.week || '').trim();
+        const topic = String(row['Chapter & Topic'] || row.topic || '').trim();
         const periods = Number(row['No. of Periods'] || row.periods || 0);
-        const lo      = String(row['Learning Outcome'] || row.learning_outcome || '').trim();
+        const lo = String(row['Learning Outcome'] || row.learning_outcome || '').trim();
 
         if (!clsName || !subName || !topic) {
           throw new Error('Missing mandatory fields (Class, Subject, Topic).');
@@ -487,7 +487,7 @@ const bulkUploadSyllabus = async (req, res) => {
         const cls = classes.find(c => c.name === clsName || c.name.includes(clsName));
         const sub = subjects.find(s => s.name === subName || s.name.includes(subName));
         const sec = sections.find(s => s.name === secName || s.name.includes(secName));
-        
+
         // Resolve Teacher (by Name or ID)
         let resolvedTeacherId = req.user.id; // Default to admin
         if (tName) {
@@ -588,7 +588,7 @@ const getSyllabusPlan = async (req, res) => {
       conditions.push('s.week = ?');
       values.push(week);
     }
-    
+
     // Fallback search by strings if needed
     if (className) {
       conditions.push('(ac.class_number = ? OR ac.name = ?)');
@@ -648,10 +648,10 @@ const getSyllabusPlan = async (req, res) => {
   } catch (error) {
     console.error("[SYLLABUS PLAN ERROR]:", error);
     // Never crash — always return structured JSON
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       data: [],
-      message: "Syllabus plan query failed: " + error.message 
+      message: "Syllabus plan query failed: " + error.message
     });
   }
 }
@@ -670,7 +670,7 @@ const debugSyllabus = async (req, res) => {
 /** POST /api/syllabus/upload-syllabus */
 const uploadSyllabusPlan = async (req, res) => {
   if (!req.file) return sendError(res, 'No file uploaded.', 400);
-  
+
   try {
     const userId = req.user.id;
     const [teachers] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
@@ -719,21 +719,21 @@ const uploadSyllabusPlan = async (req, res) => {
         // --- RESOLVE IDs WITH FUZZY MATCHING ---
         // 1. Resolve Class
         const [clsRows] = await pool.execute(
-          'SELECT id FROM academic_classes WHERE class_number = ? OR name LIKE ? LIMIT 1', 
+          'SELECT id FROM academic_classes WHERE class_number = ? OR name LIKE ? LIMIT 1',
           [classClean, `%${classClean}%`]
         );
         const clsId = clsRows[0]?.id;
 
         // 2. Resolve Section
         const [secRows] = await pool.execute(
-          'SELECT id FROM acad_sections WHERE name = ? OR name LIKE ? LIMIT 1', 
+          'SELECT id FROM acad_sections WHERE name = ? OR name LIKE ? LIMIT 1',
           [sectionClean, `%${sectionClean}%`]
         );
         const secId = secRows[0]?.id;
 
         // 3. Resolve Subject
         const [subRows] = await pool.execute(
-          'SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1', 
+          'SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
           [subjectClean, `%${subjectClean}%`]
         );
         const subId = subRows[0]?.id;
@@ -786,7 +786,7 @@ const uploadSyllabusPlan = async (req, res) => {
 
 /** POST /api/syllabus/add-micro-schedule */
 const addMicroSchedule = async (req, res) => {
-  const { 
+  const {
     class_id, section_id, subject_id, topic, week, month, periods, status,
     learning_outcome, notebook_checked
   } = req.body;
@@ -829,8 +829,8 @@ const addMicroSchedule = async (req, res) => {
       ]
     );
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: 'Micro schedule added successfully.',
       data: { id: result.insertId }
     });
@@ -845,7 +845,7 @@ const addMicroSchedule = async (req, res) => {
 /** GET /api/syllabus/export-syllabus */
 const exportSyllabusPlan = async (req, res) => {
   const { class_id, section_id, subject_id, is_completed } = req.query;
-  
+
   let sql = `
     SELECT s.*, 
            ac.name as class_name, asec.name as section_name,
@@ -863,9 +863,9 @@ const exportSyllabusPlan = async (req, res) => {
   if (class_id) { sql += ' AND s.class_id = ?'; values.push(Number(class_id)); }
   if (section_id) { sql += ' AND s.section_id = ?'; values.push(Number(section_id)); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
-  if (is_completed !== undefined && is_completed !== '') { 
-    sql += ' AND s.is_completed = ?'; 
-    values.push(is_completed === 'true' ? 1 : 0); 
+  if (is_completed !== undefined && is_completed !== '') {
+    sql += ' AND s.is_completed = ?';
+    values.push(is_completed === 'true' ? 1 : 0);
   }
 
   try {
@@ -889,9 +889,9 @@ const exportSyllabusPlan = async (req, res) => {
     const workbook = xlsx.utils.book_new();
     const worksheet = xlsx.utils.json_to_sheet(data);
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Syllabus');
-    
+
     const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=syllabus_export.xlsx');
     return res.status(200).send(buffer);
@@ -901,8 +901,8 @@ const exportSyllabusPlan = async (req, res) => {
   }
 }
 
-module.exports = { 
-  getSyllabus, getSyllabusById, createSyllabus, updateSyllabus, deleteSyllabus, 
+module.exports = {
+  getSyllabus, getSyllabusById, createSyllabus, updateSyllabus, deleteSyllabus,
   getSyllabusMetadata, downloadTemplate, bulkUploadSyllabus,
   getSyllabusPlan, uploadSyllabusPlan, addMicroSchedule, exportSyllabusPlan,
   debugSyllabus
