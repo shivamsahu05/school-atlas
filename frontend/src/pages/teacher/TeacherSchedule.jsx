@@ -82,8 +82,12 @@ export default function TeacherSchedule() {
       formData.append('file', uploadFile);
       const res = await syllabusApi.uploadPlan(formData);
       setUploadResults(res.data);
-      if (res.success || res.data?.inserted > 0) {
-        setMessage({ text: `✅ Bulk upload successful: ${res.data?.inserted} records added.`, type: 'success' });
+      if (res.success || res.data?.inserted > 0 || res.data?.updated > 0) {
+        const { inserted, updated } = res.data || {};
+        setMessage({ 
+          text: `✅ Bulk upload successful: ${inserted || 0} added, ${updated || 0} updated.`, 
+          type: 'success' 
+        });
         window.dispatchEvent(new Event('syllabus-updated'));
         window.dispatchEvent(new Event('insights-refresh'));
         window.dispatchEvent(new Event('analytics-refresh'));

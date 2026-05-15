@@ -127,14 +127,15 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
     const selSubjectName = selectedSubjectData?.subjectName || (selectedSubject === 'All' ? 'All' : '');
 
     const formatted = syllabusData.filter(item => {
-      const itemClass = item.class;
-      const itemSection = item.section;
-      const itemSubject = item.subject || item.subject_name;
-      const classMatch = selClassId === "All" || normalize(itemClass).includes(normalize(selClassName));
-      const sectionMatch = selSectionId === "All" || normalize(itemSection).includes(normalize(selSectionName));
-      const subjectMatch = selectedSubject === "All" || normalize(itemSubject).includes(normalize(selSubjectName));
-      const monthMatch = filterMonth === "All" || normalize(item.month).includes(normalize(filterMonth));
-      const weekMatch = filterWeek === "All" || normalize(item.week).includes(normalize(filterWeek));
+      // Use IDs for precise matching
+      const classMatch = selClassId === "All" || Number(item.class_id) === Number(selClassId);
+      const sectionMatch = selSectionId === "All" || Number(item.section_id) === Number(selSectionId);
+      const subjectMatch = selectedSubject === "All" || Number(item.subject_id) === Number(selectedSubject);
+      
+      // Month and Week matching (using normalize helper)
+      const monthMatch = filterMonth === "All" || normalize(item.month) === normalize(filterMonth);
+      const weekMatch = filterWeek === "All" || normalize(item.week) === normalize(filterWeek);
+      
       return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch;
     }).map(row => {
       const rawStatus = normalize(row.status);
@@ -154,7 +155,8 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
         homeworkChecked: row.homework_checked || 'No',
         notebookChecked: row.notebook_checked || 'No',
         class_understanding_level: row.class_understanding_level || '',
-        is_completed: Number(row.is_completed || 0)
+        is_completed: Number(row.is_completed || 0),
+        subject_name: row.subjectName || row.subject_name || row.subject // Fallback
       };
     });
     setWeeklyData(formatted);

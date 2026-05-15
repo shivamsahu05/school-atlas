@@ -673,101 +673,103 @@ const uploadSyllabusPlan = async (req, res) => {
   if (!req.file) return sendError(res, 'No file uploaded.', 400);
 
   try {
-    const userId = req.user.id;
-    const [teachers] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
-    const teacherId = teachers[0]?.id || userId; // Fallback to userId if not found
-
+    const userId = req.user.id; // Correct teacher_id (SSOT: users.id)
+    
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     const results = { inserted: 0, skipped: 0, failed: 0, errors: [] };
 
+    // Prefetch for validation to avoid N+1 queries
+    const [classes] = await pool.execute('SELECT id, name, class_number FROM academic_classes');
+    const [subjects] = await pool.execute('SELECT id, name FROM subjects');
+    const [sections] = await pool.execute('SELECT id, name FROM acad_sections');
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
       try {
         // --- NORMALIZE INPUTS ---
-        // Class: "Class 2" or "class2" or "2" -> "2"
         const classNameRaw = String(row.Class || row.class || '').trim();
-        const classClean = classNameRaw.match(/\d+/)?.[0] || classNameRaw;
-
-        // Section: "Sec A" or "section A" or "a" -> "A"
-        const sectionRaw = String(row.Section || row.section || 'A').trim();
-        const sectionClean = sectionRaw.replace(/section|sec/gi, '').trim().toUpperCase().charAt(0) || 'A';
-
-        // Subject: "Science" or "science" or " SCIENCE " -> "science"
-        const subjectClean = String(row.Subject || row.subject || '').trim();
-
-        // Month & Week
-        const monthClean = String(row.Month || row.month || '').trim();
+        const sectionRaw = String(row.Section || row.section || '').trim();
+        const subjectRaw = String(row.Subject || row.subject || '').trim();
+        const monthRaw = String(row.Month || row.month || '').trim();
         const weekRaw = String(row.Week || row.week || '').trim();
-        const loRaw = row['Learning Outcome'] || row.learning_outcome || row.lo || '';
-
-        // Standardize week to "Week X"
-        const weekNumMatch = weekRaw.match(/\d+/);
-        const weekClean = weekNumMatch ? `week ${weekNumMatch[0]}` : weekRaw.toLowerCase();
-
-        const topic = row['Chapter & Topic'] || row.topic || row.chapter_topic || 'Untitled Topic';
+        const topic = String(row['Chapter & Topic'] || row.topic || row.chapter_topic || '').trim();
         const periods = Number(row['No. of Periods'] || row.periods || 0);
+        const loRaw = String(row['Learning Outcome'] || row.learning_outcome || row.lo || '').trim();
 
-        if (!classClean || !subjectClean || !topic || !weekClean || !monthClean) {
-          results.failed++;
-          results.errors.push({ row: rowNum, error: 'Missing mandatory fields (Class, Subject, Topic, Week, or Month)' });
-          continue;
+        if (!classNameRaw || !subjectRaw || !topic || !weekRaw || !monthRaw) {
+          throw new Error('Missing mandatory fields (Class, Subject, Topic, Week, or Month)');
         }
 
-        // --- RESOLVE IDs WITH FUZZY MATCHING ---
+        // --- RESOLVE IDs ---
         // 1. Resolve Class
-        const [clsRows] = await pool.execute(
-          'SELECT id FROM academic_classes WHERE class_number = ? OR name LIKE ? LIMIT 1',
-          [classClean, `%${classClean}%`]
+        const classClean = classNameRaw.match(/\d+/)?.[0] || classNameRaw;
+        const cls = classes.find(c => 
+          c.class_number === classClean || 
+          c.name.toLowerCase() === classNameRaw.toLowerCase() ||
+          c.name.toLowerCase().includes(classNameRaw.toLowerCase())
         );
-        const clsId = clsRows[0]?.id;
 
-        // 2. Resolve Section
-        const [secRows] = await pool.execute(
-          'SELECT id FROM acad_sections WHERE name = ? OR name LIKE ? LIMIT 1',
-          [sectionClean, `%${sectionClean}%`]
+        // 2. Resolve Subject
+        const sub = subjects.find(s => 
+          s.name.toLowerCase() === subjectRaw.toLowerCase() ||
+          s.name.toLowerCase().includes(subjectRaw.toLowerCase())
         );
-        const secId = secRows[0]?.id;
 
-        // 3. Resolve Subject
-        const [subRows] = await pool.execute(
-          'SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1',
-          [subjectClean, `%${subjectClean}%`]
-        );
-        const subId = subRows[0]?.id;
-
-        if (!clsId || !subId) {
-          results.failed++;
-          results.errors.push({ row: rowNum, error: `Could not resolve Class (${classClean}) or Subject (${subjectClean})` });
-          continue;
+        // 3. Resolve Section
+        let secId = null;
+        if (sectionRaw) {
+          const sec = sections.find(s => 
+            s.name.toLowerCase() === sectionRaw.toLowerCase() ||
+            s.name.toLowerCase().includes(sectionRaw.toLowerCase())
+          );
+          secId = sec?.id || null;
         }
 
-        // 2. Prevent Duplicate (with normalized week/topic)
+        if (!cls || !sub) {
+          throw new Error(`Could not resolve Class (${classNameRaw}) or Subject (${subjectRaw})`);
+        }
+
+        // --- GENERATE DATES ---
+        const { startDate, endDate } = calculateDates(monthRaw, weekRaw);
+
+        // --- DUPLICATE CHECK AND UPSERT ---
         const [existing] = await pool.execute(
-          'SELECT id FROM syllabus WHERE class_id = ? AND section_id = ? AND subject_id = ? AND topic = ? AND LOWER(week) = LOWER(?)',
-          [clsId, secId || null, subId, topic, weekClean]
+          'SELECT id FROM syllabus WHERE class_id = ? AND section_id <=> ? AND subject_id = ? AND topic = ? AND LOWER(week) = LOWER(?)',
+          [cls.id, secId, sub.id, topic, weekRaw.toLowerCase()]
         );
 
         if (existing.length > 0) {
-          results.skipped++;
-          continue;
+          // Update existing record (fixes incorrect teacher_id or other fields)
+          await pool.execute(
+            `UPDATE syllabus SET 
+              teacher_id = ?, 
+              periods = ?, 
+              periods_needed = ?, 
+              learning_outcome = ?, 
+              month = ?, 
+              week = ?,
+              planned_start_date = ?, 
+              planned_end_date = ?,
+              updated_at = NOW()
+            WHERE id = ?`,
+            [userId, periods, periods, loRaw, monthRaw, weekRaw, startDate, endDate, existing[0].id]
+          );
+          results.updated++;
+        } else {
+          // Insert new record
+          await pool.execute(
+            `INSERT INTO syllabus (
+              class_id, section_id, subject_id, teacher_id, topic, week, month,
+              planned_start_date, planned_end_date, periods, periods_needed, learning_outcome, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [cls.id, secId, sub.id, userId, topic, weekRaw, monthRaw, startDate, endDate, periods, periods, loRaw]
+          );
+          results.inserted++;
         }
-
-        const { startDate, endDate } = calculateDates(monthClean, weekClean);
-
-        // 3. Insert into syllabus (SSOT)
-        await pool.execute(
-          `INSERT INTO syllabus (
-            class_id, section_id, subject_id, teacher_id, topic, week, month,
-            planned_start_date, planned_end_date, periods, periods_needed, learning_outcome, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [clsId, secId || null, subId, teacherId, topic, weekClean, monthClean, startDate, endDate, periods, periods, loRaw]
-        );
-
-        results.inserted++;
       } catch (err) {
         results.failed++;
         results.errors.push({ row: rowNum, error: err.message });
@@ -776,11 +778,11 @@ const uploadSyllabusPlan = async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Bulk upload completed: ${results.inserted} inserted, ${results.skipped} skipped, ${results.failed} failed.`,
+      message: `Bulk upload completed: ${results.inserted} inserted, ${results.updated} updated, ${results.failed} failed.`,
       data: results
     });
   } catch (error) {
-    console.error('[BULK UPLOAD ERROR]:', error);
+    console.error('[BULK UPLOAD SYLLABUS PLAN ERROR]:', error);
     return sendError(res, 'Failed to process file.', 500);
   }
 }
