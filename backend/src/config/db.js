@@ -1,6 +1,6 @@
-// src/config/db.js
+// src/config/db.js 
 // Hardened Prisma Singleton — ONE instance per runtime, always.
-// Works correctly in: Local Dev, Render (container), Vercel (serverless), hot reload.
+// Works  correctly best used  in: Local Dev, Render (container), Vercel (serverless), hot reload.
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
