@@ -380,21 +380,33 @@ export default function AdminObservation() {
                 </select>
               </div>
               <div>
-                <label className="label font-bold text-brand-700 mb-2">Assigned Teacher</label>
+                <label className="label font-bold text-brand-700 mb-2">Teacher</label>
                 <div className="relative">
-                  <input 
-                    type="text"
-                    readOnly
-                    placeholder={form.classId && form.subjectId ? "Auto-detecting..." : "Waiting for class/subject..."}
-                    value={form.teacherName}
+                  <select 
                     className={clsx(
-                      "input w-full h-12 text-sm md:text-base font-bold rounded-xl border-slate-300 bg-slate-50 transition-all",
-                      form.teacherId ? "text-brand-700 border-brand-200 bg-brand-50/30" : "text-slate-400"
+                      "select w-full h-12 text-sm md:text-base font-bold rounded-xl border-slate-300 transition-all",
+                      form.teacherId ? "text-brand-700 border-brand-200 bg-brand-50/30" : "text-slate-600 bg-white"
                     )}
-                  />
+                    value={form.teacherId}
+                    onChange={e => {
+                      const selectedT = dbTeachers.find(t => String(t.id || t.teacher_id) === String(e.target.value))
+                      setForm({ ...form, teacherId: e.target.value, teacherName: selectedT ? selectedT.name : '' })
+                    }}
+                  >
+                    <option value="">{form.classId && form.subjectId ? "Manual Selection..." : "Select Class/Subject first"}</option>
+                    {teacherOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label} (ID: {o.value})</option>
+                    ))}
+                  </select>
                   {form.teacherId && (
-                    <div className="absolute -top-2 -right-1 bg-brand-500 text-white text-[9px] px-1.5 py-0.5 rounded-full font-black uppercase tracking-tighter shadow-sm animate-bounce">
-                      Auto-detected
+                    <div className="absolute -top-2 -right-1 bg-brand-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg animate-in zoom-in duration-300">
+                      {/* We can track if it was auto-detected by comparing with resolved value, but for now simple 'Selected' is good */}
+                      Teacher Selected
+                    </div>
+                  )}
+                  {form.classId && form.subjectId && !form.teacherId && (
+                    <div className="absolute -top-2 -right-1 bg-amber-500 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg">
+                      Needs Selection
                     </div>
                   )}
                 </div>

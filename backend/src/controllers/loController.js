@@ -139,24 +139,22 @@ exports.getTeachersByClassSubject = async (req, res) => {
         const finalData = Array.from(result.values());
         if (finalData.length > 0) return res.json({ success: true, data: finalData });
         
+        // Fallback: If no mapping, show ALL teachers (Profile IDs)
         const allTeachers = await prisma.teachers.findMany({
+            where: { user: { status: 'active' } },
             include: { user: { select: { name: true } } },
             orderBy: { user: { name: 'asc' } }
         });
-        return res.json({ success: true, data: allTeachers.map(t => ({ id: t.id, name: t.user.name })) });
+        return res.json({ success: true, data: allTeachers.map(t => ({ id: t.id, name: t.user?.name || 'Unknown' })) });
     } catch (error) {
         console.warn('[LO TEACHERS] Prisma fallback:', error.message);
         try {
             const [rows] = await pool.query(`
                 SELECT DISTINCT t.id, u.name FROM teachers t
                 JOIN users u ON t.user_id = u.id
-                JOIN teacher_subjects ts ON t.id = ts.teacher_id
-                WHERE ts.class_id = ? AND ts.subject_id = ? ORDER BY u.name
-            `, [classId, subjectId]);
-            if (rows.length === 0) {
-                const [allT] = await pool.query(`SELECT t.id, u.name FROM teachers t JOIN users u ON t.user_id = u.id WHERE u.status = 'active' ORDER BY u.name`);
-                return res.json({ success: true, data: allT });
-            }
+                WHERE u.status = 'active'
+                ORDER BY u.name
+            `);
             return res.json({ success: true, data: rows });
         } catch (fError) { return res.status(500).json({ success: false, message: 'Failed to fetch teachers' }); }
     }

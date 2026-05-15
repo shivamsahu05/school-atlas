@@ -795,94 +795,119 @@ const getResolvedTeacher = async (req, res) => {
       return sendError(res, 'class_id and subject_id are required.', 400);
     }
 
-    // Resolve class_id and section_id to names for timetable query
+    // 1. Fetch Class and Section Details
     const cls = await prisma.academic_classes.findUnique({ where: { id: Number(class_id) } });
     if (!cls) return sendError(res, 'Class not found.', 404);
 
     let sectionName = '';
-    if (section_id) {
+    if (section_id && section_id !== 'null' && section_id !== 'undefined') {
       const sec = await prisma.acad_sections.findUnique({ where: { id: Number(section_id) } });
       if (sec) sectionName = sec.name;
     }
 
-    const classNum = cls.class_number || cls.name.replace(/[^0-9]/g, '');
-    const className = cls.name;
-    
-    console.log(`[RESOLVE] Inputs: class=${class_id}(${classNum}), section=${section_id}(${sectionName}), subject=${subject_id}`);
+    const classNum = cls.class_number || '';
+    const className = cls.name || '';
+    const subId = Number(subject_id);
 
-    // Resolve teacher from timetable
+    console.log(`[RESOLVE] Inputs: Class=${className}(#${classNum}), Section=${sectionName}, Subject=${subId}`);
+
+    // --- STRATEGY 1: TIMETABLE (Requested Priority) ---
+    // MUST return teachers.id (Profile ID) to match frontend dropdowns and observation/LO schemas
     try {
-        console.log(`[RESOLVE] Attempting Prisma for classNum=${classNum}, subject=${subject_id}`);
-        const timetableEntry = await prisma.teacher_timetable.findFirst({
-          where: {
-            OR: [
-              { class_number: String(classNum) },
-              { class_number: String(className) },
-              { class_number: String(className).replace(/^class\s+/i, '') },
-              { class_number: { startsWith: 'class ', contains: String(classNum) } }
-            ],
-            AND: [
-              {
-                OR: [
-                  { section: String(sectionName) },
-                  { section: String(sectionName).replace(/^section\s+/i, '') },
-                  { section: String(sectionName).replace(/^sec\s+/i, '') },
-                  { section: '' },
-                  { section: null }
-                ]
-              },
-              { subject_id: Number(subject_id) }
-            ]
-          },
-          orderBy: { section: 'desc' }
+      const query = `
+        SELECT DISTINCT t.id, u.name 
+        FROM teacher_timetable tt
+        JOIN teachers t ON (tt.teacher_id = t.id OR tt.teacher_id = t.user_id)
+        JOIN users u ON t.user_id = u.id
+        WHERE (tt.class_number = ? OR tt.class_number = ? OR tt.class_number = REPLACE(?, 'Class ', ''))
+          AND (
+            tt.section = ? 
+            OR tt.section = REPLACE(?, 'Section ', '') 
+            OR tt.section = REPLACE(?, 'Sec ', '')
+            OR (tt.section = '' AND (? = '' OR ? IS NULL))
+            OR (? = '' OR ? IS NULL)
+          )
+          AND tt.subject_id = ?
+        LIMIT 1
+      `;
+      
+      const params = [
+        String(classNum), String(className), String(className),
+        sectionName, sectionName, sectionName, sectionName, sectionName, sectionName, sectionName,
+        subId
+      ];
+
+      const [rows] = await pool.execute(query, params);
+
+      if (rows && rows.length > 0) {
+        console.log(`[RESOLVE] Strategy 1 (Timetable) Success: ${rows[0].name} (ID: ${rows[0].id})`);
+        return res.json({ success: true, teacher: rows[0] });
+      }
+    } catch (err) {
+      console.warn('[RESOLVE] Strategy 1 (Timetable) SQL Error:', err.message);
+    }
+
+    // --- STRATEGY 2: MASTER ASSIGNMENT (teacher_subjects) ---
+    try {
+      const legacyClass = await prisma.classes.findFirst({
+        where: {
+          OR: [
+            { class_name: { contains: classNum } },
+            { class_name: { contains: className.replace(/^Class\s+/i, '') } }
+          ],
+          section: sectionName || 'A'
+        }
+      });
+
+      if (legacyClass) {
+        // NOTE: teacher_subjects.teacher_id links to users.id
+        // We need to resolve it to teachers.id (Profile ID)
+        const assignment = await prisma.teacher_subjects.findFirst({
+          where: { class_id: legacyClass.id, subject_id: subId },
+          include: { 
+            teacher: { // This is 'users' model
+              include: { teacher_profile: true } 
+            } 
+          }
         });
 
-        if (timetableEntry) {
-          const user = await prisma.users.findFirst({
-            where: {
-              OR: [
-                { id: timetableEntry.teacher_id },
-                { teacher_profile: { id: timetableEntry.teacher_id } }
-              ]
-            },
-            select: { id: true, name: true }
+        if (assignment?.teacher?.teacher_profile) {
+          const tProfile = assignment.teacher.teacher_profile;
+          console.log(`[RESOLVE] Strategy 2 (Assignment) Success: ${assignment.teacher.name}`);
+          return res.json({ 
+            success: true, 
+            teacher: { id: tProfile.id, name: assignment.teacher.name } 
           });
-          if (user) {
-            console.log(`[RESOLVE] Prisma Success: ${user.name}`);
-            return res.json({ success: true, teacher: user });
-          }
         }
-        console.log(`[RESOLVE] Prisma found nothing, trying pool fallback...`);
-        throw new Error('Prisma resolution failed or returned no results');
-
-    } catch (prismaError) {
-        console.warn(`[RESOLVE TEACHER] Fallback to pool for class=${classNum}:`, prismaError.message);
-        try {
-          const [rows] = await pool.execute(`
-            SELECT DISTINCT t.id, u.name 
-            FROM teacher_timetable tt
-            LEFT JOIN teachers t ON (tt.teacher_id = t.id OR tt.teacher_id = t.user_id)
-            LEFT JOIN users u ON (u.id = t.user_id OR u.id = tt.teacher_id)
-            WHERE (tt.class_number = ? OR tt.class_number = ? OR tt.class_number = REPLACE(?, 'class ', '') OR tt.class_number = CONCAT('class ', ?))
-              AND (tt.section = ? OR tt.section = REPLACE(?, 'Section ', '') OR tt.section = REPLACE(?, 'Sec ', '') OR tt.section = '' OR ? IS NULL)
-              AND tt.subject_id = ?
-              AND u.name IS NOT NULL
-            ORDER BY tt.section DESC LIMIT 1
-          `, [String(classNum), String(className), String(className), String(classNum), sectionName, sectionName, sectionName, sectionName || null, Number(subject_id)]);
-
-          if (rows && rows.length > 0) {
-            console.log(`[RESOLVE] Pool Success: ${rows[0].name}`);
-            return res.json({ success: true, teacher: rows[0] });
-          }
-          return res.json({ success: true, teacher: null, message: "No teacher found in timetable" });
-        } catch (poolErr) {
-          console.error('[RESOLVE] Pool also failed:', poolErr.message);
-          throw poolErr;
-        }
+      }
+    } catch (err) {
+      console.warn('[RESOLVE] Strategy 2 (Assignment) Error:', err.message);
     }
+
+    // --- STRATEGY 3: FUZZY FALLBACK (Subject Only) ---
+    try {
+      const [rows] = await pool.execute(`
+        SELECT t.id, u.name 
+        FROM teacher_subjects ts
+        JOIN users u ON ts.teacher_id = u.id
+        JOIN teachers t ON u.id = t.user_id
+        WHERE ts.subject_id = ?
+        LIMIT 1
+      `, [subId]);
+
+      if (rows && rows.length > 0) {
+        console.log(`[RESOLVE] Strategy 3 (Fuzzy) Success: ${rows[0].name}`);
+        return res.json({ success: true, teacher: rows[0] });
+      }
+    } catch (err) {
+      console.error('[RESOLVE] Strategy 3 failed:', err.message);
+    }
+
+    return res.json({ success: true, teacher: null, message: "No teacher resolved" });
+
   } catch (error) {
-    console.error('getResolvedTeacher Error:', error);
-    return sendError(res, error.message, 500);
+    console.error('[RESOLVE_TEACHER_CRITICAL]:', error);
+    return res.json({ success: true, teacher: null, error: error.message });
   }
 }
 

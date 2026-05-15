@@ -104,7 +104,8 @@ export default function AdminStudents() {
       setUploadResults({
         total: summary.total || summary.totalRows || summary.inserted || 0,
         success: summary.success || summary.inserted || 0,
-        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0
+        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0,
+        errors: summary.errors || []
       });
       toast.success(res.message || 'Upload successful')
       await fetchAllData()

@@ -401,6 +401,13 @@ exports.bulkUploadStudents = async (req, res) => {
       dob: ['dob', 'dateofbirth']
     };
 
+    const insertSql = `
+      INSERT INTO students (
+        name, roll_no, class_id, section_id, father_name, mother_name, 
+        mobile, optional_mobile, address, gender, dob, house, remarks, status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+    `;
+
     for (const [index, rawRow] of rawRows.entries()) {
       try {
         const row = {};
@@ -428,15 +435,14 @@ exports.bulkUploadStudents = async (req, res) => {
         let cName = String(cNameRaw).trim();
         let cSection = cSecRaw ? String(cSecRaw).trim() : '';
 
-        // Safely parse formats like "Class 1" -> "1", "class 1" -> "1", "sec A" -> "A"
+        // Normalize Class and Section
         cName = cName.replace(/^(class|cls)\s*/i, '').trim();
         cSection = cSection.replace(/^(section|sec|-)\s*/i, '').trim();
 
-        // If user provided Class as "1-A" or "Class 1 - A" and Section is empty
         if (cName.includes('-') && !cSection) {
           const parts = cName.split('-');
-          cName = parts[0].replace(/^(class|cls)\s*/i, '').trim();
-          cSection = parts[1].replace(/^(section|sec)\s*/i, '').trim();
+          cName = parts[0].trim();
+          cSection = parts[1].trim();
         }
 
         const [classes] = await pool.execute(
@@ -461,12 +467,12 @@ exports.bulkUploadStudents = async (req, res) => {
           }
         }
 
-        // Generate sequential roll number if missing
+        // Generate or validate Roll No
         let finalRollNo = row.roll_no ? String(row.roll_no).trim() : null;
         if (!finalRollNo) {
           const [maxRollResult] = await pool.execute(
-            'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id = ?', 
-            [classes[0].id, sectionId]
+            'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ?', 
+            [classes[0].id]
           );
           let nextRollNo = 1;
           if (maxRollResult[0].maxRoll && !isNaN(parseInt(maxRollResult[0].maxRoll))) {
@@ -475,21 +481,52 @@ exports.bulkUploadStudents = async (req, res) => {
           finalRollNo = String(nextRollNo);
         }
 
-        await pool.execute(sql, [
-          String(name).trim(), 
-          finalRollNo,
-          classes[0].id, 
-          sectionId,
-          row.father_name ? String(row.father_name).trim() : '', 
-          row.mother_name ? String(row.mother_name).trim() : '', 
-          String(mobile).trim(), 
-          row.optional_mobile ? String(row.optional_mobile).trim() : '', 
-          row.address ? String(row.address).trim() : '',
-          row.gender ? String(row.gender).trim() : 'Male', 
-          row.dob ? parseExcelDate(row.dob) : null, 
-          houseVal,
-          row.remarks ? String(row.remarks).trim() : ''
-        ]);
+        // Check if student with same Roll No, Class, and Section already exists
+        const [existing] = await pool.execute(
+          'SELECT id FROM students WHERE roll_no = ? AND class_id = ? AND (section_id = ? OR (section_id IS NULL AND ? IS NULL)) LIMIT 1',
+          [finalRollNo, classes[0].id, sectionId, sectionId]
+        );
+
+        if (existing.length > 0) {
+          // If exists, update instead of insert (UPSERT behavior)
+          const updateSql = `
+            UPDATE students SET 
+              name=?, section_id=?, father_name=?, mother_name=?, mobile=?, 
+              optional_mobile=?, address=?, gender=?, dob=?, house=?, remarks=?, updated_at=NOW()
+            WHERE id=?
+          `;
+          await pool.execute(updateSql, [
+            String(name).trim(),
+            sectionId,
+            row.father_name ? String(row.father_name).trim() : '',
+            row.mother_name ? String(row.mother_name).trim() : '',
+            String(mobile).trim(),
+            row.optional_mobile ? String(row.optional_mobile).trim() : '',
+            row.address ? String(row.address).trim() : '',
+            row.gender ? String(row.gender).trim() : 'Male',
+            row.dob ? parseExcelDate(row.dob) : null,
+            row.house || 'Not Assigned',
+            row.remarks ? String(row.remarks).trim() : '',
+            existing[0].id
+          ]);
+        } else {
+          // Insert new record
+          await pool.execute(insertSql, [
+            String(name).trim(), 
+            finalRollNo,
+            classes[0].id, 
+            sectionId,
+            row.father_name ? String(row.father_name).trim() : '', 
+            row.mother_name ? String(row.mother_name).trim() : '', 
+            String(mobile).trim(), 
+            row.optional_mobile ? String(row.optional_mobile).trim() : '', 
+            row.address ? String(row.address).trim() : '',
+            row.gender ? String(row.gender).trim() : 'Male', 
+            row.dob ? parseExcelDate(row.dob) : null, 
+            row.house || 'Not Assigned',
+            row.remarks ? String(row.remarks).trim() : ''
+          ]);
+        }
 
         results.success++;
       } catch (err) {
