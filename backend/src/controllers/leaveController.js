@@ -1,5 +1,6 @@
 // src/controllers/leaveController.js
 const prisma   = require('../config/db')
+const pool     = require('../config/mysqlDb') // Raw SQL fallback only — do NOT use for new features
 const { sendSuccess, sendError, paginated } = require('../utils/response')
 const { parsePagination } = require('../utils/pagination')
 const notificationEventService = require('../utils/notificationEventService')
@@ -67,7 +68,7 @@ const getLeaves = async (req, res) => {
 
   } catch (err) {
     console.warn('[LEAVE] Prisma failed, falling back to pool:', err.message);
-    const pool = require('../config/mysqlDb');
+    // pool is imported at the top — no inline require() needed
     try {
         let sql = "SELECT l.*, u.name as user_name, u.email as user_email, u.role as user_role FROM leave_requests l JOIN users u ON l.user_id = u.id WHERE 1=1";
         const params = [];
