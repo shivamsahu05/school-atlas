@@ -107,15 +107,15 @@ exports.saveMarks = async (req, res) => {
         // Bypass final_saved check since status column doesn't exist
         await connection.execute(`
           UPDATE student_marks 
-          SET marks_obtained = ?, teacher_id = COALESCE(teacher_id, ?), entered_by_user_id = ?
+          SET marks_obtained = ?
           WHERE student_id = ? AND subject_id = ? AND exam_type = ?
-        `, [mObt, teacherId, enteredByUserId, student_id, subject_id, exam_type]);
+        `, [mObt, student_id, subject_id, exam_type]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, teacher_id, entered_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, teacherId, enteredByUserId]);
+          (student_id, subject_id, exam_type, marks_obtained)
+          VALUES (?, ?, ?, ?)
+        `, [student_id, subject_id, exam_type, mObt]);
       }
     }
 
@@ -167,13 +167,10 @@ exports.getHistory = async (req, res) => {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
              m.exam_type, m.marks_obtained,
-             COALESCE(u_entry.name, u_teacher.name) as teacher_name
+             'System' as teacher_name
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
         AND m.subject_id = ?
-      LEFT JOIN users u_entry ON m.entered_by_user_id = u_entry.id
-      LEFT JOIN teachers t ON m.teacher_id = t.id
-      LEFT JOIN users u_teacher ON t.user_id = u_teacher.id
       WHERE s.class_id = ?
     `;
     const params = [subject_id, class_id];
