@@ -49,7 +49,7 @@ exports.getStudents = async (req, res) => {
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-             m.id as mark_id, m.marks_obtained, m.total_marks, m.status
+             m.id as mark_id, m.marks_obtained, m.status
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
         AND m.subject_id = ? 
@@ -112,15 +112,15 @@ exports.saveMarks = async (req, res) => {
 
         await connection.execute(`
           UPDATE student_marks 
-          SET marks_obtained = ?, total_marks = ?, status = COALESCE(?, status), teacher_id = COALESCE(teacher_id, ?), entered_by_user_id = ?
+          SET marks_obtained = ?, status = COALESCE(?, status), teacher_id = COALESCE(teacher_id, ?), entered_by_user_id = ?
           WHERE student_id = ? AND subject_id = ? AND exam_type = ? AND academic_year = ?
-        `, [mObt, tMrk, targetStatus, teacherId, enteredByUserId, student_id, subject_id, exam_type, academic_year]);
+        `, [mObt, targetStatus, teacherId, enteredByUserId, student_id, subject_id, exam_type, academic_year]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, academic_year, marks_obtained, total_marks, status, teacher_id, entered_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, academic_year, mObt, tMrk, targetStatus, teacherId, enteredByUserId]);
+          (student_id, class_id, section_id, subject_id, exam_type, academic_year, marks_obtained, status, teacher_id, entered_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [student_id, class_id, section_id || null, subject_id, exam_type, academic_year, mObt, targetStatus, teacherId, enteredByUserId]);
       }
     }
 
@@ -171,7 +171,7 @@ exports.getHistory = async (req, res) => {
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-             m.exam_type, m.marks_obtained, m.total_marks, m.status,
+             m.exam_type, m.marks_obtained, m.status,
              COALESCE(u_entry.name, u_teacher.name) as teacher_name
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
@@ -205,7 +205,7 @@ exports.getHistory = async (req, res) => {
       if (row.exam_type) {
         studentMap[row.student_id].marks[row.exam_type] = {
           obtained: row.marks_obtained,
-          total: row.total_marks,
+          total: 50,
           status: row.status,
           teacher_name: row.teacher_name
         };
@@ -248,7 +248,7 @@ exports.getMarksheet = async (req, res) => {
     const marksParams = section_id ? [class_id, academic_year, section_id] : [class_id, academic_year];
     const marksSecFilter = section_id ? 'AND s.section_id = ?' : '';
     const [marks] = await pool.execute(`
-      SELECT m.student_id, m.subject_id, m.marks_obtained, m.total_marks, m.exam_type, m.status
+      SELECT m.student_id, m.subject_id, m.marks_obtained, m.exam_type, m.status
       FROM student_marks m
       JOIN students s ON m.student_id = s.id
       WHERE s.class_id = ? AND m.academic_year = ? ${marksSecFilter}
@@ -273,12 +273,12 @@ exports.getMarksheet = async (req, res) => {
         presentExamTypes.forEach(et => {
           const examMark = subMarks.find(m => m.exam_type === et);
           byExam[et] = examMark
-            ? { obtained: Number(examMark.marks_obtained || 0), total: Number(examMark.total_marks || 0) }
+            ? { obtained: Number(examMark.marks_obtained || 0), total: 50 }
             : null;
         });
 
         // Subject total across all exams
-        const subTotal = subMarks.reduce((s, m) => s + Number(m.total_marks || 0), 0);
+        const subTotal = subMarks.length * 50;
         const subObtained = subMarks.reduce((s, m) => s + Number(m.marks_obtained || 0), 0);
         const hasData = subMarks.length > 0;
 
