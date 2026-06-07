@@ -54,10 +54,9 @@ exports.getStudents = async (req, res) => {
       LEFT JOIN student_marks m ON s.id = m.student_id 
         AND m.subject_id = ? 
         AND m.exam_type = ?
-        AND m.academic_year = ?
       WHERE s.class_id = ?
     `;
-    const params = [subject_id, exam_type, academic_year, class_id];
+    const params = [subject_id, exam_type, class_id];
 
     if (section_id) {
       sql += ' AND s.section_id = ?';
@@ -100,8 +99,8 @@ exports.saveMarks = async (req, res) => {
       const mObt = (marks_obtained === '' || marks_obtained === null) ? null : Number(marks_obtained);
 
       const [existing] = await connection.execute(
-        'SELECT id FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ? AND academic_year = ?',
-        [student_id, subject_id, exam_type, academic_year]
+        'SELECT id FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ?',
+        [student_id, subject_id, exam_type]
       );
 
       if (existing.length > 0) {
@@ -109,14 +108,14 @@ exports.saveMarks = async (req, res) => {
         await connection.execute(`
           UPDATE student_marks 
           SET marks_obtained = ?, teacher_id = COALESCE(teacher_id, ?), entered_by_user_id = ?
-          WHERE student_id = ? AND subject_id = ? AND exam_type = ? AND academic_year = ?
-        `, [mObt, teacherId, enteredByUserId, student_id, subject_id, exam_type, academic_year]);
+          WHERE student_id = ? AND subject_id = ? AND exam_type = ?
+        `, [mObt, teacherId, enteredByUserId, student_id, subject_id, exam_type]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, academic_year, marks_obtained, teacher_id, entered_by_user_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, academic_year, mObt, teacherId, enteredByUserId]);
+          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, teacher_id, entered_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, teacherId, enteredByUserId]);
       }
     }
 
@@ -142,15 +141,15 @@ exports.unlockMarks = async (req, res) => {
       await pool.execute(`
         UPDATE student_marks 
         SET marks_obtained = marks_obtained 
-        WHERE student_id = ? AND subject_id = ? AND exam_type = ? AND academic_year = ?
-      `, [student_id, subject_id, exam_type, academic_year]);
+        WHERE student_id = ? AND subject_id = ? AND exam_type = ?
+      `, [student_id, subject_id, exam_type]);
     } else if (class_id) {
       await pool.execute(`
         UPDATE student_marks m
         JOIN students s ON m.student_id = s.id
         SET m.marks_obtained = m.marks_obtained
-        WHERE s.class_id = ? AND m.subject_id = ? AND m.exam_type = ? AND m.academic_year = ?
-      `, [class_id, subject_id, exam_type, academic_year]);
+        WHERE s.class_id = ? AND m.subject_id = ? AND m.exam_type = ?
+      `, [class_id, subject_id, exam_type]);
     } else {
       return sendErr(res, 'student_id or class_id required', 400);
     }
@@ -171,13 +170,13 @@ exports.getHistory = async (req, res) => {
              COALESCE(u_entry.name, u_teacher.name) as teacher_name
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
-        AND m.subject_id = ? AND m.academic_year = ?
+        AND m.subject_id = ?
       LEFT JOIN users u_entry ON m.entered_by_user_id = u_entry.id
       LEFT JOIN teachers t ON m.teacher_id = t.id
       LEFT JOIN users u_teacher ON t.user_id = u_teacher.id
       WHERE s.class_id = ?
     `;
-    const params = [subject_id, academic_year, class_id];
+    const params = [subject_id, class_id];
 
     if (section_id) {
       sql += ' AND s.section_id = ?';
@@ -241,13 +240,13 @@ exports.getMarksheet = async (req, res) => {
     `, studentParams);
 
     // 3) ALL marks for this class + year (any status), with exam_type
-    const marksParams = section_id ? [class_id, academic_year, section_id] : [class_id, academic_year];
+    const marksParams = section_id ? [class_id, section_id] : [class_id];
     const marksSecFilter = section_id ? 'AND s.section_id = ?' : '';
     const [marks] = await pool.execute(`
       SELECT m.student_id, m.subject_id, m.marks_obtained, m.exam_type
       FROM student_marks m
       JOIN students s ON m.student_id = s.id
-      WHERE s.class_id = ? AND m.academic_year = ? ${marksSecFilter}
+      WHERE s.class_id = ? ${marksSecFilter}
     `, marksParams);
 
     // 4) Find which exam types actually have data (preserve canonical order)
