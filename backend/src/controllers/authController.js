@@ -51,7 +51,11 @@ const login = async (req, res) => {
         FROM teacher_module_permissions tmp
         JOIN modules m ON tmp.module_id = m.id
         JOIN teachers t ON tmp.teacher_id = t.id
+<<<<<<< HEAD
         WHERE t.user_id = ? AND tmp.status = 'ACTIVE' AND (tmp.end_date IS NULL OR tmp.end_date >= CURDATE())
+=======
+        WHERE t.user_id = ? AND tmp.status = 'ACTIVE' AND tmp.end_date >= CURDATE()
+>>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
       `, [user.id])
       
       console.log(`[AUTH LOGIN DEBUG] Found ${permRows.length} permissions for user ${user.id}`);
@@ -121,6 +125,7 @@ const getMe = async (req, res) => {
         result.assigned_classes = subjects;
         
         const [permissions] = await pool.execute(`
+<<<<<<< HEAD
           SELECT m.module_key AS module, tmp.end_date AS expiresAt
           FROM teacher_module_permissions tmp
           JOIN modules m ON tmp.module_id = m.id
@@ -132,6 +137,15 @@ const getMe = async (req, res) => {
           allowed: true,
           expiresAt: p.expiresAt
         }));
+=======
+          SELECT m.module_key 
+          FROM teacher_module_permissions tmp
+          JOIN modules m ON tmp.module_id = m.id
+          WHERE tmp.teacher_id = (SELECT id FROM teachers WHERE user_id = ? LIMIT 1)
+          AND tmp.status = 'ACTIVE'
+        `, [userId]);
+        result.permissions = permissions.map(p => p.module_key);
+>>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
       } catch (e) {
         console.error('[AUTH ME DEBUG] Permission Fetch Error:', e.message);
         result.permissions = [];

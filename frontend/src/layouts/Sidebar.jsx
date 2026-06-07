@@ -138,6 +138,7 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
     if (user?.role === 'admin') return ADMIN_NAV;
 
     const hasStudentAccess = user?.permissions?.some(p => {
+<<<<<<< HEAD
       const modName = (typeof p === 'string' ? p : (p.module || '')).toLowerCase().replace(/\s+/g, '_');
       if (modName !== 'students_management') return false;
       if (typeof p === 'object' && p.expiresAt) {
@@ -146,6 +147,14 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
         if (new Date() > expiry) return false;
       }
       return true;
+=======
+      const modName = (p.module || '').toLowerCase().replace(/\s+/g, '_');
+      if (modName !== 'students_management') return false;
+      if (!p.expiresAt) return true;
+      const expiry = new Date(p.expiresAt);
+      expiry.setHours(23, 59, 59, 999);
+      return new Date() <= expiry;
+>>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
     });
 
     const teacherNav = [...TEACHER_NAV];

@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+
+*.zip
+
+*.rar
+
+# env
+.env
+*.env
+frontend/.env
+backend/.env
+
+# sql dumps (allow production_tables.sql to be committed)
+*_dump.sql
+dumps/
+*.sql
+
+# logs
+logs
+*.log
+npm-debug.log*
+
+# build
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# vscode
+.vscode/
+
+# prisma
+backend/prisma/dev.db
