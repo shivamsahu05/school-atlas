@@ -216,27 +216,25 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        {/* Top performers table — 6-parameter weighted score */}
+        {/* Top performers table — now teacher-based with 70/30 score */}
         <div className="card p-6">
-          <SectionHeader title="Top Performers" subtitle="Syllabus 15% · LO 15% · Observation 25% · Participate 10% · Other 20% · Language 15%" />
+          <SectionHeader title="Top Performers" subtitle="Dynamic: Weighted score across 6 parameters" />
           <div className="space-y-3 mt-2">
             {topPerformers.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-10">No performance data available</p>
             ) : topPerformers.map((p, i) => (
-              <div key={i} className="flex items-center gap-3">
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold
-                  ${i === 0 ? 'bg-amber-400 text-white' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-orange-400 text-white' : 'bg-slate-100 text-slate-500'}`}>
+              <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50/50 border border-slate-100/30">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black
+                  ${i === 0 ? 'bg-amber-400 text-white shadow-sm' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-orange-400 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>
                   {i + 1}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-800 truncate">{p.teacher_name || p.name || '—'}</p>
-                  <p className="text-xs text-slate-400">
-                    Syllabus: {Number(p.syllabus_score || 0).toFixed(0)}% · Obs: {Number(p.obs_score || 0).toFixed(0)}%
-                  </p>
+                  <p className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name || '—'}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Academic Excellence</p>
                 </div>
                 <div className="text-right flex-shrink-0">
-                  <p className="text-sm font-bold text-emerald-600">
-                    {Number(p.weighted_score ?? p.avgScore ?? 0).toFixed(1)}%
+                  <p className="text-sm font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                    {Number(p.weighted_score).toFixed(1)}%
                   </p>
                 </div>
               </div>
@@ -269,8 +267,6 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* ── D. Notification Summary Panel ──────────────────────────────────── */}
-      <NotificationPanel data={data || {}} notifications={liveNotifications} />
 
       {/* ── A. Weekly Syllabus Tracking ────────────────────────────────────── */}
       <WeeklySyllabusTracker syllabus={data?.weeklySyllabus || []} />
@@ -291,75 +287,6 @@ export default function AdminDashboard() {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// D. Notification Summary Panel
-// ────────────────────────────────────────────────────────────────────────────
-function NotificationPanel({ data, notifications = [] }) {
-  const pendingLeaves = notifications.filter(n => n.type === 'leave').length
-  const todayBdays = (data?.birthdays || []).filter(isToday).length
-  const pendingHW = notifications.filter(n => n.type === 'alert').length
-  const overdueSyl = notifications.filter(n => n.type === 'alert' && n.text.toLowerCase().includes('syllabus')).length
-  const permExpiring = notifications.filter(n => n.type === 'message' && n.text.toLowerCase().includes('expiring')).length
-
-  const NOTIFS = [
-    { label: 'Pending Homework', count: pendingHW, color: 'amber', icon: FileText, to: '/admin/followups' },
-    { label: 'Overdue Syllabus', count: overdueSyl, color: 'red', icon: BookOpen, to: '/admin/syllabus' },
-    { label: 'Birthday Today', count: todayBdays, color: 'purple', icon: Cake, to: '#birthdays' },
-    { label: 'Leave Pending', count: pendingLeaves, color: 'blue', icon: Clock, to: '/admin/leave' },
-    { label: 'Permission Expiring', count: permExpiring, color: 'teal', icon: AlertTriangle, to: '/admin/users' },
-  ]
-
-  const colMap = {
-    amber: { badge: 'bg-amber-500', icon: 'bg-amber-50 text-amber-600', border: 'border-amber-200' },
-    red: { badge: 'bg-rose-500', icon: 'bg-rose-50 text-rose-600', border: 'border-rose-200' },
-    purple: { badge: 'bg-purple-500', icon: 'bg-purple-50 text-purple-600', border: 'border-purple-200' },
-    blue: { badge: 'bg-brand-500', icon: 'bg-brand-50 text-brand-600', border: 'border-brand-200' },
-    teal: { badge: 'bg-teal-500', icon: 'bg-teal-50 text-teal-600', border: 'border-teal-200' },
-  }
-
-  return (
-    <div>
-      <SectionHeader
-        title="Notifications"
-        subtitle="Items requiring your attention (Live Data)"
-      />
-      <div className="grid grid-cols-1 md:grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {NOTIFS.map(({ label, count, color, icon: Icon, to }) => {
-          const c = colMap[color]
-          return (
-            <Link
-              key={label}
-              to={to}
-              className={`card p-4 flex flex-col gap-3 border ${c.border} hover:shadow-panel transition-all duration-200 cursor-pointer relative`}
-              onClick={(e) => {
-                if (to.startsWith('#')) {
-                  e.preventDefault()
-                  document.querySelector(to)?.scrollIntoView({ behavior: 'smooth' })
-                }
-              }}
-            >
-              {count > 0 && (
-                <span className={`absolute -top-2 -right-2 w-5 h-5 ${c.badge} text-white text-[10px] font-bold rounded-full flex items-center justify-center shadow`}>
-                  {count}
-                </span>
-              )}
-              <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${c.icon}`}>
-                <Icon size={18} />
-              </div>
-              <div>
-                <p className="text-xl font-bold text-slate-800">{count}</p>
-                <p className="text-xs text-slate-400 leading-tight mt-0.5">{label}</p>
-              </div>
-              <div className="flex items-center gap-1 text-xs text-slate-400">
-                <span>View</span>
-                <ChevronRight size={12} />
-              </div>
-            </Link>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
 
 // ────────────────────────────────────────────────────────────────────────────
 // A. Weekly Syllabus Tracking
@@ -392,6 +319,36 @@ function WeeklySyllabusTracker({ syllabus = [] }) {
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-emerald-500 inline-block" /><span className="text-xs text-slate-500">≥80% On Track ({green})</span></div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-400 inline-block" /><span className="text-xs text-slate-500">50–79% Lagging ({yellow})</span></div>
         <div className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-rose-500 inline-block" /><span className="text-xs text-slate-500">&lt;50% Overdue ({red})</span></div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6 mb-6">
+        <div className="lg:col-span-2 card p-5">
+          <p className="text-sm font-bold text-slate-800 mb-4 uppercase tracking-tight">Syllabus Completion by Class</p>
+          <BarChartWidget 
+            data={normalized.slice(0, 8)} 
+            dataKey="completion" 
+            xKey="className" 
+            color="#3b82f6" 
+            height={220} 
+            name="Completion %"
+          />
+        </div>
+        <div className="card p-5 flex flex-col justify-center items-center text-center">
+          <div className="w-16 h-16 rounded-full bg-brand-50 flex items-center justify-center mb-3">
+            <TrendingUp size={32} className="text-brand-600" />
+          </div>
+          <h4 className="text-lg font-black text-slate-800">{Math.round((green / (normalized.length || 1)) * 100)}%</h4>
+          <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">On-Track Classes</p>
+          <div className="w-full mt-4 space-y-2">
+             <div className="flex justify-between text-[10px] font-bold">
+                <span className="text-slate-400">TARGET</span>
+                <span className="text-emerald-600">80%</span>
+             </div>
+             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-brand-500 rounded-full" style={{ width: `${Math.round((green / (normalized.length || 1)) * 100)}%` }} />
+             </div>
+          </div>
+        </div>
       </div>
 
       <div className="card p-5">
@@ -561,6 +518,7 @@ function HWTrackingTable({ hwTracking = [] }) {
                 <th className="px-5 py-4">Teacher</th>
                 <th className="px-5 py-4">Task Type</th>
                 <th className="px-5 py-4">Topic</th>
+                <th className="px-5 py-4">Month/Week</th>
                 <th className="px-5 py-4 text-center">Status</th>
                 <th className="px-5 py-4 text-right">Date</th>
               </tr>
@@ -574,6 +532,7 @@ function HWTrackingTable({ hwTracking = [] }) {
                   <td className="px-5 py-3 text-slate-500 text-xs">{hw.teacher_name}</td>
                   <td className="px-5 py-3 text-slate-500 text-xs">{hw.task_type}</td>
                   <td className="px-5 py-3 text-slate-500 text-xs max-w-[200px] truncate" title={hw.topic}>{hw.topic}</td>
+                  <td className="px-5 py-3 text-slate-500 text-[10px] uppercase font-bold">{hw.month || '—'} · {hw.week || '—'}</td>
                   <td className="px-5 py-3 text-center">
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">
                       {hw.status.replace('_', ' ')}

@@ -179,6 +179,34 @@ const notificationEventService = {
     }
   },
 
+  markAllAsRead: async (role, userId = null) => {
+    try {
+      let sql = `UPDATE notifications SET is_read = TRUE WHERE (role_target = ? OR role_target = 'all')`;
+      const params = [role];
+      if (role === 'teacher' && userId) {
+        sql += ` OR target_user_id = ? `;
+        params.push(userId);
+      }
+      await pool.execute(sql, params);
+    } catch (err) {
+      console.error('[NOTIF-EVENT] Mark All Read Error:', err);
+    }
+  },
+
+  deleteAll: async (role, userId = null) => {
+    try {
+      let sql = `DELETE FROM notifications WHERE (role_target = ? OR role_target = 'all')`;
+      const params = [role];
+      if (role === 'teacher' && userId) {
+        sql += ` OR target_user_id = ? `;
+        params.push(userId);
+      }
+      await pool.execute(sql, params);
+    } catch (err) {
+      console.error('[NOTIF-EVENT] Delete All Error:', err);
+    }
+  },
+
   /**
    * Periodic check for expiring permissions
    */

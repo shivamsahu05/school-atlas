@@ -48,7 +48,10 @@ export default function AdminObservation() {
   }, [dbClasses])
 
   const sectionOptions = useMemo(() => {
-    return dbSections.map(s => ({ value: s.section_id, label: `Section ${s.section_name}` }))
+    return dbSections.map(s => ({ 
+      value: s.section_id, 
+      label: s.section_name.toLowerCase().startsWith('section') ? s.section_name : `Section ${s.section_name}` 
+    }))
   }, [dbSections])
 
   const subjectOptions = useMemo(() => {
@@ -56,7 +59,7 @@ export default function AdminObservation() {
   }, [dbClassSubjects])
 
   const teacherOptions = useMemo(() => {
-    return dbTeachers.map(t => ({ value: t.id, label: t.name }))
+    return dbTeachers.map(t => ({ value: t.teacher_id || t.id, label: t.name }))
   }, [dbTeachers])
 
   const [searchParams] = useSearchParams()
@@ -337,14 +340,14 @@ export default function AdminObservation() {
           </div>
         </>
       ) : (
-        <div className="card p-6 max-w-xl animate-fade-in">
+        <div className="card p-4 md:p-8 w-full max-w-5xl mx-auto animate-fade-in shadow-xl border-slate-200">
           <SectionHeader title="New Observation Form" subtitle="Score each criterion out of 10" />
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="space-y-6 mt-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
               <div>
-                <label className="label">Class</label>
+                <label className="label font-bold text-slate-700 mb-2">Class</label>
                 <select 
-                  className="select w-full" 
+                  className="select w-full h-12 text-base font-semibold border-slate-300 focus:ring-brand-500 focus:border-brand-500 rounded-xl" 
                   value={form.classId} 
                   onChange={e => setForm({ ...form, classId: e.target.value })}
                 >
@@ -353,9 +356,9 @@ export default function AdminObservation() {
                 </select>
               </div>
               <div>
-                <label className="label">Section</label>
+                <label className="label font-bold text-slate-700 mb-2">Section</label>
                 <select 
-                  className="select w-full" 
+                  className="select w-full h-12 text-base font-semibold border-slate-300 focus:ring-brand-500 focus:border-brand-500 rounded-xl" 
                   value={form.sectionId} 
                   onChange={e => setForm({ ...form, sectionId: e.target.value })}
                   disabled={!form.classId || fetchingSections}
@@ -365,9 +368,9 @@ export default function AdminObservation() {
                 </select>
               </div>
               <div>
-                <label className="label">Subject</label>
+                <label className="label font-bold text-slate-700 mb-2">Subject</label>
                 <select 
-                  className="select w-full" 
+                  className="select w-full h-12 text-base font-semibold border-slate-300 focus:ring-brand-500 focus:border-brand-500 rounded-xl" 
                   value={form.subjectId} 
                   onChange={e => setForm({ ...form, subjectId: e.target.value })}
                   disabled={!form.classId || fetchingSubjects}
@@ -377,36 +380,64 @@ export default function AdminObservation() {
                 </select>
               </div>
               <div>
-                <label className="label">Select Teacher</label>
-                <select 
-                  className="select w-full" 
-                  value={form.teacherId} 
-                  onChange={e => {
-                    const t = dbTeachers.find(tch => String(tch.id) === e.target.value)
-                    setForm({ ...form, teacherId: e.target.value, teacherName: t ? t.name : '' })
-                  }}
-                >
-                  <option value="">Select Teacher</option>
-                  {teacherOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
+                <label className="label font-bold text-brand-700 mb-2">Teacher</label>
+                <div className="relative">
+                  <select 
+                    className={clsx(
+                      "select w-full h-12 text-sm md:text-base font-bold rounded-xl border-slate-300 transition-all",
+                      form.teacherId ? "text-brand-700 border-brand-200 bg-brand-50/30" : "text-slate-600 bg-white"
+                    )}
+                    value={form.teacherId}
+                    onChange={e => {
+                      const selectedT = dbTeachers.find(t => String(t.id || t.teacher_id) === String(e.target.value))
+                      setForm({ ...form, teacherId: e.target.value, teacherName: selectedT ? selectedT.name : '' })
+                    }}
+                  >
+                    <option value="">{form.classId && form.subjectId ? "Manual Selection..." : "Select Class/Subject first"}</option>
+                    {teacherOptions.map(o => (
+                      <option key={o.value} value={o.value}>{o.label} (ID: {o.value})</option>
+                    ))}
+                  </select>
+                  {form.teacherId && (
+                    <div className="absolute -top-2 -right-1 bg-brand-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg animate-in zoom-in duration-300">
+                      {/* We can track if it was auto-detected by comparing with resolved value, but for now simple 'Selected' is good */}
+                      Teacher Selected
+                    </div>
+                  )}
+                  {form.classId && form.subjectId && !form.teacherId && (
+                    <div className="absolute -top-2 -right-1 bg-amber-500 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg">
+                      Needs Selection
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            {CRITERIA.map(c => (
-              <div key={c} className="flex items-center gap-4">
-                <label className="text-sm text-slate-700 flex-1 font-medium">{c}</label>
-                <input type="number" min="0" max="10" step="0.5"
-                  placeholder="–"
-                  value={form.criteria[c] ?? ''}
-                  onChange={e => setForm(f => ({ ...f, criteria: { ...f.criteria, [c]: e.target.value } }))}
-                  className="w-20 text-center input py-2" />
-                <span className="text-xs text-slate-400 w-5">/10</span>
-              </div>
-            ))}
-            <div className="flex gap-3 pt-2">
-              <button onClick={handleSave} className="btn-primary btn flex-1 justify-center">
-                <Save size={14} /> Save Observation
+
+            <div className="bg-slate-50/50 p-4 md:p-6 rounded-2xl border border-slate-100 space-y-4 md:space-y-6">
+              {CRITERIA.map(c => (
+                <div key={c} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-6 group">
+                  <label className="text-sm md:text-base text-slate-700 flex-1 font-bold group-hover:text-brand-600 transition-colors">{c}</label>
+                  <div className="flex items-center gap-3 bg-white p-1 rounded-xl shadow-sm border border-slate-200 focus-within:border-brand-400 focus-within:ring-2 focus-within:ring-brand-100 transition-all">
+                    <input type="number" min="0" max="10" step="0.5"
+                      placeholder="–"
+                      value={form.criteria[c] ?? ''}
+                      onChange={e => setForm(f => ({ ...f, criteria: { ...f.criteria, [c]: e.target.value } }))}
+                      className="w-full sm:w-24 h-10 text-center text-lg font-black text-slate-800 bg-transparent outline-none" />
+                    <span className="text-sm font-black text-slate-400 pr-3 border-l border-slate-100 pl-3">/ 10</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-4 pt-6">
+              <button 
+                onClick={handleSave} 
+                disabled={!form.teacherId}
+                className="btn-primary btn h-14 flex-1 justify-center text-lg font-black shadow-lg shadow-brand-200 disabled:opacity-50 disabled:shadow-none order-1 sm:order-2"
+              >
+                <Save size={20} /> Save Observation
               </button>
-              <button onClick={() => setShowForm(false)} className="btn-secondary btn px-4">Cancel</button>
+              <button onClick={() => setShowForm(false)} className="btn-secondary btn px-8 h-14 font-bold text-slate-500 order-2 sm:order-1">Cancel</button>
             </div>
           </div>
         </div>

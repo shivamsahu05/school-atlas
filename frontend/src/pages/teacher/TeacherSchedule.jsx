@@ -23,12 +23,27 @@ export default function TeacherSchedule() {
 
   const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 
-  // Fetch assignments for dropdowns
   React.useEffect(() => {
     scheduleApi.getMyAssignments().then(res => {
       setAssignments(res?.data || { assignments: [] });
     }).catch(console.error);
   }, []);
+
+  // Auto-hide messages after 7 seconds
+  React.useEffect(() => {
+    if (message.text) {
+      const timer = setTimeout(() => setMessage({ text: '', type: '' }), 7000);
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // Auto-hide bulk results after 10 seconds
+  React.useEffect(() => {
+    if (uploadResults) {
+      const timer = setTimeout(() => setUploadResults(null), 10000);
+      return () => clearTimeout(timer);
+    }
+  }, [uploadResults]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -67,8 +82,12 @@ export default function TeacherSchedule() {
       formData.append('file', uploadFile);
       const res = await syllabusApi.uploadPlan(formData);
       setUploadResults(res.data);
-      if (res.success || res.data?.inserted > 0) {
-        setMessage({ text: `✅ Bulk upload successful: ${res.data?.inserted} records added.`, type: 'success' });
+      if (res.success || res.data?.inserted > 0 || res.data?.updated > 0) {
+        const { inserted, updated } = res.data || {};
+        setMessage({ 
+          text: `✅ Bulk upload successful: ${inserted || 0} added, ${updated || 0} updated.`, 
+          type: 'success' 
+        });
         window.dispatchEvent(new Event('syllabus-updated'));
         window.dispatchEvent(new Event('insights-refresh'));
         window.dispatchEvent(new Event('analytics-refresh'));
@@ -132,7 +151,7 @@ export default function TeacherSchedule() {
             <Download size={16} className="text-amber-500" /> Export
           </button>
           <button
-            onClick={() => setModalOpen(true)}
+            onClick={() => { setModalOpen(true); setMessage({ text: '', type: '' }); }}
             className="btn bg-brand-600 text-white hover:bg-brand-700 shadow-lg shadow-brand-100 flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-black transition-all active:scale-95"
           >
             <Plus size={18} strokeWidth={3} /> Add Micro Schedule
@@ -195,10 +214,10 @@ export default function TeacherSchedule() {
               <select className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50"
                 value={form.section_id} onChange={e => setForm({ ...form, section_id: e.target.value, subject_id: '' })} disabled={!form.class_id} required>
                 <option value="">Select assigned section…</option>
-                {form.class_id && [...new Set(assignments.assignments.filter(a => String(a.classId) === String(form.class_id)).map(a => a.sectionId))].map(id => {
-                  const name = assignments.assignments.find(a => a.sectionId === id)?.sectionName;
-                  return <option key={id} value={id}>{name}</option>
-                })}
+                {form.class_id && [...new Set(assignments.assignments.filter(a => String(a.classId) === String(form.class_id)).map(a => a.sectionId))]
+                  .map(id => ({ id, name: String(assignments.assignments.find(a => a.sectionId === id)?.sectionName || '').trim() }))
+                  .filter(sec => sec.name && sec.name.trim() !== '')
+                  .map(sec => <option key={sec.id} value={sec.id}>{sec.name}</option>)}
               </select>
             </div>
           </div>
@@ -207,7 +226,7 @@ export default function TeacherSchedule() {
             <select className="w-full bg-slate-50 border-0 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50"
               value={form.subject_id} onChange={e => setForm({ ...form, subject_id: e.target.value })} disabled={!form.section_id} required>
               <option value="">Select assigned subject…</option>
-              {form.section_id && assignments.assignments.filter(a => String(a.sectionId) === String(form.section_id)).map(a => (
+              {form.section_id && [...new Map(assignments.assignments.filter(a => String(a.sectionId) === String(form.section_id)).map(a => [a.subjectName, a])).values()].map(a => (
                 <option key={a.subjectId} value={a.subjectId}>{a.subjectName}</option>
               ))}
             </select>

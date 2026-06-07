@@ -100,14 +100,31 @@ exports.grant = async (req, res) => {
     return sendErr(res, 'teacher_id, module_id, start_date, end_date required.', 400);
   }
   try {
-    if (module_id === 'ALL') {
-      const [modules] = await pool.execute('SELECT id FROM modules');
+    if (module_id === 'ALL_ACADEMIC' || module_id === 'ALL_FULL') {
+      const includeStudents = module_id === 'ALL_FULL';
+      // Fetch modules based on the selected bulk mode
+      const queryStr = includeStudents 
+        ? "SELECT id, module_key FROM modules"
+        : "SELECT id, module_key FROM modules WHERE module_key != 'students_management'";
+      
+      const [modules] = await pool.execute(queryStr);
       
       const values = [];
       const placeholders = [];
       modules.forEach(m => {
         placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?)');
-        values.push(teacher_id, m.id, class_id || null, section_id || null, subject_id || null, start_date, end_date, 'ACTIVE');
+        // SYLLABUS_UPLOAD and students_management are global modules (no class context)
+        const isGlobal = m.module_key === 'SYLLABUS_UPLOAD' || m.module_key === 'students_management';
+        values.push(
+          teacher_id, 
+          m.id, 
+          isGlobal ? null : (class_id || null), 
+          isGlobal ? null : (section_id || null), 
+          isGlobal ? null : (subject_id || null), 
+          start_date, 
+          end_date, 
+          'ACTIVE'
+        );
       });
 
       if (placeholders.length > 0) {

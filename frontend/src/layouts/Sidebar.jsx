@@ -26,6 +26,8 @@ const TEACHER_NAV = [
 const ADMIN_NAV = [
   { label: 'Dashboard',           icon: LayoutDashboard, to: '/admin'                  },
   { label: 'Syllabus Status',     icon: BookOpen,        to: '/admin/syllabus'         },
+  { label: 'Micro Schedule',      icon: Calendar,        to: '/admin/schedule'         },
+  { label: 'Syllabus Report',     icon: BarChart2,       to: '/admin/syllabus-report'  },
   { label: 'Award LO Scores',     icon: Star,            to: '/admin/award-lo'         },
   { label: 'Follow-ups',          icon: Bell,            to: '/admin/followups'        },
   { label: 'Messages',            icon: Mail,            to: '/admin/contact'          },
@@ -38,6 +40,7 @@ const ADMIN_NAV = [
   { label: 'Permission Control',  icon: ShieldCheck,     to: '/admin/permissions'      },
   { label: 'Teacher Timetable',   icon: Calendar,        to: '/admin/timetable'        },
   { label: 'Student Timetable',   icon: Users,           to: '/admin/student-timetable' },
+  { label: 'Marks Entry',         icon: ClipboardList,   to: '/admin/marks-entry'      },
   { label: 'Leave Approval',      icon: CheckSquare,     to: '/admin/leave'            },
   { label: 'System Tools',        icon: Settings,        to: '/admin/system'           },
   { label: 'Notifications',       icon: Bell,            to: '/admin/notifications'    },
@@ -135,17 +138,36 @@ export function Sidebar({ mobileOpen, onClose, collapsed, onToggleCollapse }) {
     if (user?.role === 'admin') return ADMIN_NAV;
 
     const hasStudentAccess = user?.permissions?.some(p => {
-      if (p.module !== 'students_management') return false;
-      if (!p.expiresAt) return true;
-      const expiry = new Date(p.expiresAt);
-      expiry.setHours(23, 59, 59, 999);
-      return new Date() <= expiry;
+      const modName = (typeof p === 'string' ? p : (p.module || '')).toLowerCase().replace(/\s+/g, '_');
+      if (modName !== 'students_management') return false;
+      if (typeof p === 'object' && p.expiresAt) {
+        const expiry = new Date(p.expiresAt);
+        expiry.setHours(23, 59, 59, 999);
+        if (new Date() > expiry) return false;
+      }
+      return true;
     });
 
     const teacherNav = [...TEACHER_NAV];
     if (hasStudentAccess) {
       teacherNav.push({ label: 'Students', icon: GraduationCap, to: '/teacher/students' });
     }
+
+    const hasMarksAccess = user?.permissions?.some(p => {
+      const modName = (typeof p === 'string' ? p : (p.module || '')).toUpperCase();
+      if (modName !== 'MARKS_ENTRY' && modName !== 'ALL_ACADEMIC' && modName !== 'ALL_FULL') return false;
+      if (typeof p === 'object' && p.expiresAt) {
+        const expiry = new Date(p.expiresAt);
+        expiry.setHours(23, 59, 59, 999);
+        if (new Date() > expiry) return false;
+      }
+      return true;
+    });
+
+    if (hasMarksAccess) {
+      teacherNav.push({ label: 'Marks Entry', icon: ClipboardList, to: '/teacher/marks-entry' });
+    }
+
     return teacherNav;
   }, [user?.role, user?.permissions]);
 

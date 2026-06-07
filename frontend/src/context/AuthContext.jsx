@@ -25,35 +25,15 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (username, password) => {
     try {
       setSyncing(true)
-
-      // Step 1: Lean login — only validates credentials, returns basic user + token
       const res = await axios.post(`${API_BASE}/auth/login`, { username, password })
       const { token, user: userData } = res.data.data
 
-      // Step 2: Persist token immediately so refreshUser() can use it
       const session = { token, user: userData }
       localStorage.setItem(SESSION_KEY, JSON.stringify(session))
       localStorage.setItem('token', token)
-      localStorage.setItem('sams_last_active', Date.now().toString())
+      localStorage.setItem('sams_last_active', Date.now().toString()) // Reset timer on login
+      
       setUser({ ...userData, token })
-
-      // Step 3: Fetch full profile (permissions, subjects, etc.) from /auth/me
-      // This runs in background — login is already marked successful
-      try {
-        const meRes = await axios.get(`${API_BASE}/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        if (meRes.data.success) {
-          const fullUser = meRes.data.data
-          const fullSession = { token, user: fullUser }
-          localStorage.setItem(SESSION_KEY, JSON.stringify(fullSession))
-          setUser({ ...fullUser, token })
-        }
-      } catch (meErr) {
-        // Non-fatal: user is logged in with basic data, permissions load later
-        console.warn('[AUTH] /me enrichment failed after login:', meErr.message)
-      }
-
       setSyncing(false)
       return { ok: true, role: userData.role }
 
@@ -67,6 +47,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     localStorage.removeItem(SESSION_KEY)
     localStorage.removeItem('token')
+    localStorage.removeItem('sams_last_active')
     setUser(null)
     setSyncing(false)
   }, [])
@@ -101,44 +82,70 @@ export function AuthProvider({ children }) {
     }
   }, [getToken])
 
-  // ─── Inactivity Timeout (5 Minutes) ────────────────────────────────────────
+  // ─── Inactivity Timeout (1 Hour) ───────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
 
-    const INACTIVITY_LIMIT = 5 * 60 * 1000; // 5 Minutes
+    const INACTIVITY_LIMIT = 60 * 60 * 1000; // 1 Hour
     const LAST_ACTIVE_KEY = 'sams_last_active';
+    const THROTTLE_MS = 10000; // Update storage max once every 10s
     
     // 1. Initial check on mount/login
     const lastActive = parseInt(localStorage.getItem(LAST_ACTIVE_KEY) || '0');
     if (lastActive && (Date.now() - lastActive > INACTIVITY_LIMIT)) {
-      console.warn('Session expired due to inactivity across browser sessions.');
+      console.warn('Session expired due to long inactivity.');
       logout();
       return;
     }
 
     let timeout;
+    let lastUpdate = 0;
+
     const startTimer = () => {
       if (timeout) clearTimeout(timeout);
+      // We check if we should logout based on the LATEST value in storage
+      // This helps if another tab was active recently
       timeout = setTimeout(() => {
-        logout();
-        window.location.href = '/login'; // Force redirect
-      }, INACTIVITY_LIMIT);
+        const currentLastActive = parseInt(localStorage.getItem(LAST_ACTIVE_KEY) || '0');
+        if (Date.now() - currentLastActive >= INACTIVITY_LIMIT) {
+          logout();
+          window.location.href = '/login'; 
+        } else {
+          // Another tab was active! Restart timer with the remaining time
+          startTimer();
+        }
+      }, 30000); // Check every 30s instead of one big timeout
     };
 
     const handleActivity = () => {
-      localStorage.setItem(LAST_ACTIVE_KEY, Date.now().toString());
+      const now = Date.now();
+      if (now - lastUpdate > THROTTLE_MS) {
+        localStorage.setItem(LAST_ACTIVE_KEY, now.toString());
+        lastUpdate = now;
+      }
       startTimer();
     };
 
-    // Listeners for any user interaction
+    // Listen for storage changes in OTHER tabs
+    const handleStorageChange = (e) => {
+      if (e.key === LAST_ACTIVE_KEY) {
+        startTimer(); // Reset our local check timer because another tab is active
+      }
+      if (e.key === SESSION_KEY && !e.newValue) {
+        logout(); // Another tab logged out
+      }
+    };
+
     const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
     events.forEach(e => window.addEventListener(e, handleActivity));
+    window.addEventListener('storage', handleStorageChange);
 
-    handleActivity(); // Set initial timestamp and start timer
+    handleActivity(); 
 
     return () => {
       if (timeout) clearTimeout(timeout);
       events.forEach(e => window.removeEventListener(e, handleActivity));
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, [user, logout]);
 

@@ -10,7 +10,7 @@ import {
   Modal, DataTable, StatusBadge
 } from '../../components/ui/index.jsx'
 import api from '../../services/api'
-import { academicApi } from '../../api'
+import { academicApi } from '../../services/schoolApi'
 import clsx from 'clsx'
 
 export default function AwardLOScores() {
@@ -98,10 +98,12 @@ export default function AwardLOScores() {
           academicApi.getClassSections(form.class_id),
           academicApi.getClassSubjects(form.class_id)
         ])
-        setFilteredSections(secRes.data || secRes.sections || [])
-        setFilteredSubjects(subRes.data || subRes.subjects || [])
+        setFilteredSections(secRes.data?.data || secRes.data || [])
+        setFilteredSubjects(subRes.data?.data || subRes.data || [])
       } catch (err) {
         console.error('Failed to fetch class data:', err)
+        setFilteredSections([])
+        setFilteredSubjects([])
       }
     }
     fetchClassData()
@@ -122,10 +124,11 @@ export default function AwardLOScores() {
         // Backend handles fallback to all teachers if no mapping exists
         const res = await api.get(`/admin/lo/teachers/${form.class_id}/${form.subject_id}`)
         if (res.data.success) {
-          setFilteredTeachers(res.data.data)
+          setFilteredTeachers(Array.isArray(res.data.data) ? res.data.data : [])
         }
       } catch (err) {
         console.error('Failed to fetch assigned teachers:', err)
+        setFilteredTeachers([])
       }
     }
     fetchTeachers()
@@ -133,7 +136,38 @@ export default function AwardLOScores() {
     setForm(prev => ({ ...prev, teacher_id: '' }))
   }, [form.class_id, form.subject_id])
 
-  // 3. AUTO-RESOLVE TOPIC FROM MICRO-SCHEDULE
+  // 3. AUTO-RESOLVE TEACHER FROM TIMETABLE
+  useEffect(() => {
+    let isMounted = true;
+    const resolveTeacher = async () => {
+      if (form.class_id && form.subject_id) {
+        try {
+          const res = await academicApi.resolveTeacher({
+            class_id: form.class_id,
+            section_id: form.section_id,
+            subject_id: form.subject_id
+          })
+          
+          if (isMounted && res.data?.teacher) {
+            const t = res.data.teacher;
+            // Only update if it's currently empty or different
+            if (String(form.teacher_id) !== String(t.id)) {
+              setForm(f => ({ ...f, teacher_id: String(t.id) }))
+            }
+          } else if (isMounted) {
+            // Reset if no teacher resolved
+            setForm(f => ({ ...f, teacher_id: '' }))
+          }
+        } catch (err) {
+          if (isMounted) console.error('Failed to resolve teacher:', err)
+        }
+      }
+    }
+    resolveTeacher()
+    return () => { isMounted = false; };
+  }, [form.class_id, form.section_id, form.subject_id])
+
+  // 4. AUTO-RESOLVE TOPIC FROM MICRO-SCHEDULE
   useEffect(() => {
     if (!form.teacher_id || !form.class_id || !form.section_id || !form.subject_id || !form.month || !form.week) return
 
@@ -219,7 +253,10 @@ export default function AwardLOScores() {
         setEditItem(null)
         fetchHistory()
       }
-    } catch (e) { alert('Update failed') }
+    } catch (e) { 
+      console.error('Update Error:', e);
+      alert(e.response?.data?.message || 'Update failed');
+    }
   }
 
   const columns = [
@@ -359,16 +396,32 @@ export default function AwardLOScores() {
                   </div>
                   <select 
                     disabled={!form.subject_id}
-                    className="w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/10 appearance-none hover:bg-white transition-all disabled:opacity-50"
+                    className={clsx(
+                      "w-full pl-11 pr-10 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold transition-all appearance-none hover:bg-white disabled:opacity-50",
+                      form.teacher_id ? "text-brand-700 border-brand-200 bg-brand-50/30" : "text-slate-700"
+                    )}
                     value={form.teacher_id}
                     onChange={e => setForm({...form, teacher_id: e.target.value})}
                   >
-                    <option value="">{form.subject_id ? (filteredTeachers.length > 0 ? 'Select teacher...' : 'No teachers available') : 'Choose subject first'}</option>
-                    {Array.isArray(filteredTeachers) && filteredTeachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <option value="">{form.subject_id ? (filteredTeachers.length > 0 ? 'Manual Selection...' : 'No teachers assigned') : 'Choose subject first'}</option>
+                    {/* Use meta.teachers as fallback if filteredTeachers is empty but class/subject selected */}
+                    {(filteredTeachers.length > 0 ? filteredTeachers : meta.teachers).map(t => (
+                      <option key={t.id} value={t.id}>{t.name} (ID: {t.id})</option>
+                    ))}
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                     <ChevronDown size={16} />
                   </div>
+                  {form.teacher_id && (
+                    <div className="absolute -top-2 -right-1 bg-brand-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg">
+                      Assigned
+                    </div>
+                  )}
+                  {form.subject_id && !form.teacher_id && (
+                    <div className="absolute -top-2 -right-1 bg-amber-500 text-white text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-widest shadow-lg">
+                      Unassigned
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -454,8 +507,8 @@ export default function AwardLOScores() {
                     value={form.score}
                     onChange={e => setForm({...form, score: e.target.value})}
                   />
-                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-300 pointer-events-none">
-                    PERCENT
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-300 pointer-events-none">
+                    %
                   </div>
                 </div>
                 <div className="flex justify-between px-1 mt-2">

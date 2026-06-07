@@ -506,12 +506,20 @@ export default function TeacherStudents() {
                 setForm(prev => ({ ...prev, class_id: selectedClass ? selectedClass.id : '', section_id: '' }))
               }} 
             />
-            {form.class_id && availableSectionsForForm.length > 0 && (
+            {form.class_id && (
               <SelectDropdown 
                 label="Section *" 
-                options={['', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
-                value={availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || ''} 
+                options={['Select section...', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
+                value={
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || 
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || 
+                  (selectedStudent?.class?.section && !form.section_id ? selectedStudent.class.section : 'Select section...')
+                } 
                 onChange={e => {
+                  if (e.target.value === 'Select section...') {
+                    setForm(prev => ({ ...prev, section_id: '' }));
+                    return;
+                  }
                   const selectedSection = availableSectionsForForm.find(s => (s.section_name || s.name) === e.target.value);
                   setForm(prev => ({ ...prev, section_id: selectedSection ? (selectedSection.section_id || selectedSection.id) : '' }))
                 }} 

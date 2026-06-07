@@ -99,15 +99,9 @@ export default function TeacherAnalytics() {
       })
       const loPct = loTotal > 0 ? Math.round(loWeighted / loTotal) : 0
 
-      // Combine with new weights (15, 15, 25, 10, 20, 15)
-      const monthlyScore = Math.round(
-        (syllabusPct * 0.15) + 
-        (loPct * 0.15) + 
-        (avgObsPct * 0.25) + 
-        ((intelPerf.participate_score || 0) * 0.10) + 
-        ((intelPerf.other_score || 0) * 0.20) + 
-        ((intelPerf.lang_score || 0) * 0.15)
-      )
+      // Combine with current avg observation score (20% weight)
+      // Overall = (Syllabus * 0.5) + (LO * 0.3) + (Obs * 0.2)
+      const monthlyScore = Math.round((syllabusPct * 0.5) + (loPct * 0.3) + (avgObsPct * 0.2))
 
       return {
         month: month.substring(0, 3),
@@ -135,20 +129,21 @@ export default function TeacherAnalytics() {
           value={`${Math.round(avgObsPct)}%`}   
           icon={Eye}       
           color="teal"   
-          trend={obsTrend ? obsTrend.value : '+4.2%'} 
-          trendPositive={obsTrend ? obsTrend.positive : true}
+          trend={avgObsPct} 
         />
         <StatCard 
           title="Syllabus Completion"      
           value={`${metrics.syllabus}%`}        
           icon={BarChart2} 
           color="blue"   
+          trend={metrics.syllabus}
         />
         <StatCard 
           title="Overall Weighted Score"    
           value={`${Math.round(overallScore)}%`}            
           icon={TrendingUp}
           color="green"  
+          trend={overallScore}
         />
         <StatCard 
           title="Academic Grade"    
@@ -178,7 +173,7 @@ export default function TeacherAnalytics() {
         </div>
       </div>
 
-      {/* Performance Breakdown */}
+      {/* Performance Breakdown - New High Fidelity Card */}
       {intelPerf && (
         <div className="bg-white p-8 md:p-10 rounded-[40px] border border-slate-200 shadow-sm transition-all duration-300 hover:shadow-xl hover:shadow-blue-50">
           <SectionHeader 
@@ -190,48 +185,49 @@ export default function TeacherAnalytics() {
             {[
               { 
                 label: 'Syllabus Completion', 
-                value: metrics.syllabus || 0, 
+                value: metrics.syllabus, 
                 weight: 15, 
                 icon: BookOpen, 
                 color: 'blue' 
               },
               { 
                 label: 'LO Achievement', 
-                value: metrics.lo || 0, 
+                value: metrics.lo, 
                 weight: 15, 
                 icon: TrendingUp, 
                 color: 'amber' 
               },
               { 
                 label: 'Observation Score', 
-                value: metrics.observation || 0, 
+                value: metrics.observation, 
                 weight: 25, 
                 icon: Eye, 
                 color: 'emerald' 
               },
               { 
                 label: 'Participate Score', 
-                value: intelPerf.participate_score || 0, 
+                value: intelPerf.participate_score, 
                 weight: 10, 
                 icon: Users, 
                 color: 'rose' 
               },
               { 
                 label: 'Other Parameters', 
-                value: intelPerf.other_score || 0, 
+                value: intelPerf.other_score, 
                 weight: 20, 
                 icon: AlertTriangle, 
                 color: 'teal' 
               },
               { 
                 label: 'Language Proficiency', 
-                value: intelPerf.lang_score || 0, 
+                value: intelPerf.lang_score, 
                 weight: 15, 
                 icon: Globe, 
                 color: 'indigo' 
               },
             ].map((param, idx) => (
               <div key={idx} className="group flex items-center gap-6">
+                {/* Icon Circle */}
                 <div className={`flex-shrink-0 w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 group-hover:scale-110 shadow-sm border ${
                   param.color === 'blue' ? 'bg-blue-50 text-blue-600 border-blue-100' :
                   param.color === 'amber' ? 'bg-amber-50 text-amber-600 border-amber-100' :
@@ -243,6 +239,7 @@ export default function TeacherAnalytics() {
                   <param.icon size={20} strokeWidth={2.5} />
                 </div>
 
+                {/* Content */}
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-black text-slate-700 tracking-tight">{param.label}</span>
@@ -255,7 +252,7 @@ export default function TeacherAnalytics() {
                     <div 
                       className={clsx(
                         "h-full rounded-full transition-all duration-1000 ease-out shadow-sm",
-                        param.value >= 85 ? "bg-emerald-500" : param.value >= 60 ? "bg-amber-500" : "bg-rose-500"
+                        param.value >= 85 ? "bg-emerald-500" : "bg-amber-500"
                       )}
                       style={{ width: `${Math.min(param.value, 100)}%` }}
                     />
@@ -265,6 +262,7 @@ export default function TeacherAnalytics() {
             ))}
           </div>
 
+          {/* Footer Overall Weighted Score */}
           <div className="mt-12 pt-8 border-t border-slate-100">
             <div className="flex items-end justify-between mb-4">
               <div className="space-y-1">
@@ -285,7 +283,6 @@ export default function TeacherAnalytics() {
           </div>
         </div>
       )}
-
     </div>
   )
 }

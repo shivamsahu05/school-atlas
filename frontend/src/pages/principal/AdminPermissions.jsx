@@ -70,7 +70,6 @@ export default function AdminPermissions() {
         setMeta(metaRes.data.data || { teachers: [], classes: [], sections: [], subjects: [], modules: [] })
       }
 
-      // Backend sendOk returns { success, data: rows } — extract array directly from .data
       if (activeRes.data?.success) {
         const activeList = activeRes.data.data
         setActivePermissions(Array.isArray(activeList) ? activeList : [])
@@ -98,6 +97,11 @@ export default function AdminPermissions() {
     return [...activePermissions, ...expiredPermissions]
   }, [activePermissions, expiredPermissions])
 
+  const filteredSections = useMemo(() => {
+    if (!form.class_id || !Array.isArray(meta.sections)) return []
+    return meta.sections.filter(s => String(s.class_id) === String(form.class_id))
+  }, [form.class_id, meta.sections])
+
   const filtered = useMemo(() => {
     if (!Array.isArray(allPermissions)) return []
     if (!searchTerm) return allPermissions
@@ -105,30 +109,36 @@ export default function AdminPermissions() {
     return allPermissions.filter(p =>
       (p.teacher || p.teacher_name || '')?.toLowerCase().includes(term) ||
       (p.class_name || '')?.toLowerCase().includes(term) ||
-      (p.module || p.module_label || p.module_name || '')?.toLowerCase().includes(term)
+      (p.module || p.module_label || '')?.toLowerCase().includes(term)
     )
   }, [allPermissions, searchTerm])
 
-  // Filter sections based on selected class
-  const filteredSections = useMemo(() => {
-    if (!form.class_id || !Array.isArray(meta.sections)) return []
-    const mapped = meta.sections.filter(s => String(s.class_id) === String(form.class_id))
-    return mapped
-  }, [form.class_id, meta.sections])
+  const handleRevoke = async (id) => {
+    if (!window.confirm('Are you sure you want to REVOKE this access? The teacher will lose access instantly.')) return
+    try {
+      const res = await api.delete(`/admin/permissions/${id}`)
+      if (res.data.success) {
+        alert('Access revoked successfully')
+        fetchData()
+        setIsModalOpen(false)
+      }
+    } catch (error) {
+      console.error('[REVOKE FAILED]:', error)
+      alert('Failed to revoke access')
+    }
+  }
 
   const handleGrant = async () => {
     const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-    const isStudentModule = selectedModuleKey === 'students_management';
-    const isAllModules = form.module_id === 'ALL';
+    const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
+    const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
 
-    // Base required fields
     if (!form.teacher_id || !form.module_id || !form.start_date || !form.end_date) {
       alert('Please fill in all required fields.')
       return
     }
 
-    // Class is required only for non-student modules, unless ALL modules are selected
-    if (!isStudentModule && !isAllModules && !form.class_id) {
+    if (!isGlobalModule && !isAllModules && !form.class_id) {
       alert('Class Scope is required for this module.')
       return
     }
@@ -192,14 +202,12 @@ export default function AdminPermissions() {
   }
 
   const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-  const isStudentModule = selectedModuleKey === 'students_management';
-  const isAllModules = form.module_id === 'ALL';
+  const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
 
   // ── Table Config ───────────────────────────────────────────────────────────
 
   const COLUMNS = [
     { 
-      // Backend returns: module (module_name alias), module_key
       key: 'module', label: 'Module Permission',
       render: (v, row) => {
         const Icon = MODULE_ICONS[row.module_key] || ShieldCheck
@@ -210,7 +218,6 @@ export default function AdminPermissions() {
              </div>
              <div>
                 <p className="font-bold text-slate-800 text-xs uppercase">{v}</p>
-                {/* Backend returns 'teacher' not 'teacher_name' */}
                 <p className="text-[10px] text-slate-400">{row.teacher}</p>
              </div>
           </div>
@@ -218,7 +225,6 @@ export default function AdminPermissions() {
       }
     },
     { 
-      // Backend returns: class_name, section (not section_name), subject (not subject_name)
       key: 'class_name', label: 'Scope', 
       render: (v, row) => (
         <div className="text-xs font-medium text-slate-600">
@@ -232,24 +238,17 @@ export default function AdminPermissions() {
       render: (_, row) => {
         const start = row.start_date ? new Date(row.start_date).toLocaleDateString() : 'N/A'
         const end = row.end_date ? new Date(row.end_date).toLocaleDateString() : 'Permanent'
-        
-        // Normalize today and end_date for accurate comparison
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
         const expiry = row.end_date ? new Date(row.end_date) : null;
         if (expiry) expiry.setHours(0, 0, 0, 0);
-
         const isPermanent = !row.end_date;
         const isActive = isPermanent || (expiry && expiry >= today);
 
         return (
           <div className="flex flex-col">
             <span className="text-xs font-semibold text-slate-700">{start} to {end}</span>
-            <span className={clsx(
-              "text-[10px] font-bold mt-1",
-              isActive ? "text-emerald-600" : "text-rose-500"
-            )}>
+            <span className={clsx("text-[10px] font-bold mt-1", isActive ? "text-emerald-600" : "text-rose-500")}>
               {isPermanent ? 'Permanent Access' : (isActive ? `${row.daysLeft} days remaining` : 'Expired')}
             </span>
           </div>
@@ -261,12 +260,9 @@ export default function AdminPermissions() {
       render: (_, row) => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        
         const expiry = row.end_date ? new Date(row.end_date) : null;
         if (expiry) expiry.setHours(0, 0, 0, 0);
-
         const isActive = !row.end_date || (expiry && expiry >= today);
-
         return (
           <div className="flex items-center gap-2">
              {isActive ? (
@@ -283,14 +279,24 @@ export default function AdminPermissions() {
       }
     },
     { 
-      key: 'actions', label: 'Edit',
+      key: 'actions', label: 'Actions',
       render: (_, row) => (
-        <button 
-          onClick={() => openEdit(row)}
-          className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-400 transition-colors"
-        >
-          <Edit2 size={15} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => openEdit(row)}
+            className="p-1.5 rounded-lg hover:bg-brand-50 text-brand-400 transition-colors"
+            title="Edit"
+          >
+            <Edit2 size={15} />
+          </button>
+          <button 
+            onClick={() => handleRevoke(row.id)}
+            className="p-1.5 rounded-lg hover:bg-rose-50 text-rose-400 transition-colors"
+            title="Revoke Access"
+          >
+            <Trash2 size={15} />
+          </button>
+        </div>
       )
     }
   ]
@@ -392,7 +398,8 @@ export default function AdminPermissions() {
                       onChange={e => setForm({...form, module_id: e.target.value})}
                     >
                       <option value="">Select module...</option>
-                      <option value="ALL" className="font-bold text-brand-600">All Modules (Bulk Access)</option>
+                      <option value="ALL_ACADEMIC" className="font-bold text-brand-600">All Academic (Excludes Students Mgt.)</option>
+                      <option value="ALL_FULL" className="font-bold text-rose-600">Full System (Includes Students Mgt.)</option>
                       {Array.isArray(meta.modules) && meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
                     </select>
                     {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
@@ -402,7 +409,7 @@ export default function AdminPermissions() {
               </div>
 
               {/* Class & Section Scope - Hidden for Students Management and All Modules (Optional) */}
-              {!isEditMode && !isStudentModule && (
+              {!isEditMode && !isGlobalModule && (
                 <>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="relative group">
@@ -481,9 +488,17 @@ export default function AdminPermissions() {
               </div>
            </div>
 
-           <div className="flex gap-3 pt-4 border-t border-slate-50">
+           <div className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-50">
+             {isEditMode && (
+               <button 
+                onClick={() => handleRevoke(editingId)} 
+                className="btn bg-rose-600 hover:bg-rose-700 text-white flex-1 justify-center py-3"
+               >
+                  <Trash2 size={16} className="mr-2" /> Revoke Access
+               </button>
+             )}
              <button onClick={handleGrant} className="btn-primary flex-1 justify-center py-3">
-                <ShieldCheck size={16} /> {isEditMode ? 'Update Access Period' : 'Grant Access Token'}
+                <ShieldCheck size={16} className="mr-2" /> {isEditMode ? 'Update Period' : 'Grant Access'}
              </button>
              <button onClick={() => setIsModalOpen(false)} className="btn-secondary px-8 text-xs font-bold uppercase tracking-wider">Cancel</button>
            </div>

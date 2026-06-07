@@ -1,5 +1,6 @@
 // src/controllers/leaveController.js
 const prisma   = require('../config/db')
+const pool     = require('../config/mysqlDb') // Raw SQL fallback only — do NOT use for new features
 const { sendSuccess, sendError, paginated } = require('../utils/response')
 const { parsePagination } = require('../utils/pagination')
 const notificationEventService = require('../utils/notificationEventService')
@@ -22,52 +23,72 @@ const getLeaves = async (req, res) => {
   const { skip, take, page, limit } = parsePagination(req.query)
   const { status, user_id, month, year } = req.query
 
-  const where = {}
-  // Teachers only see their own
-  if (req.user.role === 'teacher') where.user_id = req.user.id
-  else if (user_id)                where.user_id = Number(user_id)
-  if (status) where.status = status
-
   const MONTH_MAP = { Jan:1,Feb:2,Mar:3,Apr:4,May:5,Jun:6,Jul:7,Aug:8,Sep:9,Oct:10,Nov:11,Dec:12 }
 
-  // Month/year filter on applied_date
-  if (month || year) {
-    const targetYear  = year  ? parseInt(year)        : null
-    const targetMonth = month ? MONTH_MAP[month] ?? null : null
-    where.applied_date = {
-      ...(targetYear  ? { gte: new Date(targetYear, (targetMonth ?? 1) - 1, 1),
-                          lt:  new Date(targetYear, (targetMonth ?? 12), 1) } : {}),
+  try {
+    const where = {}
+    if (req.user.role === 'teacher') where.user_id = req.user.id
+    else if (user_id)                where.user_id = Number(user_id)
+    if (status) where.status = status
+
+    if (month || year) {
+      const targetYear  = year  ? parseInt(year)        : null
+      const targetMonth = month ? MONTH_MAP[month] ?? null : null
+      where.applied_date = {
+        ...(targetYear  ? { gte: new Date(targetYear, (targetMonth ?? 1) - 1, 1),
+                            lt:  new Date(targetYear, (targetMonth ?? 12), 1) } : {}),
+      }
+      if (targetMonth && !targetYear) delete where.applied_date
     }
-    // If only month is provided (no year), remove the date filter and apply JS-level below
-    if (targetMonth && !targetYear) delete where.applied_date
+
+    const [items, total] = await Promise.all([
+      prisma.leave_requests.findMany({
+        where, skip, take, include: INCLUDE,
+        orderBy: { applied_date: 'desc' },
+      }),
+      prisma.leave_requests.count({ where }),
+    ])
+
+    const targetMonthNum = month ? MONTH_MAP[month] ?? null : null
+    const filteredItems = (month && !year)
+      ? items.filter(l => l.applied_date && new Date(l.applied_date).getMonth() + 1 === targetMonthNum)
+      : items
+
+    const summary = await prisma.leave_requests.groupBy({
+      by:    ['status'],
+      where: req.user.role === 'teacher' ? { user_id: req.user.id } : {},
+      _count:{ id: true },
+    })
+    const counts = summary.reduce((acc, s) => {
+      acc[s.status] = s._count.id
+      return acc
+    }, { Pending: 0, Approved: 0, Rejected: 0 })
+
+    return sendSuccess(res, { ...paginated(filteredItems, total, page, limit), summary: counts })
+
+  } catch (err) {
+    console.warn('[LEAVE] Prisma failed, falling back to pool:', err.message);
+    // pool is imported at the top — no inline require() needed
+    try {
+        let sql = "SELECT l.*, u.name as user_name, u.email as user_email, u.role as user_role FROM leave_requests l JOIN users u ON l.user_id = u.id WHERE 1=1";
+        const params = [];
+        if (req.user.role === 'teacher') { sql += " AND l.user_id = ?"; params.push(req.user.id); }
+        else if (user_id) { sql += " AND l.user_id = ?"; params.push(Number(user_id)); }
+        if (status) { sql += " AND l.status = ?"; params.push(status); }
+        sql += " ORDER BY l.applied_date DESC LIMIT ? OFFSET ?";
+        params.push(take, skip);
+
+        const [rows] = await pool.execute(sql, params);
+        const normalized = rows.map(r => ({ ...r, user: { name: r.user_name, email: r.user_email, role: r.user_role } }));
+
+        const [sRows] = await pool.execute("SELECT status, COUNT(*) as count FROM leave_requests WHERE 1=1" + (req.user.role === 'teacher' ? " AND user_id = ?" : "") + " GROUP BY status", req.user.role === 'teacher' ? [req.user.id] : []);
+        const counts = sRows.reduce((acc, s) => { acc[s.status] = s.count; return acc; }, { Pending: 0, Approved: 0, Rejected: 0 });
+
+        return sendSuccess(res, { ...paginated(normalized, normalized.length, page, limit), summary: counts });
+    } catch (fErr) {
+        return sendError(res, 'Failed to fetch leaves.', 500);
+    }
   }
-
-  const [items, total] = await prisma.$transaction([
-    prisma.leave_requests.findMany({
-      where, skip, take, include: INCLUDE,
-      orderBy: { applied_date: 'desc' },
-    }),
-    prisma.leave_requests.count({ where }),
-  ])
-
-  // Apply month-only filter in JS if year not specified
-  const targetMonthNum = month ? MONTH_MAP[month] ?? null : null
-  const filteredItems = (month && !year)
-    ? items.filter(l => l.applied_date && new Date(l.applied_date).getMonth() + 1 === targetMonthNum)
-    : items
-
-  // Summary counts
-  const summary = await prisma.leave_requests.groupBy({
-    by:    ['status'],
-    where: req.user.role === 'teacher' ? { user_id: req.user.id } : {},
-    _count:{ id: true },
-  })
-  const counts = summary.reduce((acc, s) => {
-    acc[s.status] = s._count.id
-    return acc
-  }, { Pending: 0, Approved: 0, Rejected: 0 })
-
-  return sendSuccess(res, { ...paginated(filteredItems, filteredItems.length, page, limit), summary: counts })
 }
 
 /** GET /api/leave/:id */

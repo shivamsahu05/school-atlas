@@ -84,6 +84,8 @@ export const dashboardApi = {
   getTeacherDashboard:      () => api.get('/dashboard/teacher').then(r => r.data),
   getHomeworkNotifications: () => api.get('/dashboard/homework-notifications').then(r => r.data),
   getNotifications:         () => api.get('/dashboard/notifications').then(r => r.data),
+  markNotificationsRead:    () => api.post('/dashboard/notifications/mark-read').then(r => r.data),
+  clearNotifications:       () => api.post('/dashboard/notifications/clear').then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -280,7 +282,7 @@ export const leaveApi = {
 export const scheduleApi = {
   getMySchedule:    (params = {}) => api.get('/teacher/schedule', { params }).then(r => r.data),
   getTimetable:     ()            => api.get('/teacher/timetable').then(r => r.data),
-  getMyAssignments: ()            => api.get('/teacher/schedule/assignments').then(r => r.data),
+  getMyAssignments: (params = {}) => api.get('/teacher/schedule/assignments', { params }).then(r => r.data),
   markComplete:     (data)        => api.post('/teacher/schedule/update', data).then(r => r.data),
   getMicroSchedule: (params = {}) => api.get('/teacher/schedule/micro-schedule', { params }).then(r => r.data),
   saveMicroSchedule:(data)        => api.post('/teacher/schedule/micro-schedule', data).then(r => r.data),

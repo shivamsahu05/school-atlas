@@ -1,13 +1,13 @@
 // src/controllers/syllabusController.js
-const prisma   = require('../config/db')
-const pool     = require('../config/mysqlDb')
-const xlsx     = require('xlsx')
+const prisma = require('../config/db')
+const pool = require('../config/mysqlDb')
+const xlsx = require('xlsx')
 const { sendSuccess, sendError, paginated } = require('../utils/response')
 const { parsePagination } = require('../utils/pagination')
 const { calculateDates, sanitize } = require('../utils/syllabusUtils')
 
 const INCLUDE = {
-  class:   { select: { id: true, class_name: true, section: true } },
+  class: { select: { id: true, class_name: true, section: true } },
   subject: { select: { id: true, name: true } },
 }
 
@@ -65,16 +65,16 @@ const getSyllabus = async (req, res) => {
   if (className) { sql += ' AND ac.class_number = ?'; values.push(className); }
   if (section) { sql += ' AND asec.name = ?'; values.push(section); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
-  if (is_completed !== undefined) { 
-    sql += ' AND s.is_completed = ?'; 
-    values.push(is_completed === 'true' ? 1 : 0); 
+  if (is_completed !== undefined) {
+    sql += ' AND s.is_completed = ?';
+    values.push(is_completed === 'true' ? 1 : 0);
   } else if (req.query.status) {
     sql += ' AND s.status = ?';
     values.push(req.query.status);
   }
   if (search) { sql += ' AND s.topic LIKE ?'; values.push(`%${search}%`); }
   if (month && month !== 'All') { sql += ' AND MONTHNAME(s.planned_start_date) = ?'; values.push(month); }
-  
+
   if (teacher_id) {
     const tId = Number(teacher_id);
     sql += ' AND (u_direct.id = ? OR u_match.id = ? OR u_sub.id = ?)';
@@ -91,13 +91,19 @@ const getSyllabus = async (req, res) => {
   values.push(take, skip);
 
   const [items] = await pool.execute(sql, values);
-  
+
   // Debug logs for verification
   if (req.user.role === 'teacher') {
     console.log(`[SYLLABUS] Fetching for teacher ID: ${req.user.id}. Found ${items.length} items.`);
   }
 
-  const [countRes] = await pool.execute('SELECT COUNT(*) as total FROM syllabus');
+  const countSql = `
+    SELECT COUNT(*) as total FROM syllabus s 
+    LEFT JOIN academic_classes ac ON s.class_id = ac.id
+    LEFT JOIN acad_sections asec ON s.section_id = asec.id
+    WHERE 1=1 ${sql.split('WHERE 1=1')[1].split('ORDER BY')[0]}
+  `;
+  const [countRes] = await pool.execute(countSql, values.slice(0, -2));
   const total = countRes[0].total;
 
   const formattedItems = items.map(item => ({
@@ -141,7 +147,7 @@ const getSyllabus = async (req, res) => {
   const statsValues = values.slice(0, -2); // Remove take and skip
 
   const [statsRows] = await pool.execute(statsSql, statsValues);
-  
+
   const s = statsRows[0];
   const totalItems = Number(s.total) || 0;
   const completedItems = Number(s.completed) || 0;
@@ -150,11 +156,11 @@ const getSyllabus = async (req, res) => {
 
   return sendSuccess(res, {
     ...paginated(formattedItems, total, page, limit),
-    stats: { 
-      total: totalItems, 
-      completed: completedItems, 
-      pending: pendingItems, 
-      completionPct 
+    stats: {
+      total: totalItems,
+      completed: completedItems,
+      pending: pendingItems,
+      completionPct
     },
   })
 }
@@ -181,7 +187,7 @@ const getSyllabusMetadata = async (req, res) => {
     `, req.user.role === 'teacher' ? [class_id, subject_id, req.user.id] : [class_id, subject_id]);
 
     const months = [...new Set(rows.map(r => r.month))].filter(Boolean);
-    
+
     return sendSuccess(res, {
       months,
       syllabus: rows // Full rows to help frontend map weeks to dates
@@ -194,29 +200,30 @@ const getSyllabusMetadata = async (req, res) => {
 /** GET /api/syllabus/:id */
 const getSyllabusById = async (req, res) => {
   const item = await prisma.syllabus.findUnique({
-    where:   { id: Number(req.params.id) },
+    where: { id: Number(req.params.id) },
     include: INCLUDE,
   })
   if (!item) return sendError(res, 'Syllabus item not found.', 404)
-  
+
   // Ownership check
   if (req.user.role === 'teacher' && item.teacher_id !== req.user.id) {
     return sendError(res, 'Unauthorized access to this syllabus item.', 403)
   }
-  
+
   return sendSuccess(res, item)
 }
 
 /** POST /api/syllabus */
 const createSyllabus = async (req, res) => {
-  let { 
-    class_id, section_id, subject_id, 
-    chapter, topic, week,
+  let {
+    class_id, section_id, subject_id,
+    chapter, topic, week, month,
     planned_start_date, planned_end_date,
     fromDate, toDate,
     className, sectionName,
     class: classStr, subject: subjectStr,
-    completed_date, is_completed, status
+    completed_date, is_completed, status,
+    teacher_id: bodyTeacherId, periods, learning_outcome
   } = req.body
 
   // 1. Resolve Dates (Handle DD/MM/YYYY)
@@ -233,8 +240,8 @@ const createSyllabus = async (req, res) => {
   }
 
   const startDate = parseDate(planned_start_date || fromDate);
-  const endDate   = parseDate(planned_end_date || toDate);
-  const compDate  = parseDate(completed_date);
+  const endDate = parseDate(planned_end_date || toDate);
+  const compDate = parseDate(completed_date);
 
   // 2. Resolve IDs from Strings if missing
   // Handle "Class 1 - A"
@@ -284,28 +291,43 @@ const createSyllabus = async (req, res) => {
     }
   }
 
-  // 5. Insert
+  // 5. Auto-derive month from dates if not provided
+  let finalMonth = month || null;
+  if (!finalMonth && startDate) {
+    finalMonth = startDate.toLocaleString('default', { month: 'long' });
+  }
+
+  // 5. Determine teacher_id: admin can assign to a specific teacher
+  const finalTeacherId = (req.user.role === 'admin' && bodyTeacherId)
+    ? Number(bodyTeacherId)
+    : req.user.id;
+
+  // 6. Insert
   const sql = `
     INSERT INTO syllabus (
-      class_id, section_id, subject_id, teacher_id, chapter, topic, week,
+      class_id, section_id, subject_id, teacher_id, chapter, topic, week, month,
       planned_start_date, planned_end_date, completed_date, 
-      is_completed, status
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      is_completed, status, periods, periods_needed, learning_outcome
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `;
-  
+
   const [result] = await pool.execute(sql, [
     Number(class_id),
     section_id ? Number(section_id) : null,
     Number(subject_id),
-    req.user.id,
+    finalTeacherId,
     chapter || null,
     topic,
     week || null,
+    finalMonth,
     startDate,
     endDate,
     compDate,
     is_completed ? 1 : ((status?.toLowerCase() === 'completed') ? 1 : 0),
-    (status || (is_completed ? 'completed' : 'pending')).toLowerCase()
+    (status || (is_completed ? 'completed' : 'pending')).toLowerCase(),
+    Number(periods || 0),
+    Number(periods || 0),
+    learning_outcome || null
   ]);
 
   return sendSuccess(res, { id: result.insertId }, 'Syllabus item created.', 201)
@@ -314,7 +336,7 @@ const createSyllabus = async (req, res) => {
 /** PUT /api/syllabus/:id */
 /** PUT /api/syllabus/:id */
 const updateSyllabus = async (req, res) => {
-  const { 
+  const {
     class_id, section_id, subject_id, chapter, topic, week, month,
     planned_start_date, planned_end_date, completed_date, is_completed, status,
     periods, periods_needed, learning_status, notebook_checked, learning_outcome, homework_status, students_data
@@ -323,7 +345,7 @@ const updateSyllabus = async (req, res) => {
 
   const updates = []
   const values = []
-  
+
   if (req.user.role === 'teacher') {
     updates.push('teacher_id=?');
     values.push(req.user.id);
@@ -332,11 +354,11 @@ const updateSyllabus = async (req, res) => {
   if (class_id !== undefined) { updates.push('class_id=?'); values.push(class_id ? Number(class_id) : null); }
   if (section_id !== undefined) { updates.push('section_id=?'); values.push(section_id ? Number(section_id) : null); }
   if (subject_id !== undefined) { updates.push('subject_id=?'); values.push(subject_id ? Number(subject_id) : null); }
-  
+
   if (chapter !== undefined) { updates.push('chapter=?'); values.push(chapter || null); }
   if (topic !== undefined) { updates.push('topic=?'); values.push(topic || null); }
   if (week !== undefined) { updates.push('week=?'); values.push(week || null); }
-  
+
   // Date Logic for Micro Schedule
   if (month && week && (!planned_start_date || !planned_end_date)) {
     const { startDate, endDate } = calculateDates(month, week);
@@ -348,7 +370,7 @@ const updateSyllabus = async (req, res) => {
   }
 
   if (completed_date !== undefined) { updates.push('completed_date=?'); values.push(completed_date ? new Date(completed_date) : null); }
-  
+
   // Tracking fields
   if (periods !== undefined) { updates.push('periods=?'); values.push(Number(periods) || 0); }
   if (periods_needed !== undefined) { updates.push('periods_needed=?'); values.push(Number(periods_needed) || 0); }
@@ -366,7 +388,7 @@ const updateSyllabus = async (req, res) => {
     if (finalStatus === 'completed') {
       updates.push('is_completed=1');
       if (completed_date === undefined) {
-         updates.push('completed_date=NOW()');
+        updates.push('completed_date=NOW()');
       }
     } else {
       updates.push('is_completed=0');
@@ -377,7 +399,7 @@ const updateSyllabus = async (req, res) => {
   if (updates.length === 0) return res.status(400).json({ success: false, message: 'No fields to update' });
 
   updates.push('updated_at=NOW()');
-  
+
   let sql = `UPDATE syllabus SET ${updates.join(', ')} WHERE id = ?`;
   values.push(id);
 
@@ -400,14 +422,14 @@ const updateSyllabus = async (req, res) => {
 
 const deleteSyllabus = async (req, res) => {
   const { id } = req.params;
-  
+
   if (req.user.role === 'teacher') {
     const [result] = await pool.execute('DELETE FROM syllabus WHERE id = ? AND teacher_id = ?', [id, req.user.id]);
     if (result.affectedRows === 0) return sendError(res, 'Syllabus item not found or unauthorized.', 403);
   } else {
     await pool.execute('DELETE FROM syllabus WHERE id = ?', [id]);
   }
-  
+
   return sendSuccess(res, null, 'Syllabus item deleted.')
 }
 
@@ -448,15 +470,30 @@ const bulkUploadSyllabus = async (req, res) => {
       const rowNum = i + 2;
 
       try {
-        const clsName = String(row.Class || row.class || '').trim();
-        const subName = String(row.Subject || row.subject || '').trim();
-        const secName = String(row.Section || row.section || '').trim();
-        const tName   = String(row.Teacher || row.teacher || '').trim();
-        const month   = String(row.Month || row.month || '').trim();
-        const week    = String(row.Week || row.week || '').trim();
-        const topic   = String(row['Chapter & Topic'] || row.topic || '').trim();
+        let clsName = String(row.Class || row.class || '').trim();
+        if (!clsName && req.body.class_id) {
+          const defaultCls = classes.find(c => String(c.id) === String(req.body.class_id));
+          if (defaultCls) clsName = defaultCls.name;
+        }
+
+        let subName = String(row.Subject || row.subject || '').trim();
+        if (!subName && req.body.subject_id) {
+          const defaultSub = subjects.find(s => String(s.id) === String(req.body.subject_id));
+          if (defaultSub) subName = defaultSub.name;
+        }
+
+        let secName = String(row.Section || row.section || '').trim();
+        if (!secName && req.body.section_id) {
+          const defaultSec = sections.find(s => String(s.id) === String(req.body.section_id));
+          if (defaultSec) secName = defaultSec.name;
+        }
+
+        const tName = String(row.Teacher || row.teacher || '').trim();
+        const month = String(row.Month || row.month || '').trim();
+        const week = String(row.Week || row.week || '').trim();
+        const topic = String(row['Chapter & Topic'] || row.topic || '').trim();
         const periods = Number(row['No. of Periods'] || row.periods || 0);
-        const lo      = String(row['Learning Outcome'] || row.learning_outcome || '').trim();
+        const lo = String(row['Learning Outcome'] || row.learning_outcome || '').trim();
 
         if (!clsName || !subName || !topic) {
           throw new Error('Missing mandatory fields (Class, Subject, Topic).');
@@ -465,11 +502,14 @@ const bulkUploadSyllabus = async (req, res) => {
         const cls = classes.find(c => c.name === clsName || c.name.includes(clsName));
         const sub = subjects.find(s => s.name === subName || s.name.includes(subName));
         const sec = sections.find(s => s.name === secName || s.name.includes(secName));
-        
+
         // Resolve Teacher (by Name or ID)
         let resolvedTeacherId = req.user.id; // Default to admin
         if (tName) {
           const tMatch = teachers.find(t => t.name.toLowerCase() === tName.toLowerCase() || String(t.teacher_id) === tName || String(t.user_id) === tName);
+          if (tMatch) resolvedTeacherId = tMatch.user_id;
+        } else if (req.body.teacher_id) {
+          const tMatch = teachers.find(t => String(t.teacher_id) === String(req.body.teacher_id) || String(t.user_id) === String(req.body.teacher_id));
           if (tMatch) resolvedTeacherId = tMatch.user_id;
         }
 
@@ -533,7 +573,7 @@ const bulkUploadSyllabus = async (req, res) => {
 /** GET /api/syllabus/plan - PULLS FROM SYLLABUS TABLE (SSOT) */
 const getSyllabusPlan = async (req, res) => {
   try {
-    let { class_id, section_id, subject_id, month, week, className, section } = req.query;
+    let { class_id, section_id, subject_id, month, week, className, section, teacher_id } = req.query;
     const userId = req.user.id;
 
     let conditions = [];
@@ -541,18 +581,11 @@ const getSyllabusPlan = async (req, res) => {
 
     // Force teacher isolation: resolve teacher_id from teachers table
     if (req.user.role === 'teacher') {
-      try {
-        const [teacherRows] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
-        if (teacherRows.length === 0) {
-          // No teacher record = return empty, not a 500
-          return res.status(200).json({ success: true, data: [], message: 'No teacher record found.' });
-        }
-        conditions.push('s.teacher_id = ?');
-        values.push(teacherRows[0].id);
-      } catch (teacherErr) {
-        console.error('[getSyllabusPlan] Teacher lookup failed:', teacherErr.message);
-        return res.status(200).json({ success: true, data: [], message: 'Could not resolve teacher.' });
-      }
+      conditions.push('s.teacher_id = ?');
+      values.push(userId); // Use user_id (SSOT)
+    } else if (teacher_id && teacher_id !== 'All') {
+      conditions.push('s.teacher_id = ?');
+      values.push(teacher_id);
     }
 
     if (class_id && class_id !== 'All') {
@@ -576,7 +609,7 @@ const getSyllabusPlan = async (req, res) => {
       conditions.push('s.week = ?');
       values.push(week);
     }
-    
+
     // Fallback search by strings if needed
     if (className) {
       conditions.push('(ac.class_number = ? OR ac.name = ?)');
@@ -594,11 +627,13 @@ const getSyllabusPlan = async (req, res) => {
         s.*,
         COALESCE(ac.class_number, ac.name) as className,
         asec.name as sectionName,
-        sub.name as subjectName
+        sub.name as subjectName,
+        u.name as teacherName
       FROM syllabus s
       LEFT JOIN academic_classes ac ON s.class_id = ac.id
       LEFT JOIN acad_sections asec ON s.section_id = asec.id
       LEFT JOIN subjects sub ON s.subject_id = sub.id
+      LEFT JOIN users u ON s.teacher_id = u.id
       ${whereClause}
       ORDER BY s.planned_start_date ASC, s.id ASC
     `;
@@ -619,11 +654,12 @@ const getSyllabusPlan = async (req, res) => {
       status: r.status || (r.is_completed ? 'completed' : 'pending'),
       learning_outcome: r.learning_outcome || '',
       notebook_checked: r.notebook_checked || 'No',
+      homework_checked: r.homework_status || 'Incomplete',
       is_completed: Boolean(r.is_completed),
       startDate: r.planned_start_date ? new Date(r.planned_start_date).toISOString().split('T')[0] : null,
       endDate: r.planned_end_date ? new Date(r.planned_end_date).toISOString().split('T')[0] : null,
       month: r.month || (r.planned_start_date ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : ''),
-      teacher: { name: r.teacher_name || '—', id: r.teacher_id },
+      teacher: { name: r.teacherName || '—', id: r.teacher_id },
       updatedAt: r.updated_at
     }));
 
@@ -636,10 +672,10 @@ const getSyllabusPlan = async (req, res) => {
   } catch (error) {
     console.error("[SYLLABUS PLAN ERROR]:", error);
     // Never crash — always return structured JSON
-    return res.status(500).json({ 
+    return res.status(500).json({
       success: false,
       data: [],
-      message: "Syllabus plan query failed: " + error.message 
+      message: "Syllabus plan query failed: " + error.message
     });
   }
 }
@@ -658,107 +694,105 @@ const debugSyllabus = async (req, res) => {
 /** POST /api/syllabus/upload-syllabus */
 const uploadSyllabusPlan = async (req, res) => {
   if (!req.file) return sendError(res, 'No file uploaded.', 400);
-  
-  try {
-    const userId = req.user.id;
-    // If Admin, they might not have a teacher record, so we allow fallback
-    let teacherContextId = userId;
-    if (req.user.role === 'teacher') {
-      const [teachers] = await pool.execute('SELECT user_id FROM teachers WHERE user_id = ?', [userId]);
-      teacherContextId = teachers[0]?.user_id || userId;
-    }
 
+  try {
+    const userId = req.user.id; // Correct teacher_id (SSOT: users.id)
+    
     const workbook = xlsx.read(req.file.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const rows = xlsx.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     const results = { inserted: 0, skipped: 0, failed: 0, errors: [] };
 
+    // Prefetch for validation to avoid N+1 queries
+    const [classes] = await pool.execute('SELECT id, name, class_number FROM academic_classes');
+    const [subjects] = await pool.execute('SELECT id, name FROM subjects');
+    const [sections] = await pool.execute('SELECT id, name FROM acad_sections');
+
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const rowNum = i + 2;
       try {
         // --- NORMALIZE INPUTS ---
-        // Class: "Class 2" or "class2" or "2" -> "2"
         const classNameRaw = String(row.Class || row.class || '').trim();
-        const classClean = classNameRaw.match(/\d+/)?.[0] || classNameRaw;
-
-        // Section: "Sec A" or "section A" or "a" -> "A"
-        const sectionRaw = String(row.Section || row.section || 'A').trim();
-        const sectionClean = sectionRaw.replace(/section|sec/gi, '').trim().toUpperCase().charAt(0) || 'A';
-
-        // Subject: "Science" or "science" or " SCIENCE " -> "science"
-        const subjectClean = String(row.Subject || row.subject || '').trim();
-
-        // Month & Week
-        const monthClean = String(row.Month || row.month || '').trim();
+        const sectionRaw = String(row.Section || row.section || '').trim();
+        const subjectRaw = String(row.Subject || row.subject || '').trim();
+        const monthRaw = String(row.Month || row.month || '').trim();
         const weekRaw = String(row.Week || row.week || '').trim();
-        const loRaw = row['Learning Outcome'] || row.learning_outcome || row.lo || '';
-
-        // Standardize week to "Week X"
-        const weekNumMatch = weekRaw.match(/\d+/);
-        const weekClean = weekNumMatch ? `week ${weekNumMatch[0]}` : weekRaw.toLowerCase();
-
-        const topic = row['Chapter & Topic'] || row.topic || row.chapter_topic || 'Untitled Topic';
+        const topic = String(row['Chapter & Topic'] || row.topic || row.chapter_topic || '').trim();
         const periods = Number(row['No. of Periods'] || row.periods || 0);
+        const loRaw = String(row['Learning Outcome'] || row.learning_outcome || row.lo || '').trim();
 
-        if (!classClean || !subjectClean || !topic || !weekClean || !monthClean) {
-          results.failed++;
-          results.errors.push({ row: rowNum, error: 'Missing mandatory fields (Class, Subject, Topic, Week, or Month)' });
-          continue;
+        if (!classNameRaw || !subjectRaw || !topic || !weekRaw || !monthRaw) {
+          throw new Error('Missing mandatory fields (Class, Subject, Topic, Week, or Month)');
         }
 
-        // --- RESOLVE IDs WITH FUZZY MATCHING ---
+        // --- RESOLVE IDs ---
         // 1. Resolve Class
-        const [clsRows] = await pool.execute(
-          'SELECT id FROM academic_classes WHERE class_number = ? OR name LIKE ? LIMIT 1', 
-          [classClean, `%${classClean}%`]
+        const classClean = classNameRaw.match(/\d+/)?.[0] || classNameRaw;
+        const cls = classes.find(c => 
+          c.class_number === classClean || 
+          c.name.toLowerCase() === classNameRaw.toLowerCase() ||
+          c.name.toLowerCase().includes(classNameRaw.toLowerCase())
         );
-        const clsId = clsRows[0]?.id;
 
-        // 2. Resolve Section
-        const [secRows] = await pool.execute(
-          'SELECT id FROM acad_sections WHERE name = ? OR name LIKE ? LIMIT 1', 
-          [sectionClean, `%${sectionClean}%`]
+        // 2. Resolve Subject
+        const sub = subjects.find(s => 
+          s.name.toLowerCase() === subjectRaw.toLowerCase() ||
+          s.name.toLowerCase().includes(subjectRaw.toLowerCase())
         );
-        const secId = secRows[0]?.id;
 
-        // 3. Resolve Subject
-        const [subRows] = await pool.execute(
-          'SELECT id FROM subjects WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?) LIMIT 1', 
-          [subjectClean, `%${subjectClean}%`]
-        );
-        const subId = subRows[0]?.id;
-
-        if (!clsId || !subId) {
-          results.failed++;
-          results.errors.push({ row: rowNum, error: `Could not resolve Class (${classClean}) or Subject (${subjectClean})` });
-          continue;
+        // 3. Resolve Section
+        let secId = null;
+        if (sectionRaw) {
+          const sec = sections.find(s => 
+            s.name.toLowerCase() === sectionRaw.toLowerCase() ||
+            s.name.toLowerCase().includes(sectionRaw.toLowerCase())
+          );
+          secId = sec?.id || null;
         }
 
-        // 2. Prevent Duplicate (with normalized week/topic)
+        if (!cls || !sub) {
+          throw new Error(`Could not resolve Class (${classNameRaw}) or Subject (${subjectRaw})`);
+        }
+
+        // --- GENERATE DATES ---
+        const { startDate, endDate } = calculateDates(monthRaw, weekRaw);
+
+        // --- DUPLICATE CHECK AND UPSERT ---
         const [existing] = await pool.execute(
-          'SELECT id FROM syllabus WHERE class_id = ? AND section_id = ? AND subject_id = ? AND topic = ? AND LOWER(week) = LOWER(?)',
-          [clsId, secId || null, subId, topic, weekClean]
+          'SELECT id FROM syllabus WHERE class_id = ? AND section_id <=> ? AND subject_id = ? AND topic = ? AND LOWER(week) = LOWER(?)',
+          [cls.id, secId, sub.id, topic, weekRaw.toLowerCase()]
         );
 
         if (existing.length > 0) {
-          results.skipped++;
-          continue;
+          // Update existing record (fixes incorrect teacher_id or other fields)
+          await pool.execute(
+            `UPDATE syllabus SET 
+              teacher_id = ?, 
+              periods = ?, 
+              periods_needed = ?, 
+              learning_outcome = ?, 
+              month = ?, 
+              week = ?,
+              planned_start_date = ?, 
+              planned_end_date = ?,
+              updated_at = NOW()
+            WHERE id = ?`,
+            [userId, periods, periods, loRaw, monthRaw, weekRaw, startDate, endDate, existing[0].id]
+          );
+          results.updated++;
+        } else {
+          // Insert new record
+          await pool.execute(
+            `INSERT INTO syllabus (
+              class_id, section_id, subject_id, teacher_id, topic, week, month,
+              planned_start_date, planned_end_date, periods, periods_needed, learning_outcome, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
+            [cls.id, secId, sub.id, userId, topic, weekRaw, monthRaw, startDate, endDate, periods, periods, loRaw]
+          );
+          results.inserted++;
         }
-
-        const { startDate, endDate } = calculateDates(monthClean, weekClean);
-
-        // 3. Insert into syllabus (SSOT)
-        await pool.execute(
-          `INSERT INTO syllabus (
-            class_id, section_id, subject_id, teacher_id, topic, week, month,
-            planned_start_date, planned_end_date, periods, periods_needed, learning_outcome, status
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')`,
-          [clsId, secId || null, subId, teacherContextId, topic, weekClean, monthClean, startDate, endDate, periods, periods, loRaw]
-        );
-
-        results.inserted++;
       } catch (err) {
         results.failed++;
         results.errors.push({ row: rowNum, error: err.message });
@@ -767,26 +801,24 @@ const uploadSyllabusPlan = async (req, res) => {
 
     return res.json({
       success: true,
-      message: `Bulk upload completed: ${results.inserted} inserted, ${results.skipped} skipped, ${results.failed} failed.`,
+      message: `Bulk upload completed: ${results.inserted} inserted, ${results.updated} updated, ${results.failed} failed.`,
       data: results
     });
   } catch (error) {
-    console.error('[BULK UPLOAD ERROR]:', error);
+    console.error('[BULK UPLOAD SYLLABUS PLAN ERROR]:', error);
     return sendError(res, 'Failed to process file.', 500);
   }
 }
 
 /** POST /api/syllabus/add-micro-schedule */
 const addMicroSchedule = async (req, res) => {
-  const { 
-    class_id, section_id, subject_id, teacher_id, topic, week, month, periods, status,
+  const {
+    class_id, section_id, subject_id, topic, week, month, periods, status,
     learning_outcome, notebook_checked
   } = req.body;
 
   try {
     const userId = req.user.id;
-    // CRITICAL: Use teacher_id from body if provided (Admin case), else use logged-in user (Teacher case)
-    const finalTeacherId = teacher_id ? Number(teacher_id) : userId;
 
     if (!class_id || !subject_id || !topic || !week || !month) {
       return res.status(400).json({ success: false, message: 'Missing required fields.' });
@@ -807,22 +839,52 @@ const addMicroSchedule = async (req, res) => {
 
     const { startDate, endDate } = calculateDates(month, week);
 
+    // Determine teacher_id (if admin, find who is assigned, otherwise default to current user)
+    let finalTeacherId = userId;
+    if (req.user.role === 'admin') {
+      const [ttRows] = await pool.execute(`
+        SELECT tt.teacher_id 
+        FROM teacher_timetable tt
+        JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
+        LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
+        WHERE tt.subject_id = ? AND ac.id = ? AND asec.id = ?
+        LIMIT 1
+      `, [subject_id, class_id, section_id]);
+
+      if (ttRows.length > 0) {
+        finalTeacherId = ttRows[0].teacher_id;
+      } else {
+        const [tmpRows] = await pool.execute(`
+          SELECT t.user_id 
+          FROM teacher_module_permissions tmp
+          JOIN teachers t ON tmp.teacher_id = t.id
+          WHERE tmp.subject_id = ? AND tmp.class_id = ? AND tmp.section_id = ? AND tmp.status = 'ACTIVE'
+          LIMIT 1
+        `, [subject_id, class_id, section_id]);
+        if (tmpRows.length > 0) {
+          finalTeacherId = tmpRows[0].user_id;
+        }
+      }
+    }
+
     // 2. Insert into syllabus (SSOT)
     const [result] = await pool.execute(
       `INSERT INTO syllabus (
         class_id, section_id, subject_id, teacher_id, topic, week, month,
         planned_start_date, planned_end_date, periods, periods_needed, status,
-        learning_outcome, notebook_checked
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        is_completed, completed_date, learning_outcome, notebook_checked
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         class_id, section_id, subject_id, finalTeacherId, topic, week, month,
         startDate, endDate, Number(periods || 0), Number(periods || 0), finalStatus,
+        finalStatus === 'completed' ? 1 : 0,
+        finalStatus === 'completed' ? new Date() : null,
         learning_outcome || '', notebook_checked || 'No'
       ]
     );
 
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: 'Micro schedule added successfully.',
       data: { id: result.insertId }
     });
@@ -837,7 +899,7 @@ const addMicroSchedule = async (req, res) => {
 /** GET /api/syllabus/export-syllabus */
 const exportSyllabusPlan = async (req, res) => {
   const { class_id, section_id, subject_id, is_completed } = req.query;
-  
+
   let sql = `
     SELECT s.*, 
            ac.name as class_name, asec.name as section_name,
@@ -855,9 +917,9 @@ const exportSyllabusPlan = async (req, res) => {
   if (class_id) { sql += ' AND s.class_id = ?'; values.push(Number(class_id)); }
   if (section_id) { sql += ' AND s.section_id = ?'; values.push(Number(section_id)); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
-  if (is_completed !== undefined && is_completed !== '') { 
-    sql += ' AND s.is_completed = ?'; 
-    values.push(is_completed === 'true' ? 1 : 0); 
+  if (is_completed !== undefined && is_completed !== '') {
+    sql += ' AND s.is_completed = ?';
+    values.push(is_completed === 'true' ? 1 : 0);
   }
 
   try {
@@ -868,7 +930,7 @@ const exportSyllabusPlan = async (req, res) => {
       'Section': r.section_name || '—',
       'Subject': r.subject_name || '—',
       'Teacher': r.teacher_name || '—',
-      'Chapter': r.chapter || '—',
+      'Chapter': r.chapter || 'General',
       'Topic': r.topic || '—',
       'Week': r.week || '—',
       'Month': r.month || (r.planned_start_date ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : '—'),
@@ -881,9 +943,9 @@ const exportSyllabusPlan = async (req, res) => {
     const workbook = xlsx.utils.book_new();
     const worksheet = xlsx.utils.json_to_sheet(data);
     xlsx.utils.book_append_sheet(workbook, worksheet, 'Syllabus');
-    
+
     const buffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
-    
+
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=syllabus_export.xlsx');
     return res.status(200).send(buffer);
@@ -893,8 +955,8 @@ const exportSyllabusPlan = async (req, res) => {
   }
 }
 
-module.exports = { 
-  getSyllabus, getSyllabusById, createSyllabus, updateSyllabus, deleteSyllabus, 
+module.exports = {
+  getSyllabus, getSyllabusById, createSyllabus, updateSyllabus, deleteSyllabus,
   getSyllabusMetadata, downloadTemplate, bulkUploadSyllabus,
   getSyllabusPlan, uploadSyllabusPlan, addMicroSchedule, exportSyllabusPlan,
   debugSyllabus

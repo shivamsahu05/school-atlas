@@ -421,25 +421,63 @@ const assignSubjectUnified = async (req, res) => {
 
 const assignSubject = async (req, res) => {
   const { class_id, subject_id, stream_id } = req.body
-  if (!class_id || !subject_id) return sendError(res, 'class_id and subject_id are required.', 400)
+  
+  try {
+    const classId = Number(class_id)
+    const subjectId = Number(subject_id)
+    const streamId = stream_id ? Number(stream_id) : null
 
-  const exists = await prisma.acad_class_subjects.findFirst({
-    where: {
-      class_id: Number(class_id),
-      subject_id: Number(subject_id),
-      stream_id: stream_id ? Number(stream_id) : null,
-    },
-  })
-  if (exists) return sendError(res, 'Subject already assigned to this class.', 409)
+    if (!classId || !subjectId) {
+      return sendError(res, 'Valid class_id and subject_id are required.', 400)
+    }
 
-  await prisma.acad_class_subjects.create({
-    data: {
-      class_id: Number(class_id),
-      subject_id: Number(subject_id),
-      stream_id: stream_id ? Number(stream_id) : null,
-    },
-  })
-  return res.json({ success: true, message: 'Subject assigned' })
+    const exists = await prisma.acad_class_subjects.findFirst({
+      where: {
+        class_id: classId,
+        subject_id: subjectId,
+        stream_id: streamId,
+      },
+    })
+    
+    if (exists) {
+      return sendError(res, 'Subject already assigned to this class/group.', 409)
+    }
+
+    // [HOTFIX] Ensure 'id' is AUTO_INCREMENT if Prisma is complaining about Null id
+    // This happens if the table was created without the AUTO_INCREMENT attribute.
+    try {
+      await prisma.acad_class_subjects.create({
+        data: {
+          class_id: classId,
+          subject_id: subjectId,
+          stream_id: streamId,
+        },
+      })
+    } catch (createError) {
+      if (createError.message.includes('Null constraint violation') && createError.message.includes('id')) {
+        console.warn('[DB HOTFIX] Fixing missing AUTO_INCREMENT on acad_class_subjects.id');
+        await prisma.$executeRawUnsafe('ALTER TABLE acad_class_subjects MODIFY id INT AUTO_INCREMENT;');
+        
+        // Retry the create
+        await prisma.acad_class_subjects.create({
+          data: {
+            class_id: classId,
+            subject_id: subjectId,
+            stream_id: streamId,
+          },
+        })
+      } else {
+        throw createError; // Re-throw if it's a different error
+      }
+    }
+    return res.json({ success: true, message: 'Subject assigned successfully' })
+  } catch (error) {
+    console.error('[ASSIGN SUBJECT ERROR]:', error)
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to assign subject: ' + error.message 
+    })
+  }
 }
 
 const unassignSubject = async (req, res) => {
@@ -757,42 +795,119 @@ const getResolvedTeacher = async (req, res) => {
       return sendError(res, 'class_id and subject_id are required.', 400);
     }
 
-    // Resolve class_id and section_id to names for timetable query
+    // 1. Fetch Class and Section Details
     const cls = await prisma.academic_classes.findUnique({ where: { id: Number(class_id) } });
     if (!cls) return sendError(res, 'Class not found.', 404);
 
     let sectionName = '';
-    if (section_id) {
+    if (section_id && section_id !== 'null' && section_id !== 'undefined') {
       const sec = await prisma.acad_sections.findUnique({ where: { id: Number(section_id) } });
       if (sec) sectionName = sec.name;
     }
 
-    const classNum = cls.class_number || cls.name.replace(/[^0-9]/g, '');
-    const className = cls.name;
-    
-    console.log(`[RESOLVE] Inputs: class=${class_id}(${classNum}), section=${section_id}(${sectionName}), subject=${subject_id}`);
+    const classNum = cls.class_number || '';
+    const className = cls.name || '';
+    const subId = Number(subject_id);
 
-    const [rows] = await pool.execute(`
-      SELECT DISTINCT t.id, u.name 
-      FROM teacher_timetable tt
-      JOIN teachers t ON tt.teacher_id = t.id
-      JOIN users u ON t.user_id = u.id
-      WHERE (tt.class_number = ? OR tt.class_number = ?)
-        AND (tt.section = ? OR tt.section = '' OR ? IS NULL)
-        AND tt.subject_id = ?
-      ORDER BY tt.section DESC
-      LIMIT 1
-    `, [classNum, className, sectionName, sectionName || null, Number(subject_id)]);
+    console.log(`[RESOLVE] Inputs: Class=${className}(#${classNum}), Section=${sectionName}, Subject=${subId}`);
 
-    if (!rows || rows.length === 0) {
-      return res.json({ success: true, teacher: null, message: "No teacher assigned in timetable" });
+    // --- STRATEGY 1: TIMETABLE (Requested Priority) ---
+    // MUST return teachers.id (Profile ID) to match frontend dropdowns and observation/LO schemas
+    try {
+      const query = `
+        SELECT DISTINCT t.id, u.name 
+        FROM teacher_timetable tt
+        JOIN teachers t ON (tt.teacher_id = t.id OR tt.teacher_id = t.user_id)
+        JOIN users u ON t.user_id = u.id
+        WHERE (tt.class_number = ? OR tt.class_number = ? OR tt.class_number = REPLACE(?, 'Class ', ''))
+          AND (
+            tt.section = ? 
+            OR tt.section = REPLACE(?, 'Section ', '') 
+            OR tt.section = REPLACE(?, 'Sec ', '')
+            OR (tt.section = '' AND (? = '' OR ? IS NULL))
+            OR (? = '' OR ? IS NULL)
+          )
+          AND tt.subject_id = ?
+        LIMIT 1
+      `;
+      
+      const params = [
+        String(classNum), String(className), String(className),
+        sectionName, sectionName, sectionName, sectionName, sectionName, sectionName, sectionName,
+        subId
+      ];
+
+      const [rows] = await pool.execute(query, params);
+
+      if (rows && rows.length > 0) {
+        console.log(`[RESOLVE] Strategy 1 (Timetable) Success: ${rows[0].name} (ID: ${rows[0].id})`);
+        return res.json({ success: true, teacher: rows[0] });
+      }
+    } catch (err) {
+      console.warn('[RESOLVE] Strategy 1 (Timetable) SQL Error:', err.message);
     }
 
-    return res.json({ success: true, teacher: rows[0] });
+    // --- STRATEGY 2: MASTER ASSIGNMENT (teacher_subjects) ---
+    try {
+      const legacyClass = await prisma.classes.findFirst({
+        where: {
+          OR: [
+            { class_name: { contains: classNum } },
+            { class_name: { contains: className.replace(/^Class\s+/i, '') } }
+          ],
+          section: sectionName || 'A'
+        }
+      });
+
+      if (legacyClass) {
+        // NOTE: teacher_subjects.teacher_id links to users.id
+        // We need to resolve it to teachers.id (Profile ID)
+        const assignment = await prisma.teacher_subjects.findFirst({
+          where: { class_id: legacyClass.id, subject_id: subId },
+          include: { 
+            teacher: { // This is 'users' model
+              include: { teacher_profile: true } 
+            } 
+          }
+        });
+
+        if (assignment?.teacher?.teacher_profile) {
+          const tProfile = assignment.teacher.teacher_profile;
+          console.log(`[RESOLVE] Strategy 2 (Assignment) Success: ${assignment.teacher.name}`);
+          return res.json({ 
+            success: true, 
+            teacher: { id: tProfile.id, name: assignment.teacher.name } 
+          });
+        }
+      }
+    } catch (err) {
+      console.warn('[RESOLVE] Strategy 2 (Assignment) Error:', err.message);
+    }
+
+    // --- STRATEGY 3: FUZZY FALLBACK (Subject Only) ---
+    try {
+      const [rows] = await pool.execute(`
+        SELECT t.id, u.name 
+        FROM teacher_subjects ts
+        JOIN users u ON ts.teacher_id = u.id
+        JOIN teachers t ON u.id = t.user_id
+        WHERE ts.subject_id = ?
+        LIMIT 1
+      `, [subId]);
+
+      if (rows && rows.length > 0) {
+        console.log(`[RESOLVE] Strategy 3 (Fuzzy) Success: ${rows[0].name}`);
+        return res.json({ success: true, teacher: rows[0] });
+      }
+    } catch (err) {
+      console.error('[RESOLVE] Strategy 3 failed:', err.message);
+    }
+
+    return res.json({ success: true, teacher: null, message: "No teacher resolved" });
 
   } catch (error) {
-    console.error('getResolvedTeacher Error:', error);
-    return sendError(res, error.message, 500);
+    console.error('[RESOLVE_TEACHER_CRITICAL]:', error);
+    return res.json({ success: true, teacher: null, error: error.message });
   }
 }
 

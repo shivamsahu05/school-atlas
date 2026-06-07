@@ -199,9 +199,6 @@ export default function TeacherSyllabus() {
           <p className="text-slate-500 text-sm font-medium">Monthly and Weekly syllabus management</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button onClick={handleExport} className="btn bg-white border-slate-200 text-slate-700 hover:bg-slate-50 shadow-sm flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all">
-            <Download size={16} className="text-amber-500" /> Export
-          </button>
         </div>
       </div>
 

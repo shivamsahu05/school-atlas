@@ -20,11 +20,8 @@ export default function Landing() {
   const [navOpen, setNavOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (isLoggedIn && user) {
-      navigate(user.role === 'admin' ? '/admin' : '/teacher', { replace: true })
-    }
-  }, [isLoggedIn, user, navigate])
+  const dashboardLink = isLoggedIn ? (user?.role === 'admin' ? '/admin' : '/teacher') : '/login'
+
   const [formData, setFormData] = useState({
     full_name: '',
     email: '',
@@ -82,8 +79,10 @@ export default function Landing() {
             </div>
 
             <div className="hidden md:flex items-center gap-3">
-              <Link to="/login" className="btn-outline btn text-sm">Sign In</Link>
-              <Link to="/login" className="btn-primary btn text-sm">Get Started <ArrowRight size={14} /></Link>
+              {!isLoggedIn && <Link to="/login" className="btn-outline btn text-sm">Sign In</Link>}
+              <Link to={dashboardLink} className="btn-primary btn text-sm">
+                {isLoggedIn ? 'Go to Dashboard' : 'Get Started'} <ArrowRight size={14} />
+              </Link>
             </div>
 
             <button onClick={() => setNavOpen(v => !v)} className="md:hidden p-2 rounded-xl hover:bg-slate-100">
@@ -98,8 +97,10 @@ export default function Landing() {
                   className="block px-3 py-2 rounded-lg hover:bg-slate-50 text-sm text-slate-600">{s}</a>
               ))}
               <div className="pt-2 flex gap-2">
-                <Link to="/login" className="btn-outline btn btn-sm flex-1 justify-center" onClick={() => setNavOpen(false)}>Sign In</Link>
-                <Link to="/login" className="btn-primary btn btn-sm flex-1 justify-center" onClick={() => setNavOpen(false)}>Portal</Link>
+                {!isLoggedIn && <Link to="/login" className="btn-outline btn btn-sm flex-1 justify-center" onClick={() => setNavOpen(false)}>Sign In</Link>}
+                <Link to={dashboardLink} className="btn-primary btn btn-sm flex-1 justify-center" onClick={() => setNavOpen(false)}>
+                  {isLoggedIn ? 'Dashboard' : 'Portal'}
+                </Link>
               </div>
             </div>
           )}
@@ -138,8 +139,8 @@ export default function Landing() {
               </p>
 
               <div className="flex flex-wrap gap-4">
-                <Link to="/login" className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-6 py-3 rounded-2xl hover:bg-slate-50 transition shadow-lg shadow-black/10 text-sm">
-                  <GraduationCap size={18} /> Enter Portal <ChevronRight size={16} />
+                <Link to={dashboardLink} className="inline-flex items-center gap-2 bg-white text-brand-700 font-semibold px-6 py-3 rounded-2xl hover:bg-slate-50 transition shadow-lg shadow-black/10 text-sm">
+                  <GraduationCap size={18} /> {isLoggedIn ? 'Enter Dashboard' : 'Enter Portal'} <ChevronRight size={16} />
                 </Link>
                 <a href="#features" className="inline-flex items-center gap-2 glass text-white font-medium px-6 py-3 rounded-2xl hover:bg-white/15 transition text-sm">
                   Explore Features
@@ -474,7 +475,7 @@ export default function Landing() {
               <div className="space-y-5">
                 {[
                   { icon: MapPin, label: 'Address', val: '123 School Road, Education Nagar, Madhya Pradesh – 486000' },
-                  { icon: Phone, label: 'Phone', val: '+91 98765 43210' },
+                  { icon: Phone, label: 'Phone', val: '+91 XXXXX XXXXX' },
                   { icon: Mail, label: 'Email', val: 'admin@sams-school.edu.in' },
                 ].map(({ icon: Icon, label, val }) => (
                   <div key={label} className="flex items-start gap-4">
@@ -577,8 +578,8 @@ export default function Landing() {
               © 2026 School Academic Management System.
               Designed & Developed by HackVitrasec.
             </p>
-            <Link to="/login" className="btn-primary btn btn-sm">
-              Access Portal <ChevronRight size={14} />
+            <Link to={dashboardLink} className="btn-primary btn btn-sm">
+              {isLoggedIn ? 'Go to Dashboard' : 'Access Portal'} <ChevronRight size={14} />
             </Link>
           </div>
         </div>

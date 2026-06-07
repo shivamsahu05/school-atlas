@@ -26,11 +26,18 @@ export function ModuleRoute({ module }) {
   if (user.role === 'admin') return <Outlet />
   
   const hasAccess = user.permissions?.some(p => {
-    if (p.module !== module) return false;
-    if (!p.expiresAt) return true;
-    const expiry = new Date(p.expiresAt);
-    expiry.setHours(23, 59, 59, 999);
-    return new Date() <= expiry;
+    const modName = (typeof p === 'string' ? p : (p.module || '')).toLowerCase().replace(/\s+/g, '_');
+    const targetModule = (module || '').toLowerCase().replace(/\s+/g, '_');
+    
+    if (modName === 'all_academic' || modName === 'all_full') return true;
+    if (modName !== targetModule) return false;
+    
+    if (typeof p === 'object' && p.expiresAt) {
+      const expiry = new Date(p.expiresAt);
+      expiry.setHours(23, 59, 59, 999);
+      if (new Date() > expiry) return false;
+    }
+    return true;
   })
   if (!hasAccess) {
     return <Navigate to="/teacher" replace />

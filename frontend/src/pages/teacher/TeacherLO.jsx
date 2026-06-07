@@ -112,7 +112,7 @@ export default function TeacherLO() {
   const { stats, timeline = {}, rankings, observations, meta } = data || {}
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-700 p-4 lg:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 p-3 sm:p-4 lg:p-8 bg-slate-50 min-h-screen">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -127,9 +127,9 @@ export default function TeacherLO() {
         </div>
 
         {/* Compact Global Header Filters */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3 bg-white p-1.5 rounded-[1.5rem] border border-slate-200 shadow-sm">
-            <div className="flex items-center px-4 py-2 border-r border-slate-100">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 bg-white p-1.5 rounded-[1.5rem] border border-slate-200 shadow-sm w-full sm:w-auto">
+            <div className="flex items-center px-4 py-2 border-r border-slate-100 flex-1 sm:flex-none">
               <Filter size={14} className="text-brand-600 mr-2" />
               <select 
                 className="text-[11px] font-black text-slate-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
@@ -144,10 +144,10 @@ export default function TeacherLO() {
               </select>
             </div>
 
-            <div className="flex items-center px-4 py-2">
+            <div className="flex items-center px-4 py-2 flex-1 sm:flex-none">
               <Brain size={14} className="text-brand-600 mr-2" />
               <select 
-                className="text-[11px] font-black text-slate-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider"
+                className="text-[11px] font-black text-slate-700 bg-transparent outline-none cursor-pointer uppercase tracking-wider w-full"
                 value={selectedSubject}
                 onChange={(e) => setSelectedSubject(e.target.value)}
               >
@@ -238,8 +238,8 @@ export default function TeacherLO() {
               {filteredMonths.map(month => (
                 <div key={month} className="space-y-4">
                   {timeline[month].map((week) => (
-                    <div key={week.id} className="bg-white rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
-                      <div className="p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
+                    <div key={week.id} className="bg-white rounded-[1.5rem] md:rounded-[2rem] border border-slate-100 shadow-sm hover:shadow-md transition-all overflow-hidden group">
+                      <div className="p-5 sm:p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6">
                         <div className="flex-1 space-y-3">
                           <div className="flex items-center gap-3">
                             <span className="text-[10px] font-black text-brand-600 bg-brand-50 px-3 py-1 rounded-lg uppercase tracking-widest">
@@ -312,14 +312,14 @@ export default function TeacherLO() {
                             Missing Submissions ({week.missingCount})
                           </h5>
                           
-                          {week.missingStudents.length === 0 ? (
+                          {(week.missingStudents || []).length === 0 ? (
                             <div className="bg-emerald-50 text-emerald-700 p-8 rounded-[1.5rem] border border-dashed border-emerald-200 text-center">
                               <p className="text-sm font-black uppercase">100% Completion Achievement!</p>
                               <p className="text-[10px] font-bold opacity-70 mt-1">Excellent! All students have completed their work for this topic.</p>
                             </div>
                           ) : (
                             <div className="grid sm:grid-cols-2 gap-4">
-                              {week.missingStudents.map((s, idx) => (
+                              {(week.missingStudents || []).map((s, idx) => (
                                 <div key={idx} className="flex items-center justify-between bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:border-brand-200 transition-all">
                                   <div className="flex items-center gap-4">
                                     <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-sm font-black text-slate-400">
@@ -365,7 +365,7 @@ export default function TeacherLO() {
               </div>
             ) : (
               observations?.map((obs) => (
-                <div key={obs.id} className="bg-white rounded-[2rem] p-6 md:p-8 border border-slate-100 shadow-sm hover:shadow-lg transition-all relative overflow-hidden group">
+                <div key={obs.id} className="bg-white rounded-[1.5rem] md:rounded-[2rem] p-5 sm:p-6 md:p-8 border border-slate-100 shadow-sm hover:shadow-lg transition-all relative overflow-hidden group">
                   <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-110 transition-transform duration-700" />
                   
                   <div className="relative z-10">

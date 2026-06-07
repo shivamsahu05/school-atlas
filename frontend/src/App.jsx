@@ -21,6 +21,7 @@ import TeacherEvents from './pages/teacher/TeacherEvents'
 import TeacherCompetitions from './pages/teacher/TeacherCompetitions'
 import TeacherStudents from './pages/teacher/TeacherStudents'
 import TeacherTimeTable from './pages/teacher/TeacherTimeTable'
+import MarksEntry from './pages/teacher/MarksEntry'
 
 // Principal pages
 import AdminDashboard       from './pages/principal/AdminDashboard'
@@ -39,9 +40,12 @@ import AdminContact from './pages/principal/AdminContact'
 import AdminSystemTools from './pages/principal/AdminSystemTools'
 import AdminAcademics from './pages/principal/AdminAcademics'
 import AdminSyllabus from './pages/principal/AdminSyllabus'
+import AdminSchedule from './pages/principal/AdminSchedule'
+import AdminSyllabusReport from './pages/principal/AdminSyllabusReport'
 import AdminNotifications from './pages/principal/AdminNotifications'
 import AdminEvents from './pages/principal/AdminEvents'
 import AdminStudentTimetable from './pages/principal/AdminStudentTimetable'
+import AdminMarksEntry from './pages/principal/AdminMarksEntry'
 import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
@@ -74,6 +78,9 @@ export default function App() {
               <Route element={<ModuleRoute module="students_management" />}>
                 <Route path="/teacher/students" element={<TeacherStudents />} />
               </Route>
+              <Route element={<ModuleRoute module="MARKS_ENTRY" />}>
+                <Route path="/teacher/marks-entry" element={<MarksEntry />} />
+              </Route>
             </Route>
           </Route>
         </Route>
@@ -99,6 +106,9 @@ export default function App() {
               <Route path="/admin/student-timetable" element={<AdminStudentTimetable />} />
               <Route path="/admin/leave"          element={<AdminLeave />} />
               <Route path="/admin/syllabus"       element={<AdminSyllabus />} />
+              <Route path="/admin/schedule"       element={<AdminSchedule />} />
+              <Route path="/admin/marks-entry"    element={<AdminMarksEntry />} />
+              <Route path="/admin/syllabus-report" element={<AdminSyllabusReport />} />
               <Route path="/admin/notifications"  element={<AdminNotifications />} />
             </Route>
           </Route>

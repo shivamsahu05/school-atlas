@@ -31,6 +31,7 @@ function getTitle(pathname) {
     '/teacher/time-table':    'Time Table',
     '/teacher/leave':         'Leave Management',
     '/teacher/profile':       'My Profile',
+    '/teacher/marks-entry':   'Marks Entry',
     '/teacher/events':        'Events & Notices',
     '/teacher/competitions':  'Competitions Management',
     '/admin':                 'School Overview',
@@ -42,6 +43,7 @@ function getTitle(pathname) {
     '/admin/users':           'User Management',
     '/admin/timetable':       'Timetable & Marks',
     '/admin/leave':           'Leave Approval',
+    '/admin/marks-entry':     'Marks Entry',
     '/admin/notifications':   'Admin Notifications',
   }
   return map[pathname] ?? 'SAMS'
@@ -70,8 +72,8 @@ function NotificationPortal({
     <>
       <div className="fixed inset-0 z-[9998]" onClick={onClose} />
       <div
-        style={{ top: pos.top, right: pos.right }}
-        className="fixed z-[9999] w-80 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in"
+        style={{ top: pos.top, right: window.innerWidth < 640 ? 16 : pos.right }}
+        className="fixed z-[9999] w-[calc(100vw-32px)] sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden animate-fade-in"
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-slate-50 bg-slate-50/50">
@@ -227,8 +229,29 @@ export function DashboardLayout() {
     navigate(n.link)
   }
 
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  const clearAll    = () => setNotifications([])
+  const markAllRead = async () => {
+    try {
+      // Optimistic update: set all to read immediately to clear badge
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+      
+      // Sync with backend
+      await dashboardApi.markNotificationsRead()
+      
+      // Force a slight delay before next auto-fetch to ensure DB consistency
+      setTimeout(fetchNotifications, 1500)
+    } catch (err) {
+      console.error('Failed to mark all read:', err)
+    }
+  }
+
+  const clearAll = async () => {
+    try {
+      setNotifications([])
+      await dashboardApi.clearNotifications()
+    } catch (err) {
+      console.error('Failed to clear notifications:', err)
+    }
+  }
 
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">

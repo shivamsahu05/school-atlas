@@ -32,6 +32,7 @@ model users {
   leave_requests       leave_requests[]
   teacher_lo_entries   teacher_performance_lo[] @relation("TeacherPerformanceLO")
   teacher_profile      teachers?
+  class_observations_given class_observations[] @relation("ObserverClassObs")
 
   @@index([role], name: "idx_user_role")
 }
@@ -60,6 +61,7 @@ model teachers {
   updated_at    DateTime  @updatedAt
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  class_observations class_observations[]
 }
 
 // ─── classes ─────────────────────────────────────────────────────────────────
@@ -95,6 +97,7 @@ model subjects {
   acad_class_subjects   acad_class_subjects[]
   teacher_lo            teacher_performance_lo[]
   teacher_timetable     teacher_timetable[]
+  class_observations    class_observations[]
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -115,6 +118,7 @@ model academic_classes {
   acad_class_sections  acad_class_sections[]
   acad_class_subjects  acad_class_subjects[]
   acad_class_streams   acad_class_streams[]
+  class_observations   class_observations[]
 
   @@unique([name])
 }
@@ -129,6 +133,7 @@ model acad_sections {
   updated_at  DateTime @updatedAt
 
   acad_class_sections acad_class_sections[]
+  class_observations  class_observations[]
 
   @@unique([code])
 }
@@ -369,6 +374,31 @@ model observations {
   observer users @relation("ObservedBy",      fields: [observed_by], references: [id], onDelete: Cascade)
 }
 
+model class_observations {
+  id                 Int      @id @default(autoincrement())
+  teacher_id         Int
+  observer_id        Int
+  class_id           Int?
+  section_id         Int?
+  subject_id         Int?
+  total_score        Int?
+  content_mastery    Int      @default(0)
+  pedagogy           Int      @default(0)
+  student_engagement Int      @default(0)
+  communication      Int      @default(0)
+  assessment         Int      @default(0)
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  teacher  teachers          @relation(fields: [teacher_id],  references: [id], onDelete: Cascade)
+  observer users             @relation("ObserverClassObs", fields: [observer_id], references: [id], onDelete: Cascade)
+  class    academic_classes? @relation(fields: [class_id],    references: [id], onDelete: SetNull)
+  section  acad_sections?    @relation(fields: [section_id],  references: [id], onDelete: SetNull)
+  subject  subjects?         @relation(fields: [subject_id],  references: [id], onDelete: SetNull)
+
+  @@index([teacher_id], name: "idx_obs_teacher")
+}
+
 // ─── performance_scores ───────────────────────────────────────────────────────
 model performance_scores {
   id                      Int      @id @default(autoincrement())
@@ -497,6 +527,7 @@ model teacher_performance_lo {
   topic           String   @db.VarChar(255)
   teacher_score   Decimal? @db.Decimal(5, 2)
   principal_score Decimal? @db.Decimal(5, 2)
+  lo_status       teacher_lo_status?
   status          teacher_lo_status @default(Meeting)
   remarks         String?  @db.Text
   created_at      DateTime @default(now())

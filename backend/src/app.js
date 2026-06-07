@@ -31,6 +31,7 @@ const permissionsRoutes     = require('./routes/permissionRoutes')
 const studentsRoutes        = require('./routes/students')
 const contactRoutes         = require('./routes/contactRoutes')
 const systemRoutes          = require('./routes/systemRoutes')
+const marksRoutes           = require('./routes/marksRoutes')
 
 const app = express()
 
@@ -95,6 +96,9 @@ app.use(`${A}/admin`,          academicRoutes)
 app.use(`${A}/admin`,          reportsRoutes)
 app.use(`${A}/admin/permissions`, permissionsRoutes)
 app.use(`${A}/admin/system`,      systemRoutes)
+
+// 7. Marks Entry
+app.use(`${A}/marks`,          marksRoutes)
 
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound)

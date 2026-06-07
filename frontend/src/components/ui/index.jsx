@@ -266,7 +266,7 @@ export function SelectDropdown({ label, options, value, onChange, error, ...prop
           )}
           {...props}
         >
-          {options.map(opt => (
+          {options.filter(Boolean).map(opt => (
             <option key={typeof opt === 'string' ? opt : opt.value} value={typeof opt === 'string' ? opt : opt.value}>
               {typeof opt === 'string' ? opt : opt.label}
             </option>

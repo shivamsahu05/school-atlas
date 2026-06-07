@@ -1,35 +1,35 @@
-// src/config/db.js
-// Singleton Prisma client – reuse across all modules
+// src/config/db.js 
+// Hardened Prisma Singleton — ONE instance per runtime, always.
+// Works  correctly best used  in: Local Dev, Render (container), Vercel (serverless), hot reload.
 
-// Ensure environment variables are loaded (crucial for local/dev/scripts)
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
 if (!process.env.DATABASE_URL) {
-  console.error('❌ [Prisma]: DATABASE_URL is not defined in environment.');
+  console.error('❌ [Prisma]: DATABASE_URL is not defined. Check your .env file.');
+  process.exit(1); // Hard fail — app cannot run without DB
 }
 
-let prisma = null;
+const { PrismaClient } = require('@prisma/client');
 
-try {
-  const { PrismaClient } = require('@prisma/client');
-  const globalForPrisma = globalThis;
+// globalThis caching prevents multiple instances during:
+// - Next.js / nodemon hot reloads (dev)
+// - Serverless cold starts where module cache may be bypassed
+// NOTE: This must be ALWAYS enabled, not just in dev.
+const globalForPrisma = globalThis;
 
-  prisma =
-    globalForPrisma.prisma ??
-    new PrismaClient({
-      log: ['error', 'warn'],
-    });
+const prisma = globalForPrisma.__prisma ?? new PrismaClient({
+  log: process.env.NODE_ENV === 'production'
+    ? ['error']           // Production: only errors
+    : ['error', 'warn'],  // Dev: errors + warnings
+  // NOTE: connection_limit is set via DATABASE_URL query param in .env
+  // Example: DATABASE_URL="mysql://...?connection_limit=3"
+});
 
-  if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
-  console.log('✅ [Prisma]: Client initialized');
-} catch (err) {
-  console.warn('⚠️ [Prisma]: Client init failed (non-fatal, mysql2 pool is primary):', err.message);
-  // Return a proxy that throws a clear error when any method is called
-  prisma = new Proxy({}, {
-    get: (_, prop) => () => {
-      throw new Error(`Prisma not available (DATABASE_URL missing?). Use mysql2 pool instead. Method: ${prop}`);
-    }
-  });
+// Always cache — prevents new instance on hot reload (dev) and module re-eval (serverless)
+globalForPrisma.__prisma = prisma;
+
+if (process.env.NODE_ENV !== 'production') {
+  console.log('✅ [Prisma]: Singleton initialized (dev mode)');
 }
 
 module.exports = prisma;

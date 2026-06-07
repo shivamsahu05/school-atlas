@@ -104,7 +104,8 @@ export default function AdminStudents() {
       setUploadResults({
         total: summary.total || summary.totalRows || summary.inserted || 0,
         success: summary.success || summary.inserted || 0,
-        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0
+        failed: summary.failed || (summary.errors ? summary.errors.length : 0) || 0,
+        errors: summary.errors || []
       });
       toast.success(res.message || 'Upload successful')
       await fetchAllData()
@@ -510,12 +511,20 @@ export default function AdminStudents() {
                 setForm(prev => ({ ...prev, class_id: selectedClass ? selectedClass.id : '', section_id: '' }))
               }} 
             />
-            {form.class_id && availableSectionsForForm.length > 0 && (
+            {form.class_id && (
               <SelectDropdown 
                 label="Section *" 
-                options={['', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
-                value={availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || ''} 
+                options={['Select section...', ...availableSectionsForForm.map(s => s.section_name || s.name)]} 
+                value={
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.section_name || 
+                  availableSectionsForForm.find(s => (s.section_id || s.id) == form.section_id)?.name || 
+                  (selectedStudent?.class?.section && !form.section_id ? selectedStudent.class.section : 'Select section...')
+                } 
                 onChange={e => {
+                  if (e.target.value === 'Select section...') {
+                    setForm(prev => ({ ...prev, section_id: '' }));
+                    return;
+                  }
                   const selectedSection = availableSectionsForForm.find(s => (s.section_name || s.name) === e.target.value);
                   setForm(prev => ({ ...prev, section_id: selectedSection ? (selectedSection.section_id || selectedSection.id) : '' }))
                 }} 
