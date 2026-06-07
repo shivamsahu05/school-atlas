@@ -107,15 +107,15 @@ exports.saveMarks = async (req, res) => {
         // Bypass final_saved check since status column doesn't exist
         await connection.execute(`
           UPDATE student_marks 
-          SET marks_obtained = ?
+          SET marks_obtained = ?, teacher_id = ?
           WHERE student_id = ? AND subject_id = ? AND exam_type = ?
-        `, [mObt, student_id, subject_id, exam_type]);
+        `, [mObt, req.user.id, student_id, subject_id, exam_type]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, subject_id, exam_type, marks_obtained)
-          VALUES (?, ?, ?, ?)
-        `, [student_id, subject_id, exam_type, mObt]);
+          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, teacher_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, req.user.id]);
       }
     }
 
