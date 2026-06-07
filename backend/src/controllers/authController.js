@@ -1,8 +1,9 @@
 // src/controllers/authController.js
-const bcrypt          = require('bcryptjs')
-const prisma          = require('../config/db')
-const pool            = require('../config/mysqlDb')
-const { signToken }   = require('../utils/jwt')
+const bcrypt = require('bcryptjs')
+const { PrismaClient } = require('@prisma/client')
+const prisma = new PrismaClient()
+const pool = require('../config/mysqlDb')
+const { signToken } = require('../utils/jwt')
 const { sendSuccess, sendError } = require('../utils/response')
 
 /**

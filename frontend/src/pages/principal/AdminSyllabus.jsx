@@ -1,10 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
-<<<<<<< HEAD
 import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2, Edit } from 'lucide-react'
-=======
-import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2 } from 'lucide-react'
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
 import { StatCard, SectionHeader, StatusBadge, ProgressBar, Modal } from '../../components/ui/index.jsx'
 import { DataTable } from '../../components/ui/DataTable.jsx'
 import { BarChartWidget } from '../../components/charts/index.jsx'
@@ -136,14 +132,11 @@ export default function AdminSyllabus() {
     }
   }
 
-<<<<<<< HEAD
   const handleClassChange = async (classId) => {
     setForm(f => ({ ...f, class_id: classId, section_id: '', subject_id: '' }))
     await loadClassData(classId)
   }
 
-=======
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
   // Auto-date calculation logic
   useEffect(() => {
     if (!form.week || !form.month) return;
@@ -155,19 +148,9 @@ export default function AdminSyllabus() {
 
       const year = new Date().getFullYear();
       const weekNum = parseInt(weekStr.replace(/\D/g, '')) || 1;
-<<<<<<< HEAD
-
       // Standard 7-day week chunks
       const startDay = (weekNum - 1) * 7 + 1;
       let endDay = weekNum * 7;
-
-=======
-      
-      // Standard 7-day week chunks
-      const startDay = (weekNum - 1) * 7 + 1;
-      let endDay = weekNum * 7;
-      
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
       const lastDayOfMonth = new Date(year, mIdx + 1, 0).getDate();
       if (startDay > lastDayOfMonth) return { start: '', end: '' };
       if (endDay > lastDayOfMonth) endDay = lastDayOfMonth;
@@ -183,11 +166,7 @@ export default function AdminSyllabus() {
   }, [form.week, form.month]);
 
 
-<<<<<<< HEAD
   const handleSubmit = async (e) => {
-=======
-  const handleAdd = async (e) => {
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
     e.preventDefault()
     if (!form.class_id || !form.subject_id || !form.topic || !form.teacher_id) {
       alert('Teacher, Class, subject and topic are required.');
@@ -411,23 +390,29 @@ export default function AdminSyllabus() {
         )
       }
     },
-<<<<<<< HEAD
-=======
     {
       key: 'actions',
       label: 'Actions',
       textRight: true,
       render: (_, r) => (
-        <button 
-          onClick={() => handleDelete(r)}
-          className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
-          title="Delete Topic"
-        >
-          <Trash2 size={16} />
-        </button>
+        <div className="flex justify-end gap-2">
+          <button 
+            onClick={() => handleEditOpen(r)}
+            className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-all active:scale-90"
+            title="Edit Topic"
+          >
+            <Edit size={16} />
+          </button>
+          <button 
+            onClick={() => handleDelete(r)}
+            className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
+            title="Delete Topic"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       )
     }
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
   ]
 
   const S = 'text-xs border border-slate-200 rounded-lg px-3 py-1.5 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-300'

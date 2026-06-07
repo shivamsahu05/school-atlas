@@ -470,7 +470,6 @@ const bulkUploadSyllabus = async (req, res) => {
       const rowNum = i + 2;
 
       try {
-<<<<<<< HEAD
         let clsName = String(row.Class || row.class || '').trim();
         if (!clsName && req.body.class_id) {
           const defaultCls = classes.find(c => String(c.id) === String(req.body.class_id));
@@ -488,12 +487,6 @@ const bulkUploadSyllabus = async (req, res) => {
           const defaultSec = sections.find(s => String(s.id) === String(req.body.section_id));
           if (defaultSec) secName = defaultSec.name;
         }
-
-=======
-        const clsName = String(row.Class || row.class || '').trim();
-        const subName = String(row.Subject || row.subject || '').trim();
-        const secName = String(row.Section || row.section || '').trim();
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
         const tName = String(row.Teacher || row.teacher || '').trim();
         const month = String(row.Month || row.month || '').trim();
         const week = String(row.Week || row.week || '').trim();
@@ -589,12 +582,9 @@ const getSyllabusPlan = async (req, res) => {
     if (req.user.role === 'teacher') {
       conditions.push('s.teacher_id = ?');
       values.push(userId); // Use user_id (SSOT)
-<<<<<<< HEAD
     } else if (teacher_id && teacher_id !== 'All') {
       conditions.push('s.teacher_id = ?');
       values.push(teacher_id);
-=======
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
     }
 
     if (class_id && class_id !== 'All') {

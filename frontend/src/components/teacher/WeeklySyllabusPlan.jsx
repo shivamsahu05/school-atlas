@@ -1,11 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-<<<<<<< HEAD
 import {
-=======
-import { 
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
   Clock, Users, Save, Loader2, Edit2, BookOpen, Check, X, Search, XCircle, ChevronDown, Book, ClipboardCheck, TrendingUp, BarChart3, Calendar, Filter, Trash2
 } from 'lucide-react';
 import { scheduleApi, syllabusApi } from '../../api';
@@ -39,11 +35,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   const [modalLoading, setModalLoading] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
   const [studentDataMap, setStudentDataMap] = useState({});
 
   const init = useCallback(async () => {
@@ -247,7 +239,6 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
     if (!syllabusData) return;
 
     const formatted = syllabusData.filter(item => {
-<<<<<<< HEAD
       const classMatch = selClassId === "All" || Number(item.class_id) === Number(selClassId);
       const sectionMatch = selSectionId === "All" || Number(item.section_id) === Number(selSectionId);
       const subjectMatch = selectedSubject === "All" || Number(item.subject_id) === Number(selectedSubject);
@@ -255,18 +246,6 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       const weekMatch = filterWeek === "All" || normalize(item.week) === normalize(filterWeek);
       const teacherMatch = !filterTeacherId || filterTeacherId === "All" || Number(item.teacher_id) === Number(filterTeacherId);
       return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch && teacherMatch;
-=======
-      // Use IDs for precise matching
-      const classMatch = selClassId === "All" || Number(item.class_id) === Number(selClassId);
-      const sectionMatch = selSectionId === "All" || Number(item.section_id) === Number(selSectionId);
-      const subjectMatch = selectedSubject === "All" || Number(item.subject_id) === Number(selectedSubject);
-      
-      // Month and Week matching (using normalize helper)
-      const monthMatch = filterMonth === "All" || normalize(item.month) === normalize(filterMonth);
-      const weekMatch = filterWeek === "All" || normalize(item.week) === normalize(filterWeek);
-      
-      return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch;
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
     }).map(row => {
       const rawStatus = normalize(row.status);
       let status = 'pending';
@@ -286,11 +265,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
         notebookChecked: row.notebook_checked || 'No',
         class_understanding_level: row.class_understanding_level || '',
         is_completed: Number(row.is_completed || 0),
-<<<<<<< HEAD
         subject_name: row.subjectName || row.subject_name || row.subject
-=======
-        subject_name: row.subjectName || row.subject_name || row.subject // Fallback
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
       };
     });
     setWeeklyData(formatted);
@@ -410,15 +385,9 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   };
 
   const openStudentManager = async (topic) => {
-<<<<<<< HEAD
     setSelectedTopic(topic);
     setIsModalOpen(true);
 
-=======
-    setSelectedTopic(topic); 
-    setIsModalOpen(true); 
-    
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
     if (studentDataMap[topic.id]) {
       setStudentList(studentDataMap[topic.id]);
       return;
@@ -429,11 +398,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       const targetClassId = topic.class_id || selClassId;
       const targetSectionId = topic.section_id || selSectionId;
       const res = await scheduleApi.getItemStudents(topic.id, targetClassId, targetSectionId);
-<<<<<<< HEAD
 
-=======
-      
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
       setStudentList((res || []).map(s => ({
         ...s,
         notebook_done: s.notebook !== undefined ? Number(s.notebook) : 0,
@@ -492,13 +457,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
           <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Sections</option>}
             {!isAllView && <option value="">Select section…</option>}
-<<<<<<< HEAD
             {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
-=======
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-              .filter(s => s.sectionName && s.sectionName.trim() !== '')
-              .map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
@@ -751,13 +710,8 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                       {!isAllView && (
                         <td className="px-5 py-5 align-top text-center">
                           {(row.notebookChecked === 'Yes' || row.homeworkChecked === 'Yes') ? (
-<<<<<<< HEAD
                             <button
                               onClick={() => openStudentManager(row)}
-=======
-                            <button 
-                              onClick={() => openStudentManager(row)} 
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
                               disabled={isViewOnly}
                               className={clsx(
                                 "inline-flex items-center gap-2 px-4 py-2 rounded-md transition-all border shadow-sm group",
@@ -777,7 +731,6 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                       <td className="px-5 py-5 align-top text-right">
                         <div className="flex items-center justify-end gap-2">
                           {isAllView ? (
-<<<<<<< HEAD
                             <>
                               {onEditClick && (
                                 <button
@@ -796,15 +749,6 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                                 <Trash2 size={16} />
                               </button>
                             </>
-=======
-                            <button 
-                              onClick={() => handleDelete(row)}
-                              className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
-                              title="Delete Topic"
-                            >
-                              <Trash2 size={16} />
-                            </button>
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
                           ) : (
                             isViewOnly ? (
                               <div className="flex items-center gap-2">
@@ -812,11 +756,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                                   <Edit2 size={13} className="group-hover:rotate-12 transition-transform" />
                                   <span className="text-[10px] font-black uppercase tracking-wider">Edit</span>
                                 </button>
-<<<<<<< HEAD
                               </div>
-=======
-                                </div>
->>>>>>> 9a27384e83e581220d2d2b72cbd45f72bed0a915
                             ) : (
                               <div className="flex items-center gap-2">
                                 <button
