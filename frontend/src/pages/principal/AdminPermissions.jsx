@@ -137,31 +137,12 @@ export default function AdminPermissions() {
   }
 
   const handleGrant = async () => {
-<<<<<<< HEAD
-    const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-    const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
-    const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
-
-    if (!form.teacher_id || !form.module_id || !form.start_date || !form.end_date) {
-      alert('Please fill in all required fields.')
-      return
-    }
-
-    if (!isGlobalModule && !isAllModules && !form.class_id) {
-      alert('Class Scope is required for this module.')
-      return
-    }
-
-    try {
-      if (isEditMode) {
-=======
     if (isEditMode) {
       if (!form.start_date || !form.end_date) {
         alert('Please fill in all required fields.')
         return
       }
       try {
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         const res = await api.put(`/admin/permissions/${editingId}`, {
           start_date: form.start_date,
           end_date: form.end_date
@@ -349,10 +330,7 @@ export default function AdminPermissions() {
 
   const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
   const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
-<<<<<<< HEAD
-=======
   const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   // ── Table Config ───────────────────────────────────────────────────────────
 
@@ -593,40 +571,6 @@ export default function AdminPermissions() {
               )}
 
               {/* Access Module */}
-<<<<<<< HEAD
-              <div className="relative group">
-                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Access Module</label>
-                 <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                      <Lock size={16} />
-                    </div>
-                    <select 
-                      disabled={isEditMode}
-                      className="select pl-11 disabled:opacity-50"
-                      value={form.module_id} 
-                      onChange={e => setForm({...form, module_id: e.target.value})}
-                    >
-                      <option value="">Select module...</option>
-                      <option value="ALL_ACADEMIC" className="font-bold text-brand-600">All Academic (Excludes Students Mgt.)</option>
-                      <option value="ALL_FULL" className="font-bold text-rose-600">Full System (Includes Students Mgt.)</option>
-                      {Array.isArray(meta.modules) && meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
-                    </select>
-                    {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                      <ChevronDown size={16} />
-                    </div>}
-                 </div>
-              </div>
-
-              {/* Class & Section Scope - Hidden for Students Management and All Modules (Optional) */}
-              {!isEditMode && !isGlobalModule && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="relative group">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Class Scope</label>
-                        <div className="relative">
-                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                            <GraduationCap size={16} />
-=======
               <div className="space-y-3">
                  <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Access Module *</label>
                  
@@ -758,7 +702,6 @@ export default function AdminPermissions() {
                                 })}
                               </div>
                             )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                           </div>
                         );
                       })}

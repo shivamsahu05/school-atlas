@@ -95,39 +95,6 @@ exports.getExpired = async (req, res) => {
 
 // POST /api/admin/permissions/grant
 exports.grant = async (req, res) => {
-<<<<<<< HEAD
-  const { teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date } = req.body;
-  if (!teacher_id || !module_id || !start_date || !end_date) {
-    return sendErr(res, 'teacher_id, module_id, start_date, end_date required.', 400);
-  }
-  try {
-    if (module_id === 'ALL_ACADEMIC' || module_id === 'ALL_FULL') {
-      const includeStudents = module_id === 'ALL_FULL';
-      // Fetch modules based on the selected bulk mode
-      const queryStr = includeStudents 
-        ? "SELECT id, module_key FROM modules"
-        : "SELECT id, module_key FROM modules WHERE module_key != 'students_management'";
-      
-      const [modules] = await pool.execute(queryStr);
-      
-      const values = [];
-      const placeholders = [];
-      modules.forEach(m => {
-        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?)');
-        // SYLLABUS_UPLOAD and students_management are global modules (no class context)
-        const isGlobal = m.module_key === 'SYLLABUS_UPLOAD' || m.module_key === 'students_management';
-        values.push(
-          teacher_id, 
-          m.id, 
-          isGlobal ? null : (class_id || null), 
-          isGlobal ? null : (section_id || null), 
-          isGlobal ? null : (subject_id || null), 
-          start_date, 
-          end_date, 
-          'ACTIVE'
-        );
-      });
-=======
   const { 
     teacher_id, 
     module_id, 
@@ -141,7 +108,6 @@ exports.grant = async (req, res) => {
     subject_ids,
     module_ids
   } = req.body;
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   if ((!module_id && (!Array.isArray(module_ids) || module_ids.length === 0)) || !start_date || !end_date) {
     return sendErr(res, 'module selection, start_date, end_date required.', 400);

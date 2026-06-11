@@ -1,9 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-<<<<<<< HEAD
-import { Loader2, Clock } from 'lucide-react';
-=======
 import { Loader2, Clock, Download } from 'lucide-react';
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 import { teachersApi, syllabusApi } from '../../api';
 
 export default function AdminSyllabusReport() {
@@ -44,34 +40,23 @@ export default function AdminSyllabusReport() {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
-<<<<<<< HEAD
-    // Group by Class + Section + Subject
-=======
     // Group by Class + Section + Subject + Teacher
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
     const groups = {};
     syllabusData.forEach(item => {
       // Find clean class, section and subject names
       const className = item.class_name || (typeof item.class === 'object' ? item.class?.class_name : item.class) || '—';
       const sectionName = item.section_name || (typeof item.class === 'object' ? item.class?.section : item.section) || '—';
       const subjectName = item.subject_name || (typeof item.subject === 'object' ? item.subject?.name : item.subject) || '—';
-<<<<<<< HEAD
-      const key = `${className}-${sectionName}-${subjectName}`;
-=======
       const teacherName = (typeof item.teacher === 'object' ? item.teacher?.name : item.teacher) || item.teacher_name || '—';
       
       const key = `${className}-${sectionName}-${subjectName}-${teacherName}`;
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
       if (!groups[key]) {
         groups[key] = {
           class: className,
           section: sectionName,
           subject: subjectName,
-<<<<<<< HEAD
-=======
           teacher: teacherName,
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
           items: []
         };
       }
@@ -133,10 +118,7 @@ export default function AdminSyllabusReport() {
           class: g.class,
           section: g.section,
           subject: g.subject,
-<<<<<<< HEAD
-=======
           teacher: g.teacher,
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
           planned: plannedTillToday,
           completed: completedTillToday,
           percent: completionPct,
@@ -156,10 +138,7 @@ export default function AdminSyllabusReport() {
           class: g.class,
           section: g.section,
           subject: g.subject,
-<<<<<<< HEAD
-=======
           teacher: g.teacher,
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
           totalPlanned: totalYearly,
           completed: completedYearly,
           percent: completionPct
@@ -167,8 +146,6 @@ export default function AdminSyllabusReport() {
       }
     });
 
-<<<<<<< HEAD
-=======
     const classOrder = {
       'playgroup': 0.05,
       'nursery': 0.1,
@@ -222,19 +199,13 @@ export default function AdminSyllabusReport() {
     const sortedRowsTillToday = sortRows(rowsTillToday);
     const sortedRowsYearly = sortRows(rowsYearly);
 
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
     const overallPct = overallPlannedTillToday > 0 
       ? Math.round((overallCompletedTillToday / overallPlannedTillToday) * 100)
       : 0;
 
     return {
-<<<<<<< HEAD
-      rowsTillToday,
-      rowsYearly,
-=======
       rowsTillToday: sortedRowsTillToday,
       rowsYearly: sortedRowsYearly,
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       overallPct,
       overallCompleted: overallCompletedTillToday,
       overallPending: Math.max(0, overallPlannedTillToday - overallCompletedTillToday)
@@ -247,8 +218,6 @@ export default function AdminSyllabusReport() {
     return t ? t.name : 'Unknown';
   }, [selectedTeacherId, teachers]);
 
-<<<<<<< HEAD
-=======
   const [downloading, setDownloading] = useState(false);
 
   const handleDownloadReport = () => {
@@ -270,7 +239,6 @@ export default function AdminSyllabusReport() {
       .finally(() => setDownloading(false));
   };
 
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
   return (
     <div className="space-y-6 animate-fade-in p-1.5 sm:p-6 pb-16 max-w-7xl mx-auto print:p-0">
       
@@ -299,8 +267,6 @@ export default function AdminSyllabusReport() {
               ))}
             </select>
           </div>
-<<<<<<< HEAD
-=======
           <button
             onClick={handleDownloadReport}
             disabled={downloading}
@@ -313,7 +279,6 @@ export default function AdminSyllabusReport() {
             )}
             <span>{downloading ? 'Downloading...' : 'Download Report'}</span>
           </button>
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         </div>
       </div>
 
@@ -352,12 +317,9 @@ export default function AdminSyllabusReport() {
                   <tr className="bg-slate-800 text-white border-b border-slate-700">
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Class</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Section</th>
-<<<<<<< HEAD
-=======
                     {selectedTeacherId === 'All' && (
                       <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Teacher</th>
                     )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Subject</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Planned Till Today</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Completed</th>
@@ -371,12 +333,9 @@ export default function AdminSyllabusReport() {
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-800">{r.class}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-semibold text-slate-600">{r.section}</td>
-<<<<<<< HEAD
-=======
                       {selectedTeacherId === 'All' && (
                         <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-indigo-600">{r.teacher}</td>
                       )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-700">{r.subject}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-slate-600 bg-slate-50/30">{r.planned}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-emerald-600 bg-emerald-50/20">{r.completed}</td>
@@ -392,11 +351,7 @@ export default function AdminSyllabusReport() {
                     </tr>
                   )) : (
                     <tr>
-<<<<<<< HEAD
-                      <td colSpan="8" className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
-=======
                       <td colSpan={selectedTeacherId === 'All' ? 9 : 8} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                         No syllabus entries found for this teacher
                       </td>
                     </tr>
@@ -418,12 +373,9 @@ export default function AdminSyllabusReport() {
                   <tr className="bg-slate-800 text-white border-b border-slate-700">
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Class</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Section</th>
-<<<<<<< HEAD
-=======
                     {selectedTeacherId === 'All' && (
                       <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Teacher</th>
                     )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Subject</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Planned Yearly</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Total Completed</th>
@@ -435,12 +387,9 @@ export default function AdminSyllabusReport() {
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-800">{r.class}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-semibold text-slate-600">{r.section}</td>
-<<<<<<< HEAD
-=======
                       {selectedTeacherId === 'All' && (
                         <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-indigo-600">{r.teacher}</td>
                       )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-700">{r.subject}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-slate-600 bg-slate-50/30">{r.totalPlanned}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-emerald-600 bg-emerald-50/20">{r.completed}</td>
@@ -450,11 +399,7 @@ export default function AdminSyllabusReport() {
                     </tr>
                   )) : (
                     <tr>
-<<<<<<< HEAD
-                      <td colSpan="6" className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
-=======
                       <td colSpan={selectedTeacherId === 'All' ? 7 : 6} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                         No syllabus entries found
                       </td>
                     </tr>

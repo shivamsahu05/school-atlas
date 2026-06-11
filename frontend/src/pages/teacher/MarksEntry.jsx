@@ -109,16 +109,6 @@ export default function MarksEntry({ isAdmin = false }) {
   }, [viewMode]);
 
   const loadData = async () => {
-<<<<<<< HEAD
-    if (!filters.class_id) {
-      return toast.error('Class is required.');
-    }
-    if (viewMode !== 'marksheet' && !filters.subject_id) {
-      return toast.error('Subject is required.');
-    }
-    if (viewMode === 'entry' && !filters.exam_type) {
-      return toast.error('Exam Type is required.');
-=======
     const missing = [];
     if (viewMode === 'entry' && !filters.exam_type) missing.push('Exam Type');
     if (!filters.class_id) missing.push('Class');
@@ -127,7 +117,6 @@ export default function MarksEntry({ isAdmin = false }) {
 
     if (missing.length > 0) {
       return toast.error(`Please select: ${missing.join(', ')}`);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
     }
 
     try {
@@ -191,12 +180,8 @@ export default function MarksEntry({ isAdmin = false }) {
         globalTotalMarks,
         marksData: students.map(s => ({
           student_id: s.student_id,
-<<<<<<< HEAD
-          marks_obtained: s.marks_obtained
-=======
           marks_obtained: s.marks_obtained,
           status: s.status
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         }))
       };
 
@@ -252,11 +237,7 @@ export default function MarksEntry({ isAdmin = false }) {
   }
 
   return (
-<<<<<<< HEAD
-    <div className="p-4 sm:p-8 animate-fade-in space-y-6">
-=======
     <div className="py-2 sm:py-4 px-0 animate-fade-in space-y-6">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <SectionHeader 
           title="Marks Entry Portal" 
@@ -327,15 +308,9 @@ export default function MarksEntry({ isAdmin = false }) {
             </div>
 
             <div>
-<<<<<<< HEAD
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Section</label>
-              <select className="select" value={filters.section_id} onChange={e => setFilters({...filters, section_id: e.target.value})} disabled={!filters.class_id}>
-                <option value="">All Sections</option>
-=======
               <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Section *</label>
               <select className="select" value={filters.section_id} onChange={e => setFilters({...filters, section_id: e.target.value})} disabled={!filters.class_id}>
                 <option value="">Select Section...</option>
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
                 {availableSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -352,11 +327,7 @@ export default function MarksEntry({ isAdmin = false }) {
           </div>
           
           <div className="flex justify-end">
-<<<<<<< HEAD
-            <button onClick={loadData} disabled={fetchingStudents || !filters.class_id || (viewMode !== 'marksheet' && !filters.subject_id)} className="btn-primary">
-=======
             <button onClick={loadData} disabled={fetchingStudents} className="btn-primary">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
               <Search size={16} className="mr-2" /> {viewMode === 'entry' ? 'Load Students' : viewMode === 'marksheet' ? 'Generate Marksheet' : 'Generate History'}
             </button>
           </div>
@@ -393,22 +364,6 @@ export default function MarksEntry({ isAdmin = false }) {
                   <Unlock size={16} className="text-amber-500" /> Unlock All
                 </button>
               )}
-<<<<<<< HEAD
-              <button 
-                onClick={() => saveMarks(false)} 
-                disabled={saving}
-                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-              >
-                <Save size={16} className="text-brand-500" /> Save Draft
-              </button>
-              <button 
-                onClick={() => saveMarks(true)} 
-                disabled={saving}
-                className="btn bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
-              >
-                <CheckCircle size={16} /> Final Save
-              </button>
-=======
               {students.some(s => s.status !== 'final_saved') && (
                 <>
                   <button 
@@ -427,7 +382,6 @@ export default function MarksEntry({ isAdmin = false }) {
                   </button>
                 </>
               )}
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
             </div>
           </div>
           
@@ -444,11 +398,7 @@ export default function MarksEntry({ isAdmin = false }) {
               <tbody className="divide-y divide-slate-100">
                 {students.map((student, idx) => {
                   const isFinal = student.status === 'final_saved';
-<<<<<<< HEAD
-                  const disabled = isFinal && !isAdmin;
-=======
                   const disabled = isFinal;
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
                   return (
                     <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">

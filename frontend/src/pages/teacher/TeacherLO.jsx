@@ -112,11 +112,7 @@ export default function TeacherLO() {
   const { stats, timeline = {}, rankings, observations, meta } = data || {}
 
   return (
-<<<<<<< HEAD
-    <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 p-3 sm:p-4 lg:p-8 bg-slate-50 min-h-screen">
-=======
     <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 py-2 sm:py-4 px-0">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">

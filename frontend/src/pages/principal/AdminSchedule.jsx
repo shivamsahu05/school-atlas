@@ -267,11 +267,7 @@ export default function AdminSchedule() {
   if (!user) return <div className="p-4 text-center text-slate-400">Loading...</div>;
 
   return (
-<<<<<<< HEAD
-    <div className="space-y-8 animate-fade-in p-4 sm:p-8">
-=======
     <div className="space-y-8 animate-fade-in py-2 sm:py-4 px-0">
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Admin Micro Schedule</h1>

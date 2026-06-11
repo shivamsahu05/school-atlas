@@ -44,20 +44,12 @@ exports.getTeacherOptions = async (req, res) => {
 
 exports.getStudents = async (req, res) => {
   const { class_id, section_id, subject_id, exam_type, academic_year = '2025-2026' } = req.query;
-<<<<<<< HEAD
-  if (!class_id || !subject_id || !exam_type) return sendErr(res, 'class_id, subject_id, exam_type required', 400);
-=======
   if (!class_id || !section_id || !subject_id || !exam_type) return sendErr(res, 'class_id, section_id, subject_id, exam_type required', 400);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-<<<<<<< HEAD
-             m.id as mark_id, m.marks_obtained
-=======
              m.id as mark_id, m.marks_obtained, m.total_marks, m.status
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
         AND m.subject_id = ? 
@@ -102,34 +94,11 @@ exports.saveMarks = async (req, res) => {
     const targetStatus = isFinal ? 'final_saved' : 'draft';
     const tMrk = (globalTotalMarks === '' || globalTotalMarks === null) ? null : Number(globalTotalMarks);
     for (const item of marksData) {
-<<<<<<< HEAD
-      const { student_id, marks_obtained } = item;
-=======
       const { student_id, marks_obtained, status } = item;
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       
       const mObt = (marks_obtained === '' || marks_obtained === null) ? null : Number(marks_obtained);
 
       const [existing] = await connection.execute(
-<<<<<<< HEAD
-        'SELECT id FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ?',
-        [student_id, subject_id, exam_type]
-      );
-
-      if (existing.length > 0) {
-        // Bypass final_saved check since status column doesn't exist
-        await connection.execute(`
-          UPDATE student_marks 
-          SET marks_obtained = ?, teacher_id = ?
-          WHERE student_id = ? AND subject_id = ? AND exam_type = ?
-        `, [mObt, req.user.id, student_id, subject_id, exam_type]);
-      } else {
-        await connection.execute(`
-          INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, teacher_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, req.user.id]);
-=======
         'SELECT id, status FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ?',
         [student_id, subject_id, exam_type]
       );
@@ -155,7 +124,6 @@ exports.saveMarks = async (req, res) => {
           (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, total_marks, status, teacher_id)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, tMrk, studentStatus, req.user.id]);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       }
     }
 
@@ -180,22 +148,14 @@ exports.unlockMarks = async (req, res) => {
     if (student_id) {
       await pool.execute(`
         UPDATE student_marks 
-<<<<<<< HEAD
-        SET marks_obtained = marks_obtained 
-=======
         SET status = 'draft' 
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         WHERE student_id = ? AND subject_id = ? AND exam_type = ?
       `, [student_id, subject_id, exam_type]);
     } else if (class_id) {
       await pool.execute(`
         UPDATE student_marks m
         JOIN students s ON m.student_id = s.id
-<<<<<<< HEAD
-        SET m.marks_obtained = m.marks_obtained
-=======
         SET m.status = 'draft'
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         WHERE s.class_id = ? AND m.subject_id = ? AND m.exam_type = ?
       `, [class_id, subject_id, exam_type]);
     } else {
@@ -209,20 +169,12 @@ exports.unlockMarks = async (req, res) => {
 
 exports.getHistory = async (req, res) => {
   const { class_id, section_id, subject_id, academic_year = '2025-2026' } = req.query;
-<<<<<<< HEAD
-  if (!class_id || !subject_id) return sendErr(res, 'class_id, subject_id required', 400);
-=======
   if (!class_id || !section_id || !subject_id) return sendErr(res, 'class_id, section_id, subject_id required', 400);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-<<<<<<< HEAD
-             m.exam_type, m.marks_obtained,
-=======
              m.exam_type, m.marks_obtained, m.total_marks, m.status,
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
              'System' as teacher_name
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
@@ -253,13 +205,8 @@ exports.getHistory = async (req, res) => {
       if (row.exam_type) {
         studentMap[row.student_id].marks[row.exam_type] = {
           obtained: row.marks_obtained,
-<<<<<<< HEAD
-          total: 50,
-          status: 'draft',
-=======
           total: row.total_marks || 50,
           status: row.status || 'draft',
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
           teacher_name: row.teacher_name
         };
       }
@@ -272,11 +219,7 @@ exports.getHistory = async (req, res) => {
 };
 exports.getMarksheet = async (req, res) => {
   const { academic_year, class_id, section_id } = req.query;
-<<<<<<< HEAD
-  if (!class_id || !academic_year) return sendErr(res, 'class_id and academic_year required', 400);
-=======
   if (!class_id || !section_id || !academic_year) return sendErr(res, 'class_id, section_id and academic_year required', 400);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   // Canonical order of exam types (must match exact DB values)
   const EXAM_ORDER = ['Unit Test', 'Half Yearly Exam', 'Annual Exam'];
@@ -305,11 +248,7 @@ exports.getMarksheet = async (req, res) => {
     const marksParams = section_id ? [class_id, section_id] : [class_id];
     const marksSecFilter = section_id ? 'AND s.section_id = ?' : '';
     const [marks] = await pool.execute(`
-<<<<<<< HEAD
-      SELECT m.student_id, m.subject_id, m.marks_obtained, m.exam_type
-=======
       SELECT m.student_id, m.subject_id, m.marks_obtained, m.total_marks, m.exam_type
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
       FROM student_marks m
       JOIN students s ON m.student_id = s.id
       WHERE s.class_id = ? ${marksSecFilter}
@@ -334,20 +273,12 @@ exports.getMarksheet = async (req, res) => {
         presentExamTypes.forEach(et => {
           const examMark = subMarks.find(m => m.exam_type === et);
           byExam[et] = examMark
-<<<<<<< HEAD
-            ? { obtained: Number(examMark.marks_obtained || 0), total: 50 }
-=======
             ? { obtained: Number(examMark.marks_obtained || 0), total: Number(examMark.total_marks || 50) }
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
             : null;
         });
 
         // Subject total across all exams
-<<<<<<< HEAD
-        const subTotal = subMarks.length * 50;
-=======
         const subTotal = subMarks.reduce((s, m) => s + Number(m.total_marks || 50), 0);
->>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
         const subObtained = subMarks.reduce((s, m) => s + Number(m.marks_obtained || 0), 0);
         const hasData = subMarks.length > 0;
 
