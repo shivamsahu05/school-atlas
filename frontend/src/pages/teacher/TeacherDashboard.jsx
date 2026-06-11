@@ -15,6 +15,7 @@ const COLOR_MAP = { blue: 'bg-brand-50 text-brand-600', green: 'bg-emerald-50 te
 const MENU_ITEMS = [
   { label: 'Dashboard', desc: 'Main overview & KPIs', to: '/teacher', icon: LayoutDashboard, color: 'blue' },
   { label: 'Syllabus Tracking', desc: 'Chapter completion charts', to: '/teacher/syllabus', icon: BookOpen, color: 'green', perm: 'SYLLABUS_UPLOAD' },
+  { label: 'Syllabus Report', desc: 'Syllabus status & report', to: '/teacher/syllabus-report', icon: ClipboardList, color: 'green', perm: 'SYLLABUS_UPLOAD' },
   { label: 'Learning Outcomes', desc: 'Student LO distribution', to: '/teacher/lo', icon: Brain, color: 'purple', perm: 'LO_ENTRY' },
   { label: 'Performance', desc: 'Analytics & observation', to: '/teacher/analytics', icon: TrendingUp, color: 'red', perm: 'MARKS_ENTRY' },
   { label: 'Time Table', desc: 'Weekly period overview', to: '/teacher/time-table', icon: Clock, color: 'blue' },
@@ -119,7 +120,7 @@ export default function TeacherDashboard() {
   const overallPerf = intelData.overall_score || 0;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-8 animate-fade-in p-4 lg:p-6">
+    <div className="space-y-8 animate-fade-in">
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-[#0d225c] rounded-[2rem] p-6 md:p-8 lg:p-10 text-white shadow-xl">
         <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl pointer-events-none" />
@@ -147,7 +148,7 @@ export default function TeacherDashboard() {
       </div>
 
       {/* KPI StatCards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <StatCard title="Topics Completed" value={`${syllabusStats.completed}/${syllabusStats.total}`} subtitle={`${syllabusStats.percentage}% of syllabus`} icon={BookOpen} color="brand" trend={syllabusStats.percentage} />
         {(() => {
           const loPct = loSummary.total > 0 ? Math.round(((loSummary.exceeding * 100) + (loSummary.meeting * 80) + (loSummary.approaching * 60)) / loSummary.total) : 0;

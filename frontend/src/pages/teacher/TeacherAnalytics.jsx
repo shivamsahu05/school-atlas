@@ -280,6 +280,18 @@ export default function TeacherAnalytics() {
                 style={{ width: `${Math.min(overallScore, 100)}%` }}
               />
             </div>
+
+            {intelPerf?.remarks && (
+              <div className="mt-8 p-6 bg-slate-50/50 border border-slate-200/60 rounded-3xl animate-fade-in">
+                <div className="flex items-center gap-2 mb-3">
+                  <Shield size={18} className="text-brand-600" />
+                  <span className="text-sm font-bold text-slate-800 uppercase tracking-tight">Principal's Feedback & Remarks</span>
+                </div>
+                <p className="text-sm text-slate-600 italic whitespace-pre-wrap leading-relaxed">
+                  "{intelPerf.remarks}"
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

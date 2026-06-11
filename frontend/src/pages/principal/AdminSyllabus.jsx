@@ -428,7 +428,7 @@ export default function AdminSyllabus() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard title="Total Topics" value={total} icon={BookOpen} color="blue" />
         <StatCard title="Completed" value={completed} icon={CheckCircle} color="green" trend={pct} />
         <StatCard title="Pending" value={pending} icon={Clock} color="amber" />

@@ -155,26 +155,58 @@ const lmsIntelligenceController = {
       let otherScore = 100 - (extraPeriodsCount * 5) - (leaveCount * 2);
       otherScore = Math.max(0, otherScore);
 
-      // Final Weighted Aggregation
-      // Syllabus (15%) + LO (15%) + Obs (25%) + Participate (10%) + Other (20%) + Language (15%)
-      const totalWeighted = 
-        (syllabusPct * 0.15) + 
-        (loPct * 0.15) + 
-        (obsPct * 0.25) + 
-        (participatePct * 0.10) + 
-        (otherScore * 0.20) + 
-        (langPct * 0.15);
+      // Check overrides
+      let finalSyllabus = syllabusPct;
+      let finalLo = loPct;
+      let finalObs = obsPct;
+      let finalParticipate = participatePct;
+      let finalOther = otherScore;
+      let finalLang = langPct;
+      let finalOverall = null;
+      let remarks = "";
 
-      result.syllabus.percentage = Math.round(syllabusPct);
-      result.overall_score = parseFloat(totalWeighted.toFixed(1));
+      try {
+        const [overrideRows] = await pool.execute(`
+          SELECT * FROM teacher_performance_overrides WHERE teacher_id = ?
+        `, [teacherId]);
+
+        if (overrideRows && overrideRows.length > 0) {
+          const o = overrideRows[0];
+          if (o.syllabus_completion_pct !== null) finalSyllabus = Number(o.syllabus_completion_pct);
+          if (o.lo_avg_pct !== null) finalLo = Number(o.lo_avg_pct);
+          if (o.observation_pct !== null) finalObs = Number(o.observation_pct);
+          if (o.participate_score !== null) finalParticipate = Number(o.participate_score);
+          if (o.other_score !== null) finalOther = Number(o.other_score);
+          if (o.lang_score !== null) finalLang = Number(o.lang_score);
+          if (o.overall_score !== null) finalOverall = Number(o.overall_score);
+          if (o.remarks !== null) remarks = o.remarks;
+        }
+      } catch (err) {
+        console.warn("Override table fetch failed or doesn't exist yet:", err.message);
+      }
+
+      if (finalOverall === null) {
+        const totalWeighted = 
+          (finalSyllabus * 0.15) + 
+          (finalLo * 0.15) + 
+          (finalObs * 0.25) + 
+          (finalParticipate * 0.10) + 
+          (finalOther * 0.20) + 
+          (finalLang * 0.15);
+        finalOverall = parseFloat(totalWeighted.toFixed(1));
+      }
+
+      result.syllabus.percentage = Math.round(finalSyllabus);
+      result.overall_score = finalOverall;
       result.performance = { 
-        syllabus: Math.round(syllabusPct), 
-        lo: Math.round(loPct), 
-        observation: Math.round(obsPct) 
+        syllabus: Math.round(finalSyllabus), 
+        lo: Math.round(finalLo), 
+        observation: Math.round(finalObs) 
       };
-      result.participate_score = Math.round(participatePct);
-      result.other_score = Math.round(otherScore);
-      result.lang_score = Math.round(langPct);
+      result.participate_score = Math.round(finalParticipate);
+      result.other_score = Math.round(finalOther);
+      result.lang_score = Math.round(finalLang);
+      result.remarks = remarks;
       
       result.not_done_students = result.not_done_students.slice(0, 15);
       res.json({ success: true, data: { ...result, all_rows: rows } });

@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext'
 const TEACHER_NAV = [
   { label: 'Dashboard',           icon: LayoutDashboard, to: '/teacher'            },
   { label: 'Syllabus Tracking',   icon: BookOpen,        to: '/teacher/syllabus'   },
+  { label: 'Syllabus Report',     icon: BarChart2,       to: '/teacher/syllabus-report' },
   { label: 'Learning Outcomes',   icon: Brain,           to: '/teacher/lo'         },
   { label: 'Performance',         icon: BarChart2,       to: '/teacher/analytics'  },
   { label: 'Time Table',          icon: Clock,           to: '/teacher/time-table' },
@@ -34,6 +35,7 @@ const ADMIN_NAV = [
   { label: 'Events & Notices',    icon: Bell,            to: '/admin/events'           },
   { label: 'Competitions',        icon: Trophy,          to: '/admin/competitions'     },
   { label: 'Classroom Obs.',      icon: Eye,             to: '/admin/observation'      },
+  { label: 'Teacher Performance', icon: TrendingUp,      to: '/admin/performance'      },
   { label: 'Teacher Directory',   icon: Users,           to: '/admin/teachers'         },
   { label: 'Student Directory',   icon: GraduationCap,   to: '/admin/students'         },
   { label: 'Manage Academics',    icon: BookOpen,        to: '/admin/academics'        },

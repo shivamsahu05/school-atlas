@@ -35,10 +35,11 @@ export default function Login() {
   const fillDemo = (type) => {
     setForm(type === 'admin'
       ? { username: 'admin', password: 'Admin@123' }
-      : { username: '9876543211', password: 'Teacher@123' }
+      : { username: '8957499948', password: 'Teacher@123' }
     )
     setError('')
   }
+
 
   return (
     <div className="min-h-screen flex">
@@ -68,11 +69,11 @@ export default function Login() {
 
         {/* Feature pills */}
         <div className="relative space-y-3">
-          {['Real-time Syllabus Tracking','Homework Submission Analytics','Weighted Teacher Scoring','Learning Outcome Assessment'].map(f => (
+          {['Real-time Syllabus Tracking', 'Homework Submission Analytics', 'Weighted Teacher Scoring', 'Learning Outcome Assessment'].map(f => (
             <div key={f} className="flex items-center gap-3 glass rounded-xl px-4 py-3">
               <div className="w-5 h-5 rounded-full bg-emerald-400 flex items-center justify-center flex-shrink-0">
                 <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
-                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M1 4L3.5 6.5L9 1" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </div>
               <span className="text-white/90 text-sm">{f}</span>
@@ -138,7 +139,7 @@ export default function Login() {
                 />
                 <button type="button" onClick={() => setShowPw(v => !v)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                  {showPw ? <EyeOff size={15}/> : <Eye size={15}/>}
+                  {showPw ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
             </div>
@@ -157,7 +158,7 @@ export default function Login() {
             >
               {loading
                 ? <span className="flex items-center gap-2"><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Signing in…</span>
-                : <span className="flex items-center gap-2">Sign In <ArrowRight size={16}/></span>
+                : <span className="flex items-center gap-2">Sign In <ArrowRight size={16} /></span>
               }
             </button>
           </form>

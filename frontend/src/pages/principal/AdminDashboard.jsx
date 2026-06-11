@@ -148,7 +148,7 @@ export default function AdminDashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <SectionHeader title="School Overview" subtitle="Real-time database metrics" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <StatCard title="Total Teachers" value={data?.overview?.totalTeachers || 0} icon={Users} color="blue" trend={100} />
             <StatCard title="Total Students" value={data?.overview?.totalStudents || 0} icon={GraduationCap} color="green" trend={100} />
             <StatCard title="Classes" value={data?.overview?.totalClasses || 0} icon={BookOpen} color="teal" trend={100} />

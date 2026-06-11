@@ -98,6 +98,7 @@ export const eventApi = {
 export const performanceApi = {
   getAll: () => api.get('/performance/all'),
   getTeacher: (id) => api.get(`/performance/teacher/${id}`),
+  saveOverride: (data) => api.post('/performance/override', data),
 };
 
 export const teacherLoApi = {

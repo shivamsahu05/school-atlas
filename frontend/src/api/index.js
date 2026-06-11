@@ -255,6 +255,7 @@ export const performanceApi = {
   getMe:      ()          => api.get('/performance/me').then(r => r.data),
   getById:    (teacherId) => api.get(`/performance/${teacherId}`).then(r => r.data),
   recalculate:(teacherId) => api.post(`/performance/${teacherId}/recalculate`).then(r => r.data),
+  saveOverride:(data)     => api.post('/performance/override', data).then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

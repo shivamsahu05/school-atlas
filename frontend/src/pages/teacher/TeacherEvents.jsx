@@ -108,7 +108,7 @@ export default function TeacherEvents() {
     { key: 'creator', label: 'Created By', render: (_, row) => (
         <div className="text-xs">
           <span className="font-bold text-slate-700">{row.creator?.name || 'Unknown'}</span>
-          <span className="block text-[10px] text-slate-400 capitalize">{row.creator?.role || 'System'}</span>
+          <span className="block text-[10px] text-slate-600 capitalize">{row.creator?.role || 'System'}</span>
         </div>
       )
     },
@@ -116,7 +116,7 @@ export default function TeacherEvents() {
     { key: 'location', label: 'Location' },
     {
       key: 'event_type', label: 'Type',
-      render: v => <span className="text-[10px] font-black uppercase tracking-widest bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{v?.replace('_', ' ')}</span>
+      render: v => <span className="text-[10px] font-black capitalize bg-slate-100 text-slate-700 px-2 py-0.5 rounded-full">{v?.replace('_', ' ')}</span>
     },
     { key: 'target_class', label: 'Target' },
     { key: 'status', label: 'Status', render: v => <StatusBadge status={v} /> },
@@ -151,7 +151,7 @@ export default function TeacherEvents() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-2.5 sm:gap-4">
         <StatCard title="Upcoming" value={upcoming} icon={Calendar} color="blue" />
         <StatCard title="Ongoing" value={ongoing} icon={Clock} color="amber" />
         <StatCard title="Completed" value={completed} icon={CheckCircle} color="green" />

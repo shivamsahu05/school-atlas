@@ -281,7 +281,7 @@ export default function AdminTeachers() {
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
           <SectionHeader title="Teacher Directory" subtitle={`${teachers.length} staff members`} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
               <Search size={14} className="text-slate-400" />
               <input className="text-sm outline-none w-36" placeholder="Search…"

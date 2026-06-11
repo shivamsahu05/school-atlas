@@ -9,6 +9,19 @@ const { sendError } = require('../utils/response')
 const errorHandler = (err, req, res, next) => {
   console.error('[ERROR]', err)
 
+  // Handle database connection failures
+  const isDbError = 
+    err.name === 'PrismaClientInitializationError' || 
+    err.message?.includes("Can't reach database server") ||
+    err.message?.includes("database server") ||
+    err.message?.includes("ECONNREFUSED") ||
+    err.message?.includes("3306") ||
+    err.code === 'ECONNREFUSED';
+
+  if (isDbError) {
+    return sendError(res, 'Database connection failed. Please ensure the MySQL database server is running.', 503)
+  }
+
   // Prisma known request errors
   if (err.code) {
     switch (err.code) {

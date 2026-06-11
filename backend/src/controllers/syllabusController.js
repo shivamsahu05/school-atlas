@@ -897,7 +897,11 @@ const addMicroSchedule = async (req, res) => {
 
 /** GET /api/syllabus/export-syllabus */
 const exportSyllabusPlan = async (req, res) => {
+<<<<<<< HEAD
   const { class_id, section_id, subject_id, is_completed } = req.query;
+=======
+  const { class_id, section_id, subject_id, is_completed, teacher_id } = req.query;
+>>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
 
   let sql = `
     SELECT s.*, 
@@ -916,6 +920,16 @@ const exportSyllabusPlan = async (req, res) => {
   if (class_id) { sql += ' AND s.class_id = ?'; values.push(Number(class_id)); }
   if (section_id) { sql += ' AND s.section_id = ?'; values.push(Number(section_id)); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
+<<<<<<< HEAD
+=======
+  if (req.user.role === 'teacher') {
+    sql += ' AND s.teacher_id = ?';
+    values.push(req.user.id);
+  } else if (teacher_id && teacher_id !== 'All' && teacher_id !== 'null') {
+    sql += ' AND s.teacher_id = ?';
+    values.push(Number(teacher_id));
+  }
+>>>>>>> ab32a4a (Added marks management, schedule and syllabus report modules)
   if (is_completed !== undefined && is_completed !== '') {
     sql += ' AND s.is_completed = ?';
     values.push(is_completed === 'true' ? 1 : 0);
