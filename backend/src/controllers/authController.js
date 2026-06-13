@@ -1,8 +1,9 @@
 // src/controllers/authController.js
-const bcrypt          = require('bcryptjs')
-const prisma          = require('../config/db')
-const pool            = require('../config/mysqlDb')
-const { signToken }   = require('../utils/jwt')
+const bcrypt = require('bcryptjs')
+const { PrismaClient } = require('@prisma/client')
+const prisma = new PrismaClient()
+const pool = require('../config/mysqlDb')
+const { signToken } = require('../utils/jwt')
 const { sendSuccess, sendError } = require('../utils/response')
 
 /**
@@ -51,7 +52,7 @@ const login = async (req, res) => {
         FROM teacher_module_permissions tmp
         JOIN modules m ON tmp.module_id = m.id
         JOIN teachers t ON tmp.teacher_id = t.id
-        WHERE t.user_id = ? AND tmp.status = 'ACTIVE' AND tmp.end_date >= CURDATE()
+        WHERE t.user_id = ? AND tmp.status = 'ACTIVE' AND (tmp.end_date IS NULL OR tmp.end_date >= CURDATE())
       `, [user.id])
       
       console.log(`[AUTH LOGIN DEBUG] Found ${permRows.length} permissions for user ${user.id}`);
@@ -121,13 +122,17 @@ const getMe = async (req, res) => {
         result.assigned_classes = subjects;
         
         const [permissions] = await pool.execute(`
-          SELECT m.module_key 
+          SELECT m.module_key AS module, tmp.end_date AS expiresAt
           FROM teacher_module_permissions tmp
           JOIN modules m ON tmp.module_id = m.id
           WHERE tmp.teacher_id = (SELECT id FROM teachers WHERE user_id = ? LIMIT 1)
-          AND tmp.status = 'ACTIVE'
+          AND tmp.status = 'ACTIVE' AND (tmp.end_date IS NULL OR tmp.end_date >= CURDATE())
         `, [userId]);
-        result.permissions = permissions.map(p => p.module_key);
+        result.permissions = permissions.map(p => ({
+          module: p.module,
+          allowed: true,
+          expiresAt: p.expiresAt
+        }));
       } catch (e) {
         console.error('[AUTH ME DEBUG] Permission Fetch Error:', e.message);
         result.permissions = [];

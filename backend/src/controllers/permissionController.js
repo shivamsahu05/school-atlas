@@ -95,56 +95,127 @@ exports.getExpired = async (req, res) => {
 
 // POST /api/admin/permissions/grant
 exports.grant = async (req, res) => {
-  const { teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date } = req.body;
-  if (!teacher_id || !module_id || !start_date || !end_date) {
-    return sendErr(res, 'teacher_id, module_id, start_date, end_date required.', 400);
-  }
-  try {
-    if (module_id === 'ALL_ACADEMIC' || module_id === 'ALL_FULL') {
-      const includeStudents = module_id === 'ALL_FULL';
-      // Fetch modules based on the selected bulk mode
-      const queryStr = includeStudents 
-        ? "SELECT id, module_key FROM modules"
-        : "SELECT id, module_key FROM modules WHERE module_key != 'students_management'";
-      
-      const [modules] = await pool.execute(queryStr);
-      
-      const values = [];
-      const placeholders = [];
-      modules.forEach(m => {
-        placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?)');
-        // SYLLABUS_UPLOAD and students_management are global modules (no class context)
-        const isGlobal = m.module_key === 'SYLLABUS_UPLOAD' || m.module_key === 'students_management';
-        values.push(
-          teacher_id, 
-          m.id, 
-          isGlobal ? null : (class_id || null), 
-          isGlobal ? null : (section_id || null), 
-          isGlobal ? null : (subject_id || null), 
-          start_date, 
-          end_date, 
-          'ACTIVE'
-        );
-      });
+  const { 
+    teacher_id, 
+    module_id, 
+    class_id, 
+    section_id, 
+    subject_id, 
+    start_date, 
+    end_date,
+    teacher_ids,
+    scopes,
+    subject_ids,
+    module_ids
+  } = req.body;
 
-      if (placeholders.length > 0) {
-        const query = `
-          INSERT INTO teacher_module_permissions
-            (teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date, status)
-          VALUES ${placeholders.join(', ')}
-        `;
-        await pool.execute(query, values);
+  if ((!module_id && (!Array.isArray(module_ids) || module_ids.length === 0)) || !start_date || !end_date) {
+    return sendErr(res, 'module selection, start_date, end_date required.', 400);
+  }
+
+  // Resolve teacher IDs
+  let resolvedTeacherIds = [];
+  if (Array.isArray(teacher_ids) && teacher_ids.length > 0) {
+    resolvedTeacherIds = teacher_ids.map(Number);
+  } else if (teacher_id) {
+    resolvedTeacherIds = [Number(teacher_id)];
+  } else {
+    return sendErr(res, 'At least one teacher must be selected.', 400);
+  }
+
+  try {
+    // Resolve module IDs
+    let resolvedModuleIds = [];
+    if (Array.isArray(module_ids) && module_ids.length > 0) {
+      resolvedModuleIds = module_ids;
+    } else if (module_id) {
+      resolvedModuleIds = [module_id];
+    }
+
+    let modulesToGrant = [];
+    for (const mId of resolvedModuleIds) {
+      if (mId === 'ALL_ACADEMIC' || mId === 'ALL_FULL') {
+        const includeStudents = mId === 'ALL_FULL';
+        const queryStr = includeStudents 
+          ? "SELECT id, module_key FROM modules"
+          : "SELECT id, module_key FROM modules WHERE module_key != 'students_management'";
+        const [dbModules] = await pool.execute(queryStr);
+        dbModules.forEach(dbm => {
+          if (!modulesToGrant.some(x => String(x.id) === String(dbm.id))) {
+            modulesToGrant.push(dbm);
+          }
+        });
+      } else {
+        const [dbModules] = await pool.execute("SELECT id, module_key FROM modules WHERE id = ?", [mId]);
+        dbModules.forEach(dbm => {
+          if (!modulesToGrant.some(x => String(x.id) === String(dbm.id))) {
+            modulesToGrant.push(dbm);
+          }
+        });
       }
-      return sendOk(res, { success: true }, 'All permissions granted successfully.', 201);
+    }
+
+    if (modulesToGrant.length === 0) {
+      return sendErr(res, 'Invalid module selection.', 400);
+    }
+
+    // Resolve scopes
+    let resolvedScopes = [];
+    if (Array.isArray(scopes) && scopes.length > 0) {
+      resolvedScopes = scopes.map(s => ({
+        class_id: s.class_id ? Number(s.class_id) : null,
+        section_id: s.section_id ? Number(s.section_id) : null
+      }));
     } else {
-      const [result] = await pool.execute(`
+      resolvedScopes = [{
+        class_id: class_id ? Number(class_id) : null,
+        section_id: section_id ? Number(section_id) : null
+      }];
+    }
+
+    // Resolve subjects
+    let resolvedSubjectIds = [];
+    if (Array.isArray(subject_ids) && subject_ids.length > 0) {
+      resolvedSubjectIds = subject_ids.map(id => id ? Number(id) : null);
+    } else {
+      resolvedSubjectIds = [subject_id ? Number(subject_id) : null];
+    }
+
+    const values = [];
+    const placeholders = [];
+
+    for (const tId of resolvedTeacherIds) {
+      for (const m of modulesToGrant) {
+        for (const scope of resolvedScopes) {
+          for (const subId of resolvedSubjectIds) {
+            placeholders.push('(?, ?, ?, ?, ?, ?, ?, ?)');
+            values.push(
+              tId,
+              m.id,
+              scope.class_id,
+              scope.section_id,
+              subId,
+              start_date,
+              end_date,
+              'ACTIVE'
+            );
+          }
+        }
+      }
+    }
+
+    if (placeholders.length > 0) {
+      const query = `
         INSERT INTO teacher_module_permissions
           (teacher_id, module_id, class_id, section_id, subject_id, start_date, end_date, status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'ACTIVE')
-      `, [teacher_id, module_id, class_id || null, section_id || null, subject_id || null, start_date, end_date]);
-      return sendOk(res, { id: result.insertId }, 'Permission granted.', 201);
+        VALUES ${placeholders.join(', ')}
+      `;
+      await pool.execute(query, values);
     }
+
+    return sendOk(res, { success: true }, 'Permissions granted successfully.', 201);
   } catch (err) {
+    console.error('GRANT ERROR:', err);
     return sendErr(res, err.message);
   }
 };

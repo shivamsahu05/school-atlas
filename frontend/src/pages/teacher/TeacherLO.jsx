@@ -112,7 +112,7 @@ export default function TeacherLO() {
   const { stats, timeline = {}, rankings, observations, meta } = data || {}
 
   return (
-    <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 p-3 sm:p-4 lg:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 py-2 sm:py-4 px-0">
       
       {/* HEADER SECTION */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -139,7 +139,8 @@ export default function TeacherLO() {
                 <option value="">Select Class</option>
                 {[...new Set(meta?.assigned?.map(a => a.class_id))].map(id => {
                   const name = meta.assigned.find(a => a.class_id === id).class_name;
-                  return <option key={id} value={id}>Class {name}</option>
+                  const displayName = String(name || '').toLowerCase().startsWith('class') ? name : `Class ${name}`;
+                  return <option key={id} value={id}>{displayName}</option>
                 })}
               </select>
             </div>
@@ -272,7 +273,10 @@ export default function TeacherLO() {
                             </p>
                           )}
                           <div className="flex items-center gap-4 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            <span className="flex items-center gap-1.5"><Calendar size={12} /> Class: {week.class_name}</span>
+                            <span className="flex items-center gap-1.5">
+                              <Calendar size={12} /> 
+                              {String(week.class_name || '').toLowerCase().startsWith('class') ? week.class_name : `Class ${week.class_name}`}
+                            </span>
                             <span>•</span>
                             <span className="text-brand-600">{week.subject || 'Academic'}</span>
                           </div>

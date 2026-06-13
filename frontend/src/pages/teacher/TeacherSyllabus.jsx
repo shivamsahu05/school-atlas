@@ -190,7 +190,7 @@ export default function TeacherSyllabus() {
   if (loading && items.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-brand-500" /></div>
 
   return (
-    <div className="space-y-6 animate-fade-in p-4 lg:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 animate-fade-in py-2 sm:py-4 px-0">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -203,7 +203,7 @@ export default function TeacherSyllabus() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
             <BookOpen size={48} className="text-brand-600" />

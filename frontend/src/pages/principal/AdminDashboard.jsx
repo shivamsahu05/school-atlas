@@ -148,7 +148,7 @@ export default function AdminDashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           <SectionHeader title="School Overview" subtitle="Real-time database metrics" />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
             <StatCard title="Total Teachers" value={data?.overview?.totalTeachers || 0} icon={Users} color="blue" trend={100} />
             <StatCard title="Total Students" value={data?.overview?.totalStudents || 0} icon={GraduationCap} color="green" trend={100} />
             <StatCard title="Classes" value={data?.overview?.totalClasses || 0} icon={BookOpen} color="teal" trend={100} />
@@ -230,7 +230,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name || '—'}</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Academic Excellence</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Overall Performance</p>
                 </div>
                 <div className="text-right flex-shrink-0">
                   <p className="text-sm font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">

@@ -166,6 +166,19 @@ const deleteSection = async (req, res) => {
 const getSubjects = async (req, res) => {
   try {
     console.log('[API SUBJECTS] Fetching subjects data...');
+
+    // [HEALING] Clean up any orphan teacher_subjects records pointing to non-existent users, classes, or subjects
+    try {
+      await prisma.$executeRawUnsafe(`
+        DELETE FROM teacher_subjects 
+        WHERE teacher_id NOT IN (SELECT id FROM users)
+           OR class_id NOT IN (SELECT id FROM classes)
+           OR subject_id NOT IN (SELECT id FROM subjects)
+      `);
+    } catch (healError) {
+      console.warn('[HEALING WARN] Failed to clean orphan teacher_subjects:', healError);
+    }
+
     const subjectsData = await prisma.subjects.findMany({
       orderBy: { name: 'asc' },
       include: {

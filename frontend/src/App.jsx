@@ -11,6 +11,7 @@ import Login           from './pages/Login'
 // Teacher pages
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import TeacherSyllabus  from './pages/teacher/TeacherSyllabus'
+import TeacherSyllabusReport from './pages/teacher/TeacherSyllabusReport'
 import TeacherLO        from './pages/teacher/TeacherLO'
 import TeacherAnalytics from './pages/teacher/TeacherAnalytics'
 import TeacherSchedule  from './pages/teacher/TeacherSchedule'
@@ -21,6 +22,7 @@ import TeacherEvents from './pages/teacher/TeacherEvents'
 import TeacherCompetitions from './pages/teacher/TeacherCompetitions'
 import TeacherStudents from './pages/teacher/TeacherStudents'
 import TeacherTimeTable from './pages/teacher/TeacherTimeTable'
+import MarksEntry from './pages/teacher/MarksEntry'
 
 // Principal pages
 import AdminDashboard       from './pages/principal/AdminDashboard'
@@ -39,9 +41,12 @@ import AdminContact from './pages/principal/AdminContact'
 import AdminSystemTools from './pages/principal/AdminSystemTools'
 import AdminAcademics from './pages/principal/AdminAcademics'
 import AdminSyllabus from './pages/principal/AdminSyllabus'
+import AdminSchedule from './pages/principal/AdminSchedule'
+import AdminSyllabusReport from './pages/principal/AdminSyllabusReport'
 import AdminNotifications from './pages/principal/AdminNotifications'
 import AdminEvents from './pages/principal/AdminEvents'
 import AdminStudentTimetable from './pages/principal/AdminStudentTimetable'
+import AdminMarksEntry from './pages/principal/AdminMarksEntry'
 import ErrorBoundary from './components/ErrorBoundary'
 
 export default function App() {
@@ -60,6 +65,7 @@ export default function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/teacher"          element={<TeacherDashboard />} />
               <Route path="/teacher/syllabus" element={<TeacherSyllabus />} />
+              <Route path="/teacher/syllabus-report" element={<TeacherSyllabusReport />} />
               <Route path="/teacher/lo"       element={<TeacherLO />} />
               <Route path="/teacher/analytics"element={<TeacherAnalytics />} />
               <Route path="/teacher/schedule" element={<TeacherSchedule />} />
@@ -73,6 +79,9 @@ export default function App() {
               {/* Permission Protected Modules */}
               <Route element={<ModuleRoute module="students_management" />}>
                 <Route path="/teacher/students" element={<TeacherStudents />} />
+              </Route>
+              <Route element={<ModuleRoute module="MARKS_ENTRY" />}>
+                <Route path="/teacher/marks-entry" element={<MarksEntry />} />
               </Route>
             </Route>
           </Route>
@@ -99,6 +108,9 @@ export default function App() {
               <Route path="/admin/student-timetable" element={<AdminStudentTimetable />} />
               <Route path="/admin/leave"          element={<AdminLeave />} />
               <Route path="/admin/syllabus"       element={<AdminSyllabus />} />
+              <Route path="/admin/schedule"       element={<AdminSchedule />} />
+              <Route path="/admin/marks-entry"    element={<AdminMarksEntry />} />
+              <Route path="/admin/syllabus-report" element={<AdminSyllabusReport />} />
               <Route path="/admin/notifications"  element={<AdminNotifications />} />
             </Route>
           </Route>

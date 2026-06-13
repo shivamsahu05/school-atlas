@@ -470,9 +470,23 @@ const bulkUploadSyllabus = async (req, res) => {
       const rowNum = i + 2;
 
       try {
-        const clsName = String(row.Class || row.class || '').trim();
-        const subName = String(row.Subject || row.subject || '').trim();
-        const secName = String(row.Section || row.section || '').trim();
+        let clsName = String(row.Class || row.class || '').trim();
+        if (!clsName && req.body.class_id) {
+          const defaultCls = classes.find(c => String(c.id) === String(req.body.class_id));
+          if (defaultCls) clsName = defaultCls.name;
+        }
+
+        let subName = String(row.Subject || row.subject || '').trim();
+        if (!subName && req.body.subject_id) {
+          const defaultSub = subjects.find(s => String(s.id) === String(req.body.subject_id));
+          if (defaultSub) subName = defaultSub.name;
+        }
+
+        let secName = String(row.Section || row.section || '').trim();
+        if (!secName && req.body.section_id) {
+          const defaultSec = sections.find(s => String(s.id) === String(req.body.section_id));
+          if (defaultSec) secName = defaultSec.name;
+        }
         const tName = String(row.Teacher || row.teacher || '').trim();
         const month = String(row.Month || row.month || '').trim();
         const week = String(row.Week || row.week || '').trim();
@@ -492,6 +506,9 @@ const bulkUploadSyllabus = async (req, res) => {
         let resolvedTeacherId = req.user.id; // Default to admin
         if (tName) {
           const tMatch = teachers.find(t => t.name.toLowerCase() === tName.toLowerCase() || String(t.teacher_id) === tName || String(t.user_id) === tName);
+          if (tMatch) resolvedTeacherId = tMatch.user_id;
+        } else if (req.body.teacher_id) {
+          const tMatch = teachers.find(t => String(t.teacher_id) === String(req.body.teacher_id) || String(t.user_id) === String(req.body.teacher_id));
           if (tMatch) resolvedTeacherId = tMatch.user_id;
         }
 
@@ -555,7 +572,7 @@ const bulkUploadSyllabus = async (req, res) => {
 /** GET /api/syllabus/plan - PULLS FROM SYLLABUS TABLE (SSOT) */
 const getSyllabusPlan = async (req, res) => {
   try {
-    let { class_id, section_id, subject_id, month, week, className, section } = req.query;
+    let { class_id, section_id, subject_id, month, week, className, section, teacher_id } = req.query;
     const userId = req.user.id;
 
     let conditions = [];
@@ -565,6 +582,9 @@ const getSyllabusPlan = async (req, res) => {
     if (req.user.role === 'teacher') {
       conditions.push('s.teacher_id = ?');
       values.push(userId); // Use user_id (SSOT)
+    } else if (teacher_id && teacher_id !== 'All') {
+      conditions.push('s.teacher_id = ?');
+      values.push(teacher_id);
     }
 
     if (class_id && class_id !== 'All') {
@@ -606,11 +626,13 @@ const getSyllabusPlan = async (req, res) => {
         s.*,
         COALESCE(ac.class_number, ac.name) as className,
         asec.name as sectionName,
-        sub.name as subjectName
+        sub.name as subjectName,
+        u.name as teacherName
       FROM syllabus s
       LEFT JOIN academic_classes ac ON s.class_id = ac.id
       LEFT JOIN acad_sections asec ON s.section_id = asec.id
       LEFT JOIN subjects sub ON s.subject_id = sub.id
+      LEFT JOIN users u ON s.teacher_id = u.id
       ${whereClause}
       ORDER BY s.planned_start_date ASC, s.id ASC
     `;
@@ -636,7 +658,7 @@ const getSyllabusPlan = async (req, res) => {
       startDate: r.planned_start_date ? new Date(r.planned_start_date).toISOString().split('T')[0] : null,
       endDate: r.planned_end_date ? new Date(r.planned_end_date).toISOString().split('T')[0] : null,
       month: r.month || (r.planned_start_date ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : ''),
-      teacher: { name: r.teacher_name || '—', id: r.teacher_id },
+      teacher: { name: r.teacherName || '—', id: r.teacher_id },
       updatedAt: r.updated_at
     }));
 
@@ -816,6 +838,34 @@ const addMicroSchedule = async (req, res) => {
 
     const { startDate, endDate } = calculateDates(month, week);
 
+    // Determine teacher_id (if admin, find who is assigned, otherwise default to current user)
+    let finalTeacherId = userId;
+    if (req.user.role === 'admin') {
+      const [ttRows] = await pool.execute(`
+        SELECT tt.teacher_id 
+        FROM teacher_timetable tt
+        JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
+        LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
+        WHERE tt.subject_id = ? AND ac.id = ? AND asec.id = ?
+        LIMIT 1
+      `, [subject_id, class_id, section_id]);
+
+      if (ttRows.length > 0) {
+        finalTeacherId = ttRows[0].teacher_id;
+      } else {
+        const [tmpRows] = await pool.execute(`
+          SELECT t.user_id 
+          FROM teacher_module_permissions tmp
+          JOIN teachers t ON tmp.teacher_id = t.id
+          WHERE tmp.subject_id = ? AND tmp.class_id = ? AND tmp.section_id = ? AND tmp.status = 'ACTIVE'
+          LIMIT 1
+        `, [subject_id, class_id, section_id]);
+        if (tmpRows.length > 0) {
+          finalTeacherId = tmpRows[0].user_id;
+        }
+      }
+    }
+
     // 2. Insert into syllabus (SSOT)
     const [result] = await pool.execute(
       `INSERT INTO syllabus (
@@ -847,7 +897,7 @@ const addMicroSchedule = async (req, res) => {
 
 /** GET /api/syllabus/export-syllabus */
 const exportSyllabusPlan = async (req, res) => {
-  const { class_id, section_id, subject_id, is_completed } = req.query;
+  const { class_id, section_id, subject_id, is_completed, teacher_id } = req.query;
 
   let sql = `
     SELECT s.*, 
@@ -866,6 +916,13 @@ const exportSyllabusPlan = async (req, res) => {
   if (class_id) { sql += ' AND s.class_id = ?'; values.push(Number(class_id)); }
   if (section_id) { sql += ' AND s.section_id = ?'; values.push(Number(section_id)); }
   if (subject_id) { sql += ' AND s.subject_id = ?'; values.push(Number(subject_id)); }
+  if (req.user.role === 'teacher') {
+    sql += ' AND s.teacher_id = ?';
+    values.push(req.user.id);
+  } else if (teacher_id && teacher_id !== 'All' && teacher_id !== 'null') {
+    sql += ' AND s.teacher_id = ?';
+    values.push(Number(teacher_id));
+  }
   if (is_completed !== undefined && is_completed !== '') {
     sql += ' AND s.is_completed = ?';
     values.push(is_completed === 'true' ? 1 : 0);

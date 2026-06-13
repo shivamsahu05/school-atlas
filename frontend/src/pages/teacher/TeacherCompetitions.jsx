@@ -194,7 +194,7 @@ export default function TeacherCompetitions() {
           </div>
           <div>
             <span className="font-bold text-slate-800 block text-sm">{v}</span>
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+            <span className="text-[10px] font-bold text-slate-600 capitalize">
               {row.event_type.replace('_', ' ')} {row.target_class ? ` · ${row.target_class}` : ''}
             </span>
           </div>
@@ -204,7 +204,7 @@ export default function TeacherCompetitions() {
     { key: 'creator', label: 'Created By', render: (_, row) => (
         <div className="text-xs">
           <span className="font-bold text-slate-700">{row.creator?.name || 'Unknown'}</span>
-          <span className="block text-[10px] text-slate-400 capitalize">{row.creator?.role || 'System'}</span>
+          <span className="block text-[10px] text-slate-600 capitalize">{row.creator?.role || 'System'}</span>
         </div>
       )
     },
@@ -252,7 +252,7 @@ export default function TeacherCompetitions() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-3 gap-2.5 md:gap-6">
         <StatCard title="Total Contests" value={competitions.length} icon={Trophy} color="brand" />
         <StatCard title="Ongoing" value={competitions.filter(c => c.status === 'ongoing').length} icon={Clock} color="amber" />
         <StatCard title="Winners Decided" value={competitions.filter(c => c.status === 'completed').length} icon={CheckCircle} color="emerald" />
@@ -322,7 +322,7 @@ export default function TeacherCompetitions() {
           <div className="space-y-6">
             <div className="bg-slate-900 p-6 rounded-2xl text-white">
                <h2 className="text-xl font-black">{activeComp.title}</h2>
-               <p className="text-slate-400 text-xs mt-1 uppercase tracking-widest">{activeComp.event_type.replace('_',' ')} • {activeComp.location}</p>
+               <p className="text-slate-300 text-xs mt-1 capitalize">{activeComp.event_type.replace('_',' ')} • {activeComp.location}</p>
             </div>
             <div className="flex bg-slate-100 p-1 rounded-xl">
                <button onClick={() => setModalMode('participants')} className={clsx("flex-1 py-2 rounded-lg text-xs font-bold transition-all", modalMode === 'participants' ? "bg-white text-brand-600 shadow-sm" : "text-slate-500")}>Participants ({participants.length})</button>

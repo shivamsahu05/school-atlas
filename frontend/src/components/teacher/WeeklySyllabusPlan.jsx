@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import clsx from 'clsx';
-import { 
+import {
   Clock, Users, Save, Loader2, Edit2, BookOpen, Check, X, Search, XCircle, ChevronDown, Book, ClipboardCheck, TrendingUp, BarChart3, Calendar, Filter, Trash2
 } from 'lucide-react';
 import { scheduleApi, syllabusApi } from '../../api';
@@ -13,7 +13,7 @@ const safeDate = (d) => {
   return isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-GB");
 };
 
-export default function WeeklySyllabusPlan({ isAllView = false }) {
+export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId, onEditClick }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -26,7 +26,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
   const [filterWeek, setFilterWeek] = useState('All');
 
   const [syllabusMetadata, setSyllabusMetadata] = useState({ months: [], syllabus: [] });
-  const [syllabusData, setSyllabusData] = useState([]); 
+  const [syllabusData, setSyllabusData] = useState([]);
   const [weeklyData, setWeeklyData] = useState([]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -35,7 +35,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
   const [modalLoading, setModalLoading] = useState(false);
   const [studentSearch, setStudentSearch] = useState('');
   const [editingId, setEditingId] = useState(null);
-  
+
   const [studentDataMap, setStudentDataMap] = useState({});
 
   const init = useCallback(async () => {
@@ -98,45 +98,154 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
     if (!isAllView && (!selClassId || !selSectionId || !selectedSubject)) return;
     setLoading(true); setError(null);
     try {
-      const params = { 
-        class_id: selClassId === 'All' ? null : selClassId, 
-        section_id: selSectionId === 'All' ? null : selSectionId, 
-        subject_id: selectedSubject === 'All' ? null : selectedSubject, 
-        month: filterMonth === 'All' ? null : filterMonth 
-      };
-      const res = await syllabusApi.getPlan(params);
-      setSyllabusData(Array.isArray(res) ? res : (res?.data || []));
+      if (isAllView) {
+        // In admin/all view: always fetch ALL data with no filters (frontend handles filtering)
+        const res = await syllabusApi.getPlan({ class_id: null, section_id: null, subject_id: null, month: null });
+        const all = Array.isArray(res) ? res : (res?.data || []);
+        setSyllabusData(all);
+      } else {
+        const params = {
+          class_id: selClassId === 'All' ? null : selClassId,
+          section_id: selSectionId === 'All' ? null : selSectionId,
+          subject_id: selectedSubject === 'All' ? null : selectedSubject,
+          month: filterMonth === 'All' ? null : filterMonth
+        };
+        const res = await syllabusApi.getPlan(params);
+        setSyllabusData(Array.isArray(res) ? res : (res?.data || []));
+      }
     } catch (err) { setError(err.message); setSyllabusData([]); } finally { setLoading(false); }
   };
 
-  useEffect(() => { loadPlan() }, [selClassId, selSectionId, selectedSubject, filterMonth, isAllView]);
+  // In isAllView mode: fetch once (unfiltered) — frontend handles all filtering
+  // In teacher mode: reload on filter changes
+  useEffect(() => {
+    if (!isAllView) {
+      loadPlan();
+    }
+  }, [selClassId, selSectionId, selectedSubject, filterMonth]);
+
+  // Initial load: always run once on mount (both modes)
+  useEffect(() => {
+    loadPlan();
+  }, [isAllView]);
 
   useEffect(() => {
-    const handleSync = () => loadPlan();
+    const handleSync = () => {
+      init();
+      loadPlan();
+    };
     window.addEventListener('syllabus-updated', handleSync);
     return () => window.removeEventListener('syllabus-updated', handleSync);
-  }, [loadPlan]);
+  }, [loadPlan, init]);
+
+  // In isAllView: build dropdown options from syllabusData filtered by teacher only
+  // This is stable because syllabusData is always the full dataset in isAllView mode
+  const [allViewAssignments, setAllViewAssignments] = useState([]);
+
+  useEffect(() => {
+    if (!isAllView) return;
+    if (!syllabusData || syllabusData.length === 0) {
+      setAllViewAssignments([]);
+      return;
+    }
+
+    // Filter by teacher to get only that teacher's classes/sections/subjects
+    const sourceData = (filterTeacherId && filterTeacherId !== 'All')
+      ? syllabusData.filter(r => Number(r.teacher_id) === Number(filterTeacherId))
+      : syllabusData;
+
+    const grouped = [];
+    sourceData.forEach(a => {
+      if (!a.class_id) return;
+      let cls = grouped.find(c => c.classId === Number(a.class_id));
+      if (!cls) {
+        const className = a.class || a.className || String(a.class_id);
+        cls = { classId: Number(a.class_id), className, sections: [] };
+        grouped.push(cls);
+      }
+      if (!a.section_id) return;
+      let sec = cls.sections.find(s => s.sectionId === Number(a.section_id));
+      if (!sec) {
+        sec = { sectionId: Number(a.section_id), sectionName: String(a.section || a.sectionName || '').trim(), subjects: [] };
+        cls.sections.push(sec);
+      }
+      if (a.subject_id && !sec.subjects.find(s => s.subjectId === Number(a.subject_id))) {
+        sec.subjects.push({ subjectId: Number(a.subject_id), subjectName: a.subject_name || a.subjectName || a.subject || String(a.subject_id) });
+      }
+    });
+    // Sort classes
+    grouped.sort((a, b) => a.className.localeCompare(b.className, undefined, { numeric: true }));
+    setAllViewAssignments(grouped);
+    // Reset class/section/subject dropdowns when teacher changes
+    setSelClassId('All');
+    setSelSectionId('All');
+    setSelectedSubject('All');
+  }, [filterTeacherId, syllabusData, isAllView]); // syllabusData is stable (always full) in isAllView
+
+  // Effective assignments used by dropdowns: in allView use allViewAssignments, else own assignments
+  const effectiveAssignments = isAllView ? allViewAssignments : assignments;
+
+  // Build effective sections for selected class (only those that exist for selected class)
+  const effectiveSections = useMemo(() => {
+    if (!isAllView) {
+      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
+        .filter(s => s.sectionName && s.sectionName.trim() !== '');
+    }
+    // In allView: if a class is selected, only show sections of that class; else all unique sections
+    if (selClassId !== 'All') {
+      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
+        .filter(s => s.sectionName && s.sectionName.trim() !== '');
+    }
+    // All classes - aggregate all unique sections
+    const allSecs = [];
+    effectiveAssignments.forEach(cls => {
+      cls.sections.forEach(sec => {
+        if (sec.sectionName && !allSecs.find(s => s.sectionId === sec.sectionId)) {
+          allSecs.push(sec);
+        }
+      });
+    });
+    return allSecs;
+  }, [effectiveAssignments, selClassId, isAllView]);
+
+  // Build effective subjects for selected class+section
+  const effectiveSubjects = useMemo(() => {
+    if (!isAllView) {
+      return effectiveAssignments.find(c => String(c.classId) === String(selClassId))
+        ?.sections.find(s => String(s.sectionId) === String(selSectionId))?.subjects || [];
+    }
+    // In allView: filter by selected class and/or section
+    let sourceAssignments = effectiveAssignments;
+    if (selClassId !== 'All') {
+      sourceAssignments = sourceAssignments.filter(c => String(c.classId) === String(selClassId));
+    }
+    const allSubjects = [];
+    sourceAssignments.forEach(cls => {
+      const secs = selSectionId !== 'All' 
+        ? cls.sections.filter(s => String(s.sectionId) === String(selSectionId))
+        : cls.sections;
+      secs.forEach(sec => {
+        sec.subjects.forEach(sub => {
+          if (!allSubjects.find(s => s.subjectId === sub.subjectId)) {
+            allSubjects.push(sub);
+          }
+        });
+      });
+    });
+    return allSubjects;
+  }, [effectiveAssignments, selClassId, selSectionId, isAllView]);
 
   useEffect(() => {
     if (!syllabusData) return;
-    const selectedClassData = assignments.find(c => String(c.classId) === String(selClassId));
-    const selClassName = selectedClassData?.className || (selClassId === 'All' ? 'All' : 'All');
-    const selectedSectionData = selectedClassData?.sections.find(s => String(s.sectionId) === String(selSectionId));
-    const selSectionName = selectedSectionData?.sectionName || (selSectionId === 'All' ? 'All' : '');
-    const selectedSubjectData = selectedSectionData?.subjects.find(s => String(s.subjectId) === String(selectedSubject));
-    const selSubjectName = selectedSubjectData?.subjectName || (selectedSubject === 'All' ? 'All' : '');
 
     const formatted = syllabusData.filter(item => {
-      // Use IDs for precise matching
       const classMatch = selClassId === "All" || Number(item.class_id) === Number(selClassId);
       const sectionMatch = selSectionId === "All" || Number(item.section_id) === Number(selSectionId);
       const subjectMatch = selectedSubject === "All" || Number(item.subject_id) === Number(selectedSubject);
-      
-      // Month and Week matching (using normalize helper)
       const monthMatch = filterMonth === "All" || normalize(item.month) === normalize(filterMonth);
       const weekMatch = filterWeek === "All" || normalize(item.week) === normalize(filterWeek);
-      
-      return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch;
+      const teacherMatch = !filterTeacherId || filterTeacherId === "All" || Number(item.teacher_id) === Number(filterTeacherId);
+      return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch && teacherMatch;
     }).map(row => {
       const rawStatus = normalize(row.status);
       let status = 'pending';
@@ -156,11 +265,11 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
         notebookChecked: row.notebook_checked || 'No',
         class_understanding_level: row.class_understanding_level || '',
         is_completed: Number(row.is_completed || 0),
-        subject_name: row.subjectName || row.subject_name || row.subject // Fallback
+        subject_name: row.subjectName || row.subject_name || row.subject
       };
     });
     setWeeklyData(formatted);
-  }, [syllabusData, selClassId, selSectionId, selectedSubject, filterMonth, filterWeek, assignments, isAllView]);
+  }, [syllabusData, selClassId, selSectionId, selectedSubject, filterMonth, filterWeek, effectiveAssignments, isAllView, filterTeacherId]);
 
   const handleFieldChange = (id, field, value) => {
     setWeeklyData(prev => prev.map(r => {
@@ -180,7 +289,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
         return;
       }
       setLoading(true);
-      
+
       const payload = [{
         syllabus_id: r.id,
         class_number: r.class,
@@ -240,7 +349,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
       setLoading(true);
       const incomplete = weeklyData.find(r => r.status === 'completed' && !r.class_understanding_level);
       if (incomplete) { alert(`❌ Select learning status for: ${incomplete.topic}`); setLoading(false); return; }
-      
+
       const payload = weeklyData.map(r => ({
         syllabus_id: r.id,
         class_number: r.class,
@@ -276,9 +385,9 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
   };
 
   const openStudentManager = async (topic) => {
-    setSelectedTopic(topic); 
-    setIsModalOpen(true); 
-    
+    setSelectedTopic(topic);
+    setIsModalOpen(true);
+
     if (studentDataMap[topic.id]) {
       setStudentList(studentDataMap[topic.id]);
       return;
@@ -289,7 +398,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
       const targetClassId = topic.class_id || selClassId;
       const targetSectionId = topic.section_id || selSectionId;
       const res = await scheduleApi.getItemStudents(topic.id, targetClassId, targetSectionId);
-      
+
       setStudentList((res || []).map(s => ({
         ...s,
         notebook_done: s.notebook !== undefined ? Number(s.notebook) : 0,
@@ -316,13 +425,13 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
     if (!weeklyData || weeklyData.length === 0) return { percent: 0, completed: 0, total: 0 };
     const total = weeklyData.reduce((acc, r) => acc + (r.db_periods || 0), 0);
     const completed = weeklyData.reduce((acc, r) => acc + (r.status === 'completed' ? (r.db_periods || 0) : 0), 0);
-    
+
     if (total === 0 && weeklyData.length > 0) {
       const totalTopics = weeklyData.length;
       const completedTopics = weeklyData.filter(r => r.status === 'completed').length;
-      return { 
-        percent: Math.round((completedTopics / totalTopics) * 100), 
-        completed: completedTopics, 
+      return {
+        percent: Math.round((completedTopics / totalTopics) * 100),
+        completed: completedTopics,
         total: totalTopics,
         unit: 'topics'
       };
@@ -340,7 +449,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
           <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId('All'); setSelectedSubject('All'); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Classes</option>}
             {!isAllView && <option value="">Select class…</option>}
-            {assignments.map(c => <option key={c.classId} value={c.classId}>Class {c.className}</option>)}
+            {effectiveAssignments.map(c => <option key={c.classId} value={c.classId}>Class {c.className}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
@@ -348,9 +457,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
           <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Sections</option>}
             {!isAllView && <option value="">Select section…</option>}
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-              .filter(s => s.sectionName && s.sectionName.trim() !== '')
-              .map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
+            {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
@@ -358,7 +465,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
           <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!isAllView && !selSectionId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Subjects</option>}
             {!isAllView && <option value="">Select subject…</option>}
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections.find(s => String(s.sectionId) === String(selSectionId))?.subjects || []).map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
+            {effectiveSubjects.map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[120px]">
@@ -410,10 +517,10 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
               </div>
             </div>
           </div>
-          
+
           <div className="relative group">
             <div className="h-3 w-full bg-slate-100 rounded-full border border-slate-200 overflow-hidden shadow-inner">
-              <div 
+              <div
                 className={clsx(
                   "absolute top-0 left-0 h-full transition-all duration-1000 ease-out rounded-full shadow-[0_0_15px_rgba(37,99,235,0.3)]",
                   progressStats.percent === 100 ? "bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]" : "bg-blue-600"
@@ -482,9 +589,9 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
 
                   return (
                     <tr key={row.id} className={clsx(
-                      "transition-all duration-300 border-l-[6px]", 
-                      isEffectiveComp 
-                        ? "bg-indigo-50/40 border-indigo-500/80 grayscale-[0.1]" 
+                      "transition-all duration-300 border-l-[6px]",
+                      isEffectiveComp
+                        ? "bg-indigo-50/40 border-indigo-500/80 grayscale-[0.1]"
                         : "bg-white border-transparent hover:bg-slate-50/30"
                     )}>
                       <td className="px-5 py-5 align-top">
@@ -501,7 +608,17 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                       </td>
                       <td className="px-5 py-5 align-top">
                         <p className="text-xs font-semibold text-slate-700 leading-relaxed break-words pr-4">{row.topic}</p>
-                        <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{row.subject_name}</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+                          <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">{row.subject_name || row.subject}</span>
+                          {row.teacher?.name && row.teacher.name !== '—' && (
+                            <>
+                              <span className="text-[9px] text-slate-300">•</span>
+                              <span className="text-[9px] text-indigo-600 font-black uppercase tracking-wider">
+                                {row.teacher.name}
+                              </span>
+                            </>
+                          )}
+                        </div>
                       </td>
                       <td className="px-5 py-5 align-top text-center">
                         <div className="inline-flex flex-col items-center">
@@ -512,25 +629,25 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                       <td className="px-5 py-5 align-top">
                         {isAllView ? (
                           <div className={clsx(
-                            "inline-flex px-3 py-1.5 rounded-md text-[10px] font-bold uppercase border", 
-                            row.status === 'completed' ? "bg-blue-50 border-blue-200 text-blue-600" : 
-                            (row.status === 'in_progress' || row.status === 'in progress') ? "bg-amber-50 border-amber-200 text-amber-600" : 
-                            row.status === 'not started' ? "bg-slate-100 border-slate-200 text-slate-500" :
-                            "bg-slate-50 border-slate-200 text-slate-400"
+                            "inline-flex px-3 py-1.5 rounded-md text-[10px] font-bold uppercase border",
+                            row.status === 'completed' ? "bg-blue-50 border-blue-200 text-blue-600" :
+                              (row.status === 'in_progress' || row.status === 'in progress') ? "bg-amber-50 border-amber-200 text-amber-600" :
+                                row.status === 'not started' ? "bg-slate-100 border-slate-200 text-slate-500" :
+                                  "bg-slate-50 border-slate-200 text-slate-400"
                           )}>
                             {row.status}
                           </div>
                         ) : (
-                          <select 
-                            value={row.status} 
-                            disabled={isViewOnly} 
-                            onChange={(e) => handleFieldChange(row.id, 'status', e.target.value)} 
+                          <select
+                            value={row.status}
+                            disabled={isViewOnly}
+                            onChange={(e) => handleFieldChange(row.id, 'status', e.target.value)}
                             className={clsx(
-                              "w-full text-[10px] font-bold uppercase rounded-md px-3 py-2 border outline-none appearance-none cursor-pointer transition-all", 
-                              row.status === 'completed' ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm" : 
-                              row.status === 'in progress' ? "bg-amber-50 border-amber-300 text-amber-700" : 
-                              row.status === 'not started' ? "bg-slate-50 border-slate-300 text-slate-600" :
-                              "bg-white border-slate-300 text-slate-500"
+                              "w-full text-[10px] font-bold uppercase rounded-md px-3 py-2 border outline-none appearance-none cursor-pointer transition-all",
+                              row.status === 'completed' ? "bg-blue-50 border-blue-300 text-blue-700 shadow-sm" :
+                                row.status === 'in progress' ? "bg-amber-50 border-amber-300 text-amber-700" :
+                                  row.status === 'not started' ? "bg-slate-50 border-slate-300 text-slate-600" :
+                                    "bg-white border-slate-300 text-slate-500"
                             )}
                           >
                             <option value="not started">Not Started</option>
@@ -593,13 +710,13 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                       {!isAllView && (
                         <td className="px-5 py-5 align-top text-center">
                           {(row.notebookChecked === 'Yes' || row.homeworkChecked === 'Yes') ? (
-                            <button 
-                              onClick={() => openStudentManager(row)} 
+                            <button
+                              onClick={() => openStudentManager(row)}
                               disabled={isViewOnly}
                               className={clsx(
                                 "inline-flex items-center gap-2 px-4 py-2 rounded-md transition-all border shadow-sm group",
-                                isViewOnly 
-                                  ? "bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed" 
+                                isViewOnly
+                                  ? "bg-slate-50 text-slate-400 border-slate-100 cursor-not-allowed"
                                   : "bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100"
                               )}
                             >
@@ -614,13 +731,24 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                       <td className="px-5 py-5 align-top text-right">
                         <div className="flex items-center justify-end gap-2">
                           {isAllView ? (
-                            <button 
-                              onClick={() => handleDelete(row)}
-                              className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
-                              title="Delete Topic"
-                            >
-                              <Trash2 size={16} />
-                            </button>
+                            <>
+                              {onEditClick && (
+                                <button
+                                  onClick={() => onEditClick(row)}
+                                  className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-all active:scale-90"
+                                  title="Edit Topic"
+                                >
+                                  <Edit2 size={16} />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDelete(row)}
+                                className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
+                                title="Delete Topic"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </>
                           ) : (
                             isViewOnly ? (
                               <div className="flex items-center gap-2">
@@ -628,7 +756,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                                   <Edit2 size={13} className="group-hover:rotate-12 transition-transform" />
                                   <span className="text-[10px] font-black uppercase tracking-wider">Edit</span>
                                 </button>
-                                </div>
+                              </div>
                             ) : (
                               <div className="flex items-center gap-2">
                                 <button
@@ -660,7 +788,7 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
       {/* Action Buttons Toolbar */}
       {weeklyData.length > 0 && !isAllView && (
         <div className="flex justify-end items-center gap-4 pt-10 pb-6 border-t border-slate-100 mt-6">
-          <button 
+          <button
             onClick={() => {
               if (window.confirm("Are you sure? This will discard all unsaved changes and reload original data.")) {
                 loadPlan();
@@ -674,9 +802,9 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
             <Clock size={14} className="rotate-180" /> Reset Changes
           </button>
 
-          <button 
-            onClick={handleSaveAll} 
-            disabled={loading} 
+          <button
+            onClick={handleSaveAll}
+            disabled={loading}
             className="flex items-center gap-2.5 bg-blue-600 text-white px-10 py-3.5 rounded-xl font-black text-[11px] uppercase tracking-widest shadow-lg shadow-blue-100 hover:bg-blue-700 hover:shadow-blue-200 transition-all active:scale-95 disabled:opacity-50"
           >
             {loading ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Save All Changes
@@ -699,8 +827,8 @@ export default function WeeklySyllabusPlan({ isAllView = false }) {
                 <input type="text" placeholder="Search students..." value={studentSearch} onChange={e => setStudentSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 bg-slate-50 rounded-md text-xs font-semibold border border-slate-200 focus:border-blue-500 outline-none transition-all" />
               </div>
               <div className="flex gap-4 text-[9px] font-black uppercase text-slate-400 tracking-widest px-2">
-                <div className="w-24 text-center">Notebook<br/>Incomplete</div>
-                <div className="w-24 text-center">Homework<br/>Incomplete</div>
+                <div className="w-24 text-center">Notebook<br />Incomplete</div>
+                <div className="w-24 text-center">Homework<br />Incomplete</div>
               </div>
             </div>
             <div className="flex-1 overflow-auto p-6 scrollbar-thin max-h-[60vh] bg-slate-50/30">

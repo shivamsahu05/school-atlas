@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 
 /* ─── StatCard ─────────────────────────────────────────────────────────── */
-export function StatCard({ title, value, subtitle, icon: Icon, color = 'blue', trend, loading = false }) {
+export function StatCard({ title, value, subtitle, icon: Icon, color = 'blue', trend, loading = false, className }) {
   const colors = {
     blue:   'bg-blue-50 text-blue-600',
     green:  'bg-emerald-50 text-emerald-600',
@@ -22,32 +22,32 @@ export function StatCard({ title, value, subtitle, icon: Icon, color = 'blue', t
 
   if (loading) {
     return (
-      <div className="bg-white rounded-[1.5rem] p-6 shadow-sm border border-slate-100 animate-pulse">
-        <div className="flex items-start justify-between mb-4">
-          <div className="h-3 w-20 bg-slate-100 rounded" />
-          <div className="w-10 h-10 rounded-xl bg-slate-100" />
+      <div className={clsx("bg-white rounded-[1.2rem] sm:rounded-[1.5rem] p-3 sm:p-5 shadow-sm border border-slate-100 animate-pulse", className)}>
+        <div className="flex items-start justify-between mb-2 sm:mb-4">
+          <div className="h-3 w-12 sm:w-20 bg-slate-100 rounded" />
+          <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-slate-100" />
         </div>
-        <div className="h-8 w-24 bg-slate-100 rounded mb-2" />
-        <div className="h-3 w-32 bg-slate-100 rounded" />
+        <div className="h-6 sm:h-8 w-16 sm:w-24 bg-slate-100 rounded mb-2" />
+        <div className="h-3 w-24 sm:h-3 sm:w-32 bg-slate-100 rounded" />
       </div>
     )
   }
 
   return (
-    <div className="bg-white rounded-[1.5rem] p-5 sm:p-6 shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 group">
-      <div className="flex items-start justify-between mb-2">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em] leading-none">{title}</p>
+    <div className={clsx("bg-white rounded-[1.2rem] sm:rounded-[1.5rem] p-3 sm:p-5 shadow-sm border border-slate-100/50 hover:shadow-md transition-all duration-300 group", className)}>
+      <div className="flex items-start justify-between mb-1 sm:mb-2 gap-1">
+        <p className="text-[9px] sm:text-[11px] font-extrabold text-slate-500 tracking-wide leading-tight">{title}</p>
         {Icon && (
-          <div className={clsx('w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110', colors[color])}>
-            <Icon size={20} />
+          <div className={clsx('w-7 h-7 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 shrink-0', colors[color])}>
+            <Icon size={14} className="sm:w-5 sm:h-5" />
           </div>
         )}
       </div>
       
-      <div className="space-y-1">
-        <h4 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tighter">{value}</h4>
+      <div className="space-y-0.5 sm:space-y-1">
+        <h4 className="text-lg sm:text-3xl font-black text-slate-800 tracking-tighter">{value}</h4>
         {subtitle && (
-          <p className="text-[10px] sm:text-[11px] font-bold text-slate-400 leading-none">
+          <p className="text-[8px] sm:text-[11px] font-bold text-slate-400 leading-none">
             {subtitle}
           </p>
         )}
@@ -131,13 +131,13 @@ export function Modal({ open, onClose, title, children, size = 'md' }) {
 /* ─── Tabs ─────────────────────────────────────────────────────────────── */
 export function Tabs({ tabs, active, onChange }) {
   return (
-    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit max-w-full overflow-x-auto scrollbar-thin">
       {tabs.map(t => (
         <button
           key={t.value}
           onClick={() => onChange(t.value)}
           className={clsx(
-            'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+            'px-4 py-2 rounded-lg text-sm font-medium transition-all duration-150 flex-shrink-0 whitespace-nowrap',
             active === t.value
               ? 'bg-white text-slate-800 shadow-sm'
               : 'text-slate-500 hover:text-slate-700',

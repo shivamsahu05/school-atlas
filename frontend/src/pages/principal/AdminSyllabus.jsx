@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import clsx from 'clsx'
-import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2 } from 'lucide-react'
+import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2, Edit } from 'lucide-react'
 import { StatCard, SectionHeader, StatusBadge, ProgressBar, Modal } from '../../components/ui/index.jsx'
 import { DataTable } from '../../components/ui/DataTable.jsx'
 import { BarChartWidget } from '../../components/charts/index.jsx'
@@ -43,13 +43,14 @@ export default function AdminSyllabus() {
   const [uploadFile, setUploadFile] = useState(null)
   const [acadSections, setAcadSections] = useState([])
   const [acadSubjects, setAcadSubjects] = useState([])
-  
+
   const INITIAL_FORM = {
     teacher_id: '', class_id: '', subject_id: '', section_id: '', chapter: '', topic: '',
     month: 'May', week: 'Week 1', periods: 1, learning_outcome: '',
     planned_start_date: '', planned_end_date: '', is_completed: false
   }
   const [form, setForm] = useState(INITIAL_FORM)
+  const [editId, setEditId] = useState(null)
 
   // Fetch static data once on mount
   useEffect(() => {
@@ -113,13 +114,12 @@ export default function AdminSyllabus() {
     fetchFilterData()
   }, [filterCls])
 
-  const handleClassChange = async (classId) => {
-    setAcadSections([])
-    setAcadSubjects([])
-    setForm(f => ({ ...f, class_id: classId, section_id: '', subject_id: '' }))
-
-    if (!classId) return
-
+  const loadClassData = async (classId) => {
+    if (!classId) {
+      setAcadSections([])
+      setAcadSubjects([])
+      return
+    }
     try {
       const [secRes, subRes] = await Promise.all([
         academicApi.getClassSections(classId),
@@ -130,6 +130,11 @@ export default function AdminSyllabus() {
     } catch (err) {
       console.error('Failed to load class data:', err)
     }
+  }
+
+  const handleClassChange = async (classId) => {
+    setForm(f => ({ ...f, class_id: classId, section_id: '', subject_id: '' }))
+    await loadClassData(classId)
   }
 
   // Auto-date calculation logic
@@ -143,11 +148,9 @@ export default function AdminSyllabus() {
 
       const year = new Date().getFullYear();
       const weekNum = parseInt(weekStr.replace(/\D/g, '')) || 1;
-      
       // Standard 7-day week chunks
       const startDay = (weekNum - 1) * 7 + 1;
       let endDay = weekNum * 7;
-      
       const lastDayOfMonth = new Date(year, mIdx + 1, 0).getDate();
       if (startDay > lastDayOfMonth) return { start: '', end: '' };
       if (endDay > lastDayOfMonth) endDay = lastDayOfMonth;
@@ -163,7 +166,7 @@ export default function AdminSyllabus() {
   }, [form.week, form.month]);
 
 
-  const handleAdd = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.class_id || !form.subject_id || !form.topic || !form.teacher_id) {
       alert('Teacher, Class, subject and topic are required.');
@@ -181,14 +184,21 @@ export default function AdminSyllabus() {
         sectionName: sectionObj?.section_name || sectionObj?.name || sectionObj?.code
       }
 
-      await syllabusApi.create(payload)
+      if (editId) {
+        await syllabusApi.update(editId, payload)
+        alert('✅ Updated Successfully')
+      } else {
+        await syllabusApi.create(payload)
+        alert('✅ Created Successfully')
+      }
       setModalOpen(false)
       setForm(INITIAL_FORM)
+      setEditId(null)
       setAcadSections([])
       setAcadSubjects([])
       fetchSyllabus()
     } catch (err) {
-      alert(err.response?.data?.message || 'Failed to add topic.')
+      alert(err.response?.data?.message || `Failed to ${editId ? 'update' : 'add'} topic.`)
     } finally {
       setSubmitting(false)
     }
@@ -196,8 +206,31 @@ export default function AdminSyllabus() {
 
   const handleModalOpen = () => {
     setForm(INITIAL_FORM)
+    setEditId(null)
     setAcadSections([])
     setAcadSubjects([])
+    setModalOpen(true)
+  }
+
+  const handleEditOpen = async (row) => {
+    setEditId(row.id)
+    setForm({
+      teacher_id: row.teacher_id || '',
+      class_id: row.class_id || '',
+      section_id: row.section_id || '',
+      subject_id: row.subject_id || '',
+      chapter: row.chapter || '',
+      topic: row.topic || '',
+      month: row.month || 'May',
+      week: row.week || 'Week 1',
+      periods: row.periods || 1,
+      learning_outcome: row.learning_outcome || '',
+      planned_start_date: row.planned_start_date ? row.planned_start_date.slice(0, 10) : '',
+      planned_end_date: row.planned_end_date ? row.planned_end_date.slice(0, 10) : '',
+      is_completed: row.is_completed === 1 || row.is_completed === true,
+      status: row.status || (row.is_completed ? 'completed' : 'pending')
+    })
+    await loadClassData(row.class_id)
     setModalOpen(true)
   }
 
@@ -299,16 +332,16 @@ export default function AdminSyllabus() {
   };
 
   const columns = [
-    { 
-      key: 'teacher', 
-      label: 'Teacher', 
-      sortable: true, 
+    {
+      key: 'teacher',
+      label: 'Teacher',
+      sortable: true,
       render: (_, r) => (
         <div className="flex flex-col">
           <span className="font-bold text-slate-800">{r.teacher?.name || '—'}</span>
           {r.teacher?.id && <span className="text-[10px] text-slate-400 font-medium">ID: {r.teacher.id}</span>}
         </div>
-      ) 
+      )
     },
     { key: 'class', label: 'Class', sortable: true, render: (_, r) => `${r.class?.class_name || ''}-${r.class?.section || ''}` },
     { key: 'subject', label: 'Subject', sortable: true, render: (_, r) => r.subject?.name || '—' },
@@ -362,13 +395,22 @@ export default function AdminSyllabus() {
       label: 'Actions',
       textRight: true,
       render: (_, r) => (
-        <button 
-          onClick={() => handleDelete(r)}
-          className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
-          title="Delete Topic"
-        >
-          <Trash2 size={16} />
-        </button>
+        <div className="flex justify-end gap-2">
+          <button 
+            onClick={() => handleEditOpen(r)}
+            className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-all active:scale-90"
+            title="Edit Topic"
+          >
+            <Edit size={16} />
+          </button>
+          <button 
+            onClick={() => handleDelete(r)}
+            className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
+            title="Delete Topic"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       )
     }
   ]
@@ -386,7 +428,7 @@ export default function AdminSyllabus() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         <StatCard title="Total Topics" value={total} icon={BookOpen} color="blue" />
         <StatCard title="Completed" value={completed} icon={CheckCircle} color="green" trend={pct} />
         <StatCard title="Pending" value={pending} icon={Clock} color="amber" />
@@ -411,20 +453,6 @@ export default function AdminSyllabus() {
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
           <SectionHeader title="Micro Schedules" subtitle={`${items.length} records found`} />
-          <div className="flex flex-wrap gap-2">
-            <button onClick={handleDownloadTemplate} className="btn-secondary btn btn-sm gap-1.5 text-blue-600 border-blue-100 bg-blue-50/30">
-              <Download size={13} /> Template
-            </button>
-            <button onClick={() => setBulkModalOpen(true)} className="btn-secondary btn btn-sm gap-1.5">
-              <Plus size={13} /> Bulk Upload
-            </button>
-            <button onClick={handleExport} className="btn-secondary btn btn-sm gap-1.5">
-              <Download size={13} /> Export
-            </button>
-            <button onClick={handleModalOpen} className="btn-primary btn btn-sm">
-              <Plus size={14} /> Add Micro Schedule Topic
-            </button>
-          </div>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
@@ -448,7 +476,7 @@ export default function AdminSyllabus() {
             <option value="false">Pending</option>
           </select>
 
-          <button 
+          <button
             onClick={handleResetFilters}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition-all"
             title="Reset All Filters"
@@ -464,25 +492,25 @@ export default function AdminSyllabus() {
               <Loader2 size={24} className="animate-spin text-brand-500" />
             </div>
           )}
-          <DataTable 
-            columns={columns} 
-            rows={items} 
-            emptyMessage="No syllabus topics found." 
+          <DataTable
+            columns={columns}
+            rows={items}
+            emptyMessage="No syllabus topics found."
             getRowClassName={(r) => r.is_completed ? "bg-emerald-50/50 hover:bg-emerald-100/50" : "bg-white hover:bg-slate-50"}
           />
         </div>
       </div>
 
-      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title="Add Micro Schedule" size="lg">
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editId ? "Edit Micro Schedule" : "Add Micro Schedule"} size="lg">
         <div className="p-1">
-          <form onSubmit={handleAdd} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Assigned Teacher *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
-                  value={form.teacher_id} 
-                  onChange={e => setForm(f => ({...f, teacher_id: e.target.value}))} 
+                  value={form.teacher_id}
+                  onChange={e => setForm(f => ({ ...f, teacher_id: e.target.value }))}
                   required
                 >
                   <option value="">Select teacher…</option>
@@ -491,10 +519,10 @@ export default function AdminSyllabus() {
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Class *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
-                  value={form.class_id} 
-                  onChange={e => handleClassChange(e.target.value)} 
+                  value={form.class_id}
+                  onChange={e => handleClassChange(e.target.value)}
                   required
                 >
                   <option value="">Select class…</option>
@@ -506,11 +534,11 @@ export default function AdminSyllabus() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Section *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
-                  value={form.section_id || ''} 
-                  onChange={e => setForm(f => ({ ...f, section_id: e.target.value }))} 
-                  required 
+                  value={form.section_id || ''}
+                  onChange={e => setForm(f => ({ ...f, section_id: e.target.value }))}
+                  required
                   disabled={!form.class_id}
                 >
                   <option value="">Select section…</option>
@@ -519,11 +547,11 @@ export default function AdminSyllabus() {
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Subject *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
-                  value={form.subject_id} 
-                  onChange={e => setForm(f => ({ ...f, subject_id: e.target.value }))} 
-                  required 
+                  value={form.subject_id}
+                  onChange={e => setForm(f => ({ ...f, subject_id: e.target.value }))}
+                  required
                   disabled={!form.class_id}
                 >
                   <option value="">Select subject…</option>
@@ -535,10 +563,10 @@ export default function AdminSyllabus() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Month *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
-                  value={form.month} 
-                  onChange={e => setForm(f => ({...f, month: e.target.value}))}
+                  value={form.month}
+                  onChange={e => setForm(f => ({ ...f, month: e.target.value }))}
                   required
                 >
                   {MONTHS.filter(m => m !== 'All').map(m => <option key={m} value={m}>{m}</option>)}
@@ -546,10 +574,10 @@ export default function AdminSyllabus() {
               </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Week *</label>
-                <select 
+                <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
-                  value={form.week} 
-                  onChange={e => setForm(f => ({...f, week: e.target.value}))}
+                  value={form.week}
+                  onChange={e => setForm(f => ({ ...f, week: e.target.value }))}
                   required
                 >
                   {['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5'].map(w => <option key={w} value={w}>{w}</option>)}
@@ -558,108 +586,81 @@ export default function AdminSyllabus() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="sm:col-span-1">
+              <div className={editId ? "sm:col-span-2" : "sm:col-span-1"}>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Chapter & Topic *</label>
-                <input 
+                <input
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-brand-500/20 transition-all"
-                  value={form.topic} 
-                  onChange={e => setForm(f => ({ ...f, topic: e.target.value }))} 
-                  placeholder="e.g. Linear Equations" 
-                  required 
-                />
-              </div>
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Periods Required *</label>
-                <input 
-                  type="number" 
-                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all"
-                  value={form.periods} 
-                  onChange={e => setForm(f => ({...f, periods: e.target.value}))} 
-                  min="1" 
+                  value={form.topic}
+                  onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
+                  placeholder="e.g. Linear Equations"
                   required
                 />
               </div>
+              {!editId && (
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Periods Required *</label>
+                  <input
+                    type="number"
+                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                    value={form.periods}
+                    onChange={e => setForm(f => ({ ...f, periods: e.target.value }))}
+                    min="1"
+                    required
+                  />
+                </div>
+              )}
             </div>
+
+            {editId && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Periods Required *</label>
+                  <input
+                    type="number"
+                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all"
+                    value={form.periods}
+                    onChange={e => setForm(f => ({ ...f, periods: e.target.value }))}
+                    min="1"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Status *</label>
+                  <select
+                    className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
+                    value={form.status || 'pending'}
+                    onChange={e => setForm(f => ({ ...f, status: e.target.value, is_completed: e.target.value === 'completed' }))}
+                    required
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Learning Outcome</label>
-              <textarea 
+              <textarea
                 className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3 text-sm font-bold text-slate-700 placeholder:text-slate-300 focus:ring-2 focus:ring-brand-500/20 transition-all min-h-[100px] resize-none"
-                value={form.learning_outcome} 
-                onChange={e => setForm(f => ({...f, learning_outcome: e.target.value}))} 
-                placeholder="What will students learn in this topic?" 
+                value={form.learning_outcome}
+                onChange={e => setForm(f => ({ ...f, learning_outcome: e.target.value }))}
+                placeholder="What will students learn in this topic?"
               />
             </div>
 
             <div className="flex gap-3 pt-4">
-              <button 
-                type="submit" 
-                disabled={submitting} 
-                className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-brand-500/20 active:scale-[0.98] disabled:opacity-50"
-              >
-                {submitting ? <Loader2 size={18} className="animate-spin mx-auto" /> : 'Add to Schedule'}
-              </button>
-              <button 
-                type="button" 
-                onClick={() => setModalOpen(false)} 
-                className="px-8 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      </Modal>
-
-      {/* Bulk Upload Modal */}
-      <Modal open={bulkModalOpen} onClose={() => setBulkModalOpen(false)} title="Bulk Upload Syllabus">
-        <div className="space-y-6 p-1">
-          <div className="p-4 bg-blue-50 border border-blue-100 rounded-xl">
-            <h4 className="text-sm font-bold text-blue-900 mb-2 flex items-center gap-2">
-              <Info size={16} /> Instructions
-            </h4>
-            <ul className="text-xs text-blue-800 space-y-1 ml-6 list-disc">
-              <li>Download the template CSV file first (includes S.No column).</li>
-              <li>Fill in the Class, Subject, and Topic (mandatory).</li>
-              <li>Enter the <b>Teacher Name</b> or <b>ID</b> (case-insensitive).</li>
-              <li><b>Auto-Dates</b>: Entering 'Week 1' will auto-set dates as 1-7, 'Week 2' as 8-14, etc.</li>
-              <li>Upload the file to bulk create syllabus entries.</li>
-            </ul>
-          </div>
-
-          <form onSubmit={handleBulkUpload} className="space-y-4">
-            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:border-brand-400 transition-colors bg-slate-50/50">
-              <input
-                type="file"
-                id="bulk-file"
-                className="hidden"
-                accept=".csv,.xlsx,.xls"
-                onChange={e => setUploadFile(e.target.files[0])}
-              />
-              <label htmlFor="bulk-file" className="cursor-pointer">
-                <div className="w-12 h-12 bg-white rounded-xl shadow-sm flex items-center justify-center mx-auto mb-3 border border-slate-100 text-slate-400">
-                  {uploadFile ? <CheckCircle size={24} className="text-emerald-500" /> : <Plus size={24} />}
-                </div>
-                <p className="text-sm font-bold text-slate-700">
-                  {uploadFile ? uploadFile.name : 'Click to select CSV/Excel file'}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">Maximum size: 5MB</p>
-              </label>
-            </div>
-
-            <div className="flex gap-3">
               <button
                 type="submit"
-                disabled={!uploadFile || uploading}
-                className="btn-primary btn flex-1 justify-center disabled:opacity-50"
+                disabled={submitting}
+                className="flex-1 bg-brand-600 hover:bg-brand-700 text-white font-bold py-4 rounded-2xl transition-all shadow-lg shadow-brand-500/20 active:scale-[0.98] disabled:opacity-50"
               >
-                {uploading ? <Loader2 size={16} className="animate-spin mr-2" /> : <Download size={16} className="mr-2 rotate-180" />}
-                Start Upload
+                {submitting ? <Loader2 size={18} className="animate-spin mx-auto" /> : (editId ? 'Save Changes' : 'Add to Schedule')}
               </button>
               <button
                 type="button"
-                onClick={() => setBulkModalOpen(false)}
-                className="btn-secondary btn px-6"
+                onClick={() => setModalOpen(false)}
+                className="px-8 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
               >
                 Cancel
               </button>

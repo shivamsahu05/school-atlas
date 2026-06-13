@@ -25,24 +25,38 @@ function getTitle(pathname) {
   const map = {
     '/teacher':               'Dashboard',
     '/teacher/syllabus':      'Syllabus Tracking',
+    '/teacher/syllabus-report': 'Syllabus Report',
     '/teacher/lo':            'Learning Outcomes',
     '/teacher/analytics':     'Performance Analytics',
     '/teacher/schedule':      'Micro Schedule',
     '/teacher/time-table':    'Time Table',
     '/teacher/leave':         'Leave Management',
     '/teacher/profile':       'My Profile',
+    '/teacher/marks-entry':   'Marks Entry',
     '/teacher/events':        'Events & Notices',
     '/teacher/competitions':  'Competitions Management',
     '/admin':                 'School Overview',
     '/admin/syllabus':        'Syllabus Status',
+    '/admin/syllabus-report': 'Syllabus Report',
+    '/admin/schedule':        'Micro Schedule',
     '/admin/award-lo':        'Award LO Scores',
     '/admin/followups':       'Follow-ups',
     '/admin/observation':     'Classroom Observation',
     '/admin/performance':     'Teacher Performance',
     '/admin/users':           'User Management',
     '/admin/timetable':       'Timetable & Marks',
+    '/admin/student-timetable': 'Student Timetable',
     '/admin/leave':           'Leave Approval',
+    '/admin/marks-entry':     'Marks Entry',
     '/admin/notifications':   'Admin Notifications',
+    '/admin/teachers':        'Teacher Directory',
+    '/admin/students':        'Student Directory',
+    '/admin/permissions':     'Permission Control',
+    '/admin/competitions':    'Competitions',
+    '/admin/events':          'Events & Notices',
+    '/admin/contact':         'Messages',
+    '/admin/system':          'System Tools',
+    '/admin/academics':       'Manage Academics',
   }
   return map[pathname] ?? 'SAMS'
 }
@@ -338,7 +352,13 @@ export function DashboardLayout() {
         {/* No position:relative or z-index here — avoids stacking context */}
         {/* that would clip the portal-rendered notification dropdown       */}
         <main className="flex-1 overflow-y-auto scrollbar-thin flex flex-col">
-          <div className="p-4 lg:p-6 max-w-7xl mx-auto w-full flex-1">
+          <div className={`p-4 lg:p-6 mx-auto w-full flex-1 ${
+            pathname.includes('/schedule') || 
+            pathname.includes('/timetable') || 
+            pathname.includes('/marks-entry') 
+              ? 'max-w-none' 
+              : 'max-w-7xl'
+          }`}>
             <ErrorBoundary key={pathname}>
               <Outlet />
             </ErrorBoundary>

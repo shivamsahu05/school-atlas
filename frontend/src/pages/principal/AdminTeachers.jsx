@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { StatCard, SectionHeader, StatusBadge, Modal, FormInput } from '../../components/ui/index.jsx'
 import { DataTable } from '../../components/ui/DataTable.jsx'
-import { teachersApi } from '../../api'
+import { teachersApi, scheduleApi } from '../../api'
 
 export default function AdminTeachers() {
   const [teachers, setTeachers] = useState([])
@@ -26,6 +26,30 @@ export default function AdminTeachers() {
   const [bulkModal, setBulkModal] = useState(false)
   const [bulkResult, setBulkResult] = useState(null)
   const [showPassword, setShowPassword] = useState(false)
+  
+  const [viewAssignments, setViewAssignments] = useState([])
+  const [loadingAssignments, setLoadingAssignments] = useState(false)
+
+  useEffect(() => {
+    if (!viewTarget?.id) {
+      setViewAssignments([])
+      return
+    }
+    setLoadingAssignments(true)
+    scheduleApi.getMyAssignments({ teacher_id: viewTarget.id })
+      .then(res => {
+        // Fetch raw response details
+        const raw = res?.data?.assignments || res?.assignments || []
+        setViewAssignments(raw)
+      })
+      .catch(err => {
+        console.error('Error fetching teacher assignments:', err)
+        setViewAssignments([])
+      })
+      .finally(() => {
+        setLoadingAssignments(false)
+      })
+  }, [viewTarget])
 
   const fetchTeachers = useCallback(async () => {
     try {
@@ -257,7 +281,7 @@ export default function AdminTeachers() {
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
           <SectionHeader title="Teacher Directory" subtitle={`${teachers.length} staff members`} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 border border-slate-200 rounded-lg px-3 py-1.5 bg-white">
               <Search size={14} className="text-slate-400" />
               <input className="text-sm outline-none w-36" placeholder="Search…"
@@ -469,6 +493,39 @@ export default function AdminTeachers() {
                 <span className="text-sm text-slate-800">{value}</span>
               </div>
             ))}
+            
+            {/* Timetable Schedule Section */}
+            <div className="pt-4 border-t border-slate-100 mt-4">
+              <span className="text-xs font-black text-slate-400 uppercase tracking-wider block mb-3">Timetable Schedule / Assignments</span>
+              {loadingAssignments ? (
+                <div className="flex items-center gap-2 py-3 text-slate-400 text-xs">
+                  <Loader2 className="animate-spin text-brand-500" size={16} />
+                  <span>Loading schedule...</span>
+                </div>
+              ) : viewAssignments.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-[220px] overflow-y-auto pr-1">
+                  {viewAssignments.map((item, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50 border border-slate-100 rounded-xl hover:bg-brand-50/20 transition-all flex items-center justify-between group shadow-sm">
+                      <div className="space-y-0.5">
+                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Subject</div>
+                        <div className="text-sm font-bold text-slate-700">{item.subjectName || '—'}</div>
+                      </div>
+                      <div className="text-right space-y-0.5">
+                        <div className="text-[9px] font-black text-slate-400 uppercase tracking-widest leading-none">Class, Sec</div>
+                        <div className="text-xs font-black text-brand-600 bg-brand-50/50 group-hover:bg-brand-100/50 px-2 py-0.5 rounded-md border border-brand-100/30 inline-block mt-0.5">
+                          {item.className},{item.sectionCode || 'All'}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs font-bold text-slate-400 uppercase tracking-widest py-6">
+                  No active class/subject assignments
+                </div>
+              )}
+            </div>
+
             <div className="flex gap-3 pt-4">
               <button onClick={() => { setViewTarget(null); openEdit(viewTarget) }}
                 className="btn-secondary btn gap-1.5"><Edit2 size={14} /> Edit</button>

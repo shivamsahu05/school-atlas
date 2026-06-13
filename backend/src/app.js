@@ -31,6 +31,7 @@ const permissionsRoutes     = require('./routes/permissionRoutes')
 const studentsRoutes        = require('./routes/students')
 const contactRoutes         = require('./routes/contactRoutes')
 const systemRoutes          = require('./routes/systemRoutes')
+const marksRoutes           = require('./routes/marksRoutes')
 
 const app = express()
 
@@ -96,15 +97,31 @@ app.use(`${A}/admin`,          reportsRoutes)
 app.use(`${A}/admin/permissions`, permissionsRoutes)
 app.use(`${A}/admin/system`,      systemRoutes)
 
+// 7. Marks Entry
+app.use(`${A}/marks`,          marksRoutes)
+
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound)
 app.use(errorHandler)
 
 // Server Listen
 const PORT = process.env.PORT || 5000;
+const prisma = require('./config/db');
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server flying on port ${PORT}`);
   console.log(`🔗 API Base: http://0.0.0.0:${PORT}${A}`);
+
+  // Test database connection at startup
+  prisma.$connect()
+    .then(() => {
+      console.log('🔌 [Database]: Connected to MySQL successfully!');
+    })
+    .catch((err) => {
+      console.error('\n❌ [DATABASE CONNECTION ERROR]:');
+      console.error('👉 Could not connect to the MySQL database at 127.0.0.1:3306.');
+      console.error('👉 Please make sure XAMPP, Laragon, or your MySQL Windows Service is started and running!\n');
+    });
 });
 
 module.exports = app;

@@ -255,6 +255,7 @@ export const performanceApi = {
   getMe:      ()          => api.get('/performance/me').then(r => r.data),
   getById:    (teacherId) => api.get(`/performance/${teacherId}`).then(r => r.data),
   recalculate:(teacherId) => api.post(`/performance/${teacherId}/recalculate`).then(r => r.data),
+  saveOverride:(data)     => api.post('/performance/override', data).then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -282,7 +283,7 @@ export const leaveApi = {
 export const scheduleApi = {
   getMySchedule:    (params = {}) => api.get('/teacher/schedule', { params }).then(r => r.data),
   getTimetable:     ()            => api.get('/teacher/timetable').then(r => r.data),
-  getMyAssignments: ()            => api.get('/teacher/schedule/assignments').then(r => r.data),
+  getMyAssignments: (params = {}) => api.get('/teacher/schedule/assignments', { params }).then(r => r.data),
   markComplete:     (data)        => api.post('/teacher/schedule/update', data).then(r => r.data),
   getMicroSchedule: (params = {}) => api.get('/teacher/schedule/micro-schedule', { params }).then(r => r.data),
   saveMicroSchedule:(data)        => api.post('/teacher/schedule/micro-schedule', data).then(r => r.data),

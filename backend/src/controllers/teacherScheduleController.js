@@ -91,38 +91,100 @@ exports.getMyTimetable = async (req, res) => {
  */
 exports.getMyAssignments = async (req, res) => {
   try {
-    const [assignments] = await pool.execute(`
-      SELECT DISTINCT 
-        classId, className, sectionId, sectionName, subjectId, subjectName
-      FROM (
-        -- SOURCE A: Timetable assignments (teacher_id stores users.id)
-        SELECT 
-          ac.id as classId, ac.class_number as className,
-          asec.id as sectionId, asec.name as sectionName,
-          s.id as subjectId, s.name as subjectName
+    let assignments = [];
+    const targetTeacherId = req.query.teacher_id ? Number(req.query.teacher_id) : null;
+
+    if (targetTeacherId) {
+      const [rows] = await pool.execute(`
+        SELECT DISTINCT
+          ac.class_number as className,
+          COALESCE(asec.code, tt.section) as sectionCode,
+          s.name as subjectName
         FROM teacher_timetable tt
         JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
         LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
         JOIN subjects s ON tt.subject_id = s.id
         WHERE tt.teacher_id = ?
+        ORDER BY className ASC, sectionCode ASC, subjectName ASC
+      `, [targetTeacherId]);
+      assignments = rows;
+    } else if (req.user.role === 'admin') {
+      const [rows] = await pool.execute(`
+        SELECT DISTINCT classId, className, sectionId, sectionName, subjectId, subjectName
+        FROM (
+          SELECT DISTINCT 
+            ac.id as classId, ac.class_number as className,
+            asec.id as sectionId, asec.name as sectionName,
+            s.id as subjectId, s.name as subjectName
+          FROM teacher_timetable tt
+          JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
+          LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
+          JOIN subjects s ON tt.subject_id = s.id
+          WHERE ac.id IS NOT NULL AND s.id IS NOT NULL
 
-        UNION
+          UNION
 
-        -- SOURCE B: Manual Module Permissions (teacher_id stores teachers.id)
-        SELECT 
-          ac.id as classId, ac.class_number as className,
-          asec.id as sectionId, asec.name as sectionName,
-          s.id as subjectId, s.name as subjectName
-        FROM teacher_module_permissions tmp
-        JOIN academic_classes ac ON tmp.class_id = ac.id
-        LEFT JOIN acad_sections asec ON tmp.section_id = asec.id
-        JOIN subjects s ON tmp.subject_id = s.id
-        JOIN teachers t ON tmp.teacher_id = t.id
-        WHERE t.user_id = ? AND tmp.status = 'ACTIVE'
-      ) as combined
-      WHERE classId IS NOT NULL AND subjectId IS NOT NULL
-      ORDER BY className ASC, sectionName ASC
-    `, [req.user.id, req.user.id]);
+          SELECT DISTINCT 
+            ac.id as classId, ac.class_number as className,
+            asec.id as sectionId, asec.name as sectionName,
+            s.id as subjectId, s.name as subjectName
+          FROM syllabus sy
+          JOIN academic_classes ac ON sy.class_id = ac.id
+          LEFT JOIN acad_sections asec ON sy.section_id = asec.id
+          JOIN subjects s ON sy.subject_id = s.id
+          WHERE ac.id IS NOT NULL AND s.id IS NOT NULL
+        ) as combined
+        ORDER BY className ASC, sectionName ASC
+      `);
+      assignments = rows;
+    } else {
+      const [rows] = await pool.execute(`
+        SELECT DISTINCT 
+          classId, className, sectionId, sectionName, subjectId, subjectName
+        FROM (
+          -- SOURCE A: Timetable assignments (teacher_id stores users.id)
+          SELECT 
+            ac.id as classId, ac.class_number as className,
+            asec.id as sectionId, asec.name as sectionName,
+            s.id as subjectId, s.name as subjectName
+          FROM teacher_timetable tt
+          JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
+          LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
+          JOIN subjects s ON tt.subject_id = s.id
+          WHERE tt.teacher_id = ?
+
+          UNION
+
+          -- SOURCE B: Manual Module Permissions (teacher_id stores teachers.id)
+          SELECT 
+            ac.id as classId, ac.class_number as className,
+            asec.id as sectionId, asec.name as sectionName,
+            s.id as subjectId, s.name as subjectName
+          FROM teacher_module_permissions tmp
+          JOIN academic_classes ac ON tmp.class_id = ac.id
+          LEFT JOIN acad_sections asec ON tmp.section_id = asec.id
+          JOIN subjects s ON tmp.subject_id = s.id
+          JOIN teachers t ON tmp.teacher_id = t.id
+          WHERE t.user_id = ? AND tmp.status = 'ACTIVE'
+
+          UNION
+
+          -- SOURCE C: Syllabus assignments where they are the assigned teacher
+          SELECT 
+            ac.id as classId, ac.class_number as className,
+            asec.id as sectionId, asec.name as sectionName,
+            s.id as subjectId, s.name as subjectName
+          FROM syllabus sy
+          JOIN academic_classes ac ON sy.class_id = ac.id
+          LEFT JOIN acad_sections asec ON sy.section_id = asec.id
+          JOIN subjects s ON sy.subject_id = s.id
+          WHERE sy.teacher_id = ?
+        ) as combined
+        WHERE classId IS NOT NULL AND subjectId IS NOT NULL
+        ORDER BY className ASC, sectionName ASC
+      `, [req.user.id, req.user.id, req.user.id]);
+      assignments = rows;
+    }
 
     res.json({ success: true, data: { assignments, teacherId: req.user.id } });
 
@@ -188,7 +250,7 @@ exports.saveMicroSchedule = async (req, res) => {
     await connection.beginTransaction();
     const userId = req.user.id;
     const [teachers] = await connection.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
-    const teacherId = teachers[0].id;
+    const loggedInTeacherId = teachers.length > 0 ? teachers[0].id : null;
 
     for (const item of items) {
       const { 
@@ -199,6 +261,33 @@ exports.saveMicroSchedule = async (req, res) => {
 
       const finalStatusRaw = (item.status || learning_status || 'pending').toLowerCase();
       const isFinishing = finalStatusRaw === 'completed';
+
+      let finalTeacherId = loggedInTeacherId;
+      if (!finalTeacherId) {
+        if (syllabus_id) {
+          const [sylRows] = await connection.execute('SELECT teacher_id FROM syllabus WHERE id = ?', [syllabus_id]);
+          if (sylRows.length > 0 && sylRows[0].teacher_id) {
+            const [tRows] = await connection.execute('SELECT id FROM teachers WHERE user_id = ?', [sylRows[0].teacher_id]);
+            if (tRows.length > 0) finalTeacherId = tRows[0].id;
+          }
+        }
+        if (!finalTeacherId) {
+          const [ttRows] = await connection.execute(`
+            SELECT tt.teacher_id 
+            FROM teacher_timetable tt
+            WHERE tt.subject_id = ? AND tt.class_number = ? AND tt.section = ?
+            LIMIT 1
+          `, [Number(subject_id), class_number, section || '']);
+          if (ttRows.length > 0) {
+            const [tRows] = await connection.execute('SELECT id FROM teachers WHERE user_id = ?', [ttRows[0].teacher_id]);
+            if (tRows.length > 0) finalTeacherId = tRows[0].id;
+          }
+        }
+        if (!finalTeacherId) {
+          const [anyTeacher] = await connection.execute('SELECT id FROM teachers LIMIT 1');
+          finalTeacherId = anyTeacher.length > 0 ? anyTeacher[0].id : 1;
+        }
+      }
 
       // 1. UPDATE SYLLABUS (ID-BASED SSOT)
       if (syllabus_id) {
@@ -245,7 +334,7 @@ exports.saveMicroSchedule = async (req, res) => {
       await connection.execute(`
         INSERT INTO micro_schedule (teacher_id, class_number, section, subject_id, month, week, topic, periods_planned, learning_status, completed_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE topic=VALUES(topic), learning_status=VALUES(learning_status)
-      `, [teacherId, class_number, section || '', Number(subject_id), month, week, topic || '', Number(periods_planned || 0), msStatus, isFinishing ? new Date() : null]);
+      `, [finalTeacherId, class_number, section || '', Number(subject_id), month, week, topic || '', Number(periods_planned || 0), msStatus, isFinishing ? new Date() : null]);
 
       // 3. STUDENT DATA SYNC (Dual Persistence: JSON for reporting + Relational for tracking)
       if (syllabus_id && students_status && Array.isArray(students_status)) {

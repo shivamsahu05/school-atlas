@@ -55,6 +55,14 @@ export default function AdminPermissions() {
     end_date: ''
   })
 
+  // Bulk/multi-selection states
+  const [allTeachersToggled, setAllTeachersToggled] = useState(false)
+  const [selectedTeacherIds, setSelectedTeacherIds] = useState([])
+  const [selectedClasses, setSelectedClasses] = useState([])
+  const [selectedSections, setSelectedSections] = useState({})
+  const [selectedSubjects, setSelectedSubjects] = useState([])
+  const [selectedModuleIds, setSelectedModuleIds] = useState([])
+
   // ── Data Fetching ──────────────────────────────────────────────────────────
 
   const fetchData = async () => {
@@ -129,22 +137,12 @@ export default function AdminPermissions() {
   }
 
   const handleGrant = async () => {
-    const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
-    const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
-    const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
-
-    if (!form.teacher_id || !form.module_id || !form.start_date || !form.end_date) {
-      alert('Please fill in all required fields.')
-      return
-    }
-
-    if (!isGlobalModule && !isAllModules && !form.class_id) {
-      alert('Class Scope is required for this module.')
-      return
-    }
-
-    try {
-      if (isEditMode) {
+    if (isEditMode) {
+      if (!form.start_date || !form.end_date) {
+        alert('Please fill in all required fields.')
+        return
+      }
+      try {
         const res = await api.put(`/admin/permissions/${editingId}`, {
           start_date: form.start_date,
           end_date: form.end_date
@@ -154,13 +152,61 @@ export default function AdminPermissions() {
           fetchData()
           setIsModalOpen(false)
         }
+      } catch (error) {
+        console.error('[UPDATE FAILED]:', error);
+        alert(error.response?.data?.message || 'Action failed')
+      }
+      return;
+    }
+
+    // Grant Mode Validation
+    if (selectedModuleIds.length === 0 || !form.start_date || !form.end_date) {
+      alert('Please fill in all required fields (Module, Start Date, End Date).')
+      return
+    }
+
+    // Resolve teacher_ids
+    let teacherIdsToSend = []
+    if (allTeachersToggled) {
+      teacherIdsToSend = meta.teachers.map(t => t.id)
+    } else {
+      teacherIdsToSend = selectedTeacherIds
+    }
+
+    if (teacherIdsToSend.length === 0) {
+      alert('Please select at least one teacher.')
+      return
+    }
+
+    // Resolve scopes
+    let scopesToSend = []
+    selectedClasses.forEach(classId => {
+      const sections = selectedSections[classId] || []
+      if (sections.length === 0) {
+        // If no section is checked, it means all sections (null in DB)
+        scopesToSend.push({ class_id: classId, section_id: null })
       } else {
-        const res = await api.post('/admin/permissions/grant', form)
-        if (res.data.success) {
-          alert('Permission granted successfully')
-          fetchData()
-          setIsModalOpen(false)
-        }
+        sections.forEach(secId => {
+          scopesToSend.push({ class_id: classId, section_id: secId })
+        })
+      }
+    })
+
+    try {
+      const payload = {
+        module_ids: selectedModuleIds,
+        teacher_ids: teacherIdsToSend,
+        scopes: scopesToSend,
+        subject_ids: selectedSubjects.length > 0 ? selectedSubjects : [null],
+        start_date: form.start_date,
+        end_date: form.end_date
+      }
+
+      const res = await api.post('/admin/permissions/grant', payload)
+      if (res.data.success) {
+        alert('Permissions granted successfully')
+        fetchData()
+        setIsModalOpen(false)
       }
     } catch (error) {
       console.error('[GRANT FAILED]:', error);
@@ -180,6 +226,25 @@ export default function AdminPermissions() {
       start_date: p.start_date ? p.start_date.split('T')[0] : '',
       end_date: p.end_date ? p.end_date.split('T')[0] : ''
     })
+    setAllTeachersToggled(false)
+    setSelectedTeacherIds([p.teacher_id])
+    setSelectedModuleIds([p.module_id])
+    if (p.class_id) {
+      setSelectedClasses([p.class_id])
+      if (p.section_id) {
+        setSelectedSections({ [p.class_id]: [p.section_id] })
+      } else {
+        setSelectedSections({})
+      }
+    } else {
+      setSelectedClasses([])
+      setSelectedSections({})
+    }
+    if (p.subject_id) {
+      setSelectedSubjects([p.subject_id])
+    } else {
+      setSelectedSubjects([])
+    }
     setIsModalOpen(true)
   }
 
@@ -191,6 +256,12 @@ export default function AdminPermissions() {
       section_id: '', subject_id: '',
       start_date: '', end_date: ''
     })
+    setAllTeachersToggled(false)
+    setSelectedTeacherIds([])
+    setSelectedClasses([])
+    setSelectedSections({})
+    setSelectedSubjects([])
+    setSelectedModuleIds([])
   }
 
   const MODULE_ICONS = {
@@ -201,8 +272,65 @@ export default function AdminPermissions() {
     'students_management': GraduationCap
   }
 
+  const isModuleDisabled = (moduleId) => {
+    if (isEditMode) return true;
+
+    const isKeySelected = (key) => {
+      if (selectedModuleIds.includes(key)) return true;
+      const targetModule = meta.modules.find(m => m.module_key === key);
+      return targetModule && selectedModuleIds.includes(targetModule.id);
+    };
+
+    const hasAllFull = selectedModuleIds.includes('ALL_FULL');
+    const hasAllAcademic = selectedModuleIds.includes('ALL_ACADEMIC');
+    const hasStudentsMgt = isKeySelected('students_management');
+
+    const selectedIndividualAcademic = selectedModuleIds.filter(id => {
+      if (id === 'ALL_FULL' || id === 'ALL_ACADEMIC') return false;
+      const targetModule = meta.modules.find(m => m.id === id);
+      return targetModule && targetModule.module_key !== 'students_management';
+    });
+
+    if (moduleId === 'ALL_FULL') {
+      return hasAllAcademic || selectedIndividualAcademic.length > 0 || hasStudentsMgt;
+    }
+    if (moduleId === 'ALL_ACADEMIC') {
+      return hasAllFull || selectedIndividualAcademic.length > 0;
+    }
+
+    const currentModule = meta.modules.find(m => m.id === moduleId);
+    if (currentModule && currentModule.module_key === 'students_management') {
+      return hasAllFull;
+    }
+    
+    return hasAllFull || hasAllAcademic;
+  };
+
+  const handleModuleToggle = (id) => {
+    if (id === 'ALL_FULL') {
+      if (selectedModuleIds.includes('ALL_FULL')) {
+        setSelectedModuleIds([]);
+      } else {
+        setSelectedModuleIds(['ALL_FULL']);
+      }
+    } else if (id === 'ALL_ACADEMIC') {
+      if (selectedModuleIds.includes('ALL_ACADEMIC')) {
+        setSelectedModuleIds([]);
+      } else {
+        setSelectedModuleIds(['ALL_ACADEMIC']);
+      }
+    } else {
+      if (selectedModuleIds.includes(id)) {
+        setSelectedModuleIds(selectedModuleIds.filter(x => x !== id));
+      } else {
+        setSelectedModuleIds([...selectedModuleIds, id]);
+      }
+    }
+  };
+
   const selectedModuleKey = meta.modules.find(m => String(m.id) === String(form.module_id))?.module_key;
   const isGlobalModule = selectedModuleKey === 'students_management' || selectedModuleKey === 'SYLLABUS_UPLOAD';
+  const isAllModules = form.module_id === 'ALL_ACADEMIC' || form.module_id === 'ALL_FULL';
 
   // ── Table Config ───────────────────────────────────────────────────────────
 
@@ -363,116 +491,259 @@ export default function AdminPermissions() {
 
            <div className="space-y-5">
               {/* Select Faculty */}
-              <div className="relative group">
-                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Select Faculty</label>
-                 <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                      <Users size={16} />
-                    </div>
-                    <select 
-                      disabled={isEditMode}
-                      className="select pl-11 disabled:opacity-50"
-                      value={form.teacher_id} 
-                      onChange={e => setForm({...form, teacher_id: e.target.value})}
-                    >
-                      <option value="">Choose teacher...</option>
-                      {Array.isArray(meta.teachers) && meta.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                      <ChevronDown size={16} />
-                    </div>}
-                 </div>
-              </div>
+              {isEditMode ? (
+                <div className="relative group">
+                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Select Faculty</label>
+                   <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Users size={16} />
+                      </div>
+                      <select 
+                        disabled={true}
+                        className="select pl-11 disabled:opacity-50"
+                        value={form.teacher_id}
+                        onChange={() => {}}
+                      >
+                        {meta.teachers.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                   </div>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                   <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Select Faculty *</label>
+                   <div className="flex items-center gap-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                     <label className="flex items-center gap-2 text-sm font-semibold text-slate-700 cursor-pointer">
+                       <input 
+                         type="checkbox" 
+                         checked={allTeachersToggled} 
+                         onChange={e => {
+                           setAllTeachersToggled(e.target.checked);
+                           if (e.target.checked) setSelectedTeacherIds([]);
+                         }}
+                         className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                       />
+                       All Teachers ({meta.teachers.length})
+                     </label>
+                   </div>
+
+                   {!allTeachersToggled && (
+                     <div className="border border-slate-200 rounded-xl p-3 max-h-48 overflow-y-auto space-y-2 bg-white">
+                       <div className="flex justify-between items-center pb-2 border-b border-slate-100 mb-2">
+                         <span className="text-xs text-slate-400 font-bold uppercase">Choose Teachers ({selectedTeacherIds.length} selected)</span>
+                         <div className="flex gap-2">
+                           <button 
+                             type="button"
+                             onClick={() => setSelectedTeacherIds(meta.teachers.map(t => t.id))}
+                             className="text-[10px] font-bold text-brand-600 hover:underline"
+                           >
+                             Select All
+                           </button>
+                           <span className="text-slate-300">|</span>
+                           <button 
+                             type="button"
+                             onClick={() => setSelectedTeacherIds([])}
+                             className="text-[10px] font-bold text-slate-500 hover:underline"
+                           >
+                             Clear
+                           </button>
+                         </div>
+                       </div>
+                       {meta.teachers.map(t => (
+                         <label key={t.id} className="flex items-center gap-2 text-xs font-medium text-slate-700 hover:bg-slate-50 p-1.5 rounded cursor-pointer transition-colors">
+                           <input 
+                             type="checkbox"
+                             checked={selectedTeacherIds.includes(t.id)}
+                             onChange={e => {
+                               if (e.target.checked) {
+                                 setSelectedTeacherIds([...selectedTeacherIds, t.id]);
+                               } else {
+                                 setSelectedTeacherIds(selectedTeacherIds.filter(id => id !== t.id));
+                               }
+                             }}
+                             className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                           />
+                           {t.name} <span className="text-slate-400 text-[10px]">({t.email})</span>
+                         </label>
+                       ))}
+                     </div>
+                   )}
+                </div>
+              )}
 
               {/* Access Module */}
-              <div className="relative group">
-                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Access Module</label>
-                 <div className="relative">
-                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                      <Lock size={16} />
-                    </div>
-                    <select 
-                      disabled={isEditMode}
-                      className="select pl-11 disabled:opacity-50"
-                      value={form.module_id} 
-                      onChange={e => setForm({...form, module_id: e.target.value})}
-                    >
-                      <option value="">Select module...</option>
-                      <option value="ALL_ACADEMIC" className="font-bold text-brand-600">All Academic (Excludes Students Mgt.)</option>
-                      <option value="ALL_FULL" className="font-bold text-rose-600">Full System (Includes Students Mgt.)</option>
-                      {Array.isArray(meta.modules) && meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
-                    </select>
-                    {!isEditMode && <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                      <ChevronDown size={16} />
-                    </div>}
-                 </div>
+              <div className="space-y-3">
+                 <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Access Module *</label>
+                 
+                 {isEditMode ? (
+                   <div className="relative">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                        <Lock size={16} />
+                      </div>
+                      <select 
+                        disabled={true}
+                        className="select pl-11 disabled:opacity-50"
+                        value={form.module_id}
+                        onChange={() => {}}
+                      >
+                        {meta.modules.map(m => <option key={m.id} value={m.id}>{m.module_name || m.name}</option>)}
+                      </select>
+                   </div>
+                 ) : (
+                   <div className="border border-slate-200 rounded-xl p-3 max-h-60 overflow-y-auto space-y-2 bg-white">
+                     {/* Bulk Options */}
+                     <div className="space-y-2 pb-2 border-b border-slate-100 mb-2">
+                       <label className={`flex items-center gap-2 text-xs font-semibold p-1.5 rounded cursor-pointer transition-colors ${isModuleDisabled('ALL_ACADEMIC') ? 'opacity-40 cursor-not-allowed text-slate-400' : 'text-brand-700 hover:bg-brand-50'}`}>
+                         <input 
+                           type="checkbox"
+                           checked={selectedModuleIds.includes('ALL_ACADEMIC')}
+                           disabled={isModuleDisabled('ALL_ACADEMIC')}
+                           onChange={() => handleModuleToggle('ALL_ACADEMIC')}
+                           className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300 disabled:opacity-50"
+                         />
+                         All Academic (Excludes Students Mgt.)
+                       </label>
+                       <label className={`flex items-center gap-2 text-xs font-semibold p-1.5 rounded cursor-pointer transition-colors ${isModuleDisabled('ALL_FULL') ? 'opacity-40 cursor-not-allowed text-slate-400' : 'text-rose-700 hover:bg-rose-50'}`}>
+                         <input 
+                           type="checkbox"
+                           checked={selectedModuleIds.includes('ALL_FULL')}
+                           disabled={isModuleDisabled('ALL_FULL')}
+                           onChange={() => handleModuleToggle('ALL_FULL')}
+                           className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 border-slate-300 disabled:opacity-50"
+                         />
+                         Full System (Includes Students Mgt.)
+                       </label>
+                     </div>
+
+                     {/* Individual Modules */}
+                     <div className="space-y-2">
+                       <div className="text-[10px] text-slate-400 font-bold uppercase mb-1">Choose Modules</div>
+                       {meta.modules.map(m => {
+                         const isDisabled = isModuleDisabled(m.id);
+                         const isChecked = selectedModuleIds.includes(m.id);
+                         return (
+                           <label key={m.id} className={`flex items-center gap-2 text-xs font-medium p-1.5 rounded cursor-pointer transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed text-slate-400' : 'text-slate-700 hover:bg-slate-50'}`}>
+                             <input 
+                               type="checkbox"
+                               checked={isChecked}
+                               disabled={isDisabled}
+                               onChange={() => handleModuleToggle(m.id)}
+                               className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300 disabled:opacity-50"
+                             />
+                             {m.module_name || m.name}
+                           </label>
+                         );
+                       })}
+                     </div>
+                   </div>
+                 )}
               </div>
 
-              {/* Class & Section Scope - Hidden for Students Management and All Modules (Optional) */}
-              {!isEditMode && !isGlobalModule && (
-                <>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="relative group">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Class Scope</label>
-                        <div className="relative">
-                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                            <GraduationCap size={16} />
+              {/* Class & Section Scope */}
+              {!isEditMode && (
+                <div className="space-y-4">
+                  {/* Class Scope Tick Options */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Class Scope *</label>
+                    <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/30 space-y-3 max-h-60 overflow-y-auto">
+                      {meta.classes.map(c => {
+                        const isClassChecked = selectedClasses.includes(c.id);
+                        const sectionsForClass = meta.sections.filter(s => String(s.class_id) === String(c.id));
+                        
+                        return (
+                          <div key={c.id} className="space-y-2 border-b border-slate-100 last:border-0 pb-2.5 last:pb-0">
+                            <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer hover:text-brand-600 transition-colors">
+                              <input 
+                                type="checkbox"
+                                checked={isClassChecked}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedClasses([...selectedClasses, c.id]);
+                                  } else {
+                                    setSelectedClasses(selectedClasses.filter(id => id !== c.id));
+                                    const updatedSec = { ...selectedSections };
+                                    delete updatedSec[c.id];
+                                    setSelectedSections(updatedSec);
+                                  }
+                                }}
+                                className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                              />
+                              {c.name}
+                            </label>
+                            
+                            {/* Section Tick Options for this Class (only show if Class is Checked) */}
+                            {isClassChecked && sectionsForClass.length > 0 && (
+                              <div className="pl-6 pt-1 flex flex-wrap gap-3">
+                                {sectionsForClass.map(sec => {
+                                  const currentSecs = selectedSections[c.id] || [];
+                                  const isSecChecked = currentSecs.includes(sec.id);
+                                  return (
+                                    <label key={sec.id} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer">
+                                      <input 
+                                        type="checkbox"
+                                        checked={isSecChecked}
+                                        onChange={e => {
+                                          if (e.target.checked) {
+                                            setSelectedSections({
+                                              ...selectedSections,
+                                              [c.id]: [...currentSecs, sec.id]
+                                            });
+                                          } else {
+                                            setSelectedSections({
+                                              ...selectedSections,
+                                              [c.id]: currentSecs.filter(id => id !== sec.id)
+                                            });
+                                          }
+                                        }}
+                                        className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                                      />
+                                      {sec.name}
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
-                          <select 
-                            className="select pl-11"
-                            value={form.class_id} 
-                            onChange={e => setForm({...form, class_id: e.target.value})}
-                          >
-                            <option value="">Select class...</option>
-                            {Array.isArray(meta.classes) && meta.classes.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                          </select>
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                            <ChevronDown size={16} />
-                          </div>
-                        </div>
-                    </div>
-                    <div className="relative group">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Section (Optional)</label>
-                        <div className="relative">
-                          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                            <LayoutGrid size={16} />
-                          </div>
-                          <select 
-                            className="select pl-11"
-                            value={form.section_id} 
-                            onChange={e => setForm({...form, section_id: e.target.value})}
-                          >
-                            <option value="">All Sections</option>
-                            {Array.isArray(filteredSections) && filteredSections.map(opt => <option key={opt.id} value={opt.id}>{opt.name}</option>)}
-                          </select>
-                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                            <ChevronDown size={16} />
-                          </div>
-                        </div>
+                        );
+                      })}
                     </div>
                   </div>
 
-                  {/* Subject */}
-                  <div className="relative group">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 mb-1.5 block">Subject (Optional)</label>
-                    <div className="relative">
-                        <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-brand-500 transition-colors pointer-events-none">
-                          <BookOpen size={16} />
-                        </div>
-                        <select 
-                          className="select pl-11"
-                          value={form.subject_id} 
-                          onChange={e => setForm({...form, subject_id: e.target.value})}
+                  {/* Subject Scope Tick Options */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Subject Scope (Optional — default is All Subjects)</label>
+                    <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 bg-white">
+                      <div className="flex justify-between items-center pb-1.5 border-b border-slate-100 mb-1.5">
+                        <span className="text-[10px] text-slate-400 font-bold uppercase">{selectedSubjects.length} selected</span>
+                        <button 
+                          type="button"
+                          onClick={() => setSelectedSubjects([])}
+                          className="text-[10px] font-bold text-slate-500 hover:underline"
                         >
-                          <option value="">All Subjects</option>
-                          {Array.isArray(meta.subjects) && meta.subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                          <ChevronDown size={16} />
-                        </div>
+                          Clear Selections
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {meta.subjects.map(s => (
+                          <label key={s.id} className="flex items-center gap-2 text-xs font-medium text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer transition-colors">
+                            <input 
+                              type="checkbox"
+                              checked={selectedSubjects.includes(s.id)}
+                              onChange={e => {
+                                if (e.target.checked) {
+                                  setSelectedSubjects([...selectedSubjects, s.id]);
+                                } else {
+                                  setSelectedSubjects(selectedSubjects.filter(id => id !== s.id));
+                                }
+                              }}
+                              className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
+                            />
+                            {s.name}
+                          </label>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </>
+                </div>
               )}
 
               {/* Dates */}
