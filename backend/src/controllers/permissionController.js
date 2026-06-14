@@ -138,7 +138,7 @@ exports.grant = async (req, res) => {
         const includeStudents = mId === 'ALL_FULL';
         const queryStr = includeStudents 
           ? "SELECT id, module_key FROM modules"
-          : "SELECT id, module_key FROM modules WHERE module_key != 'students_management'";
+          : "SELECT id, module_key FROM modules WHERE module_key NOT IN ('students_management', 'MARKS_ENTRY')";
         const [dbModules] = await pool.execute(queryStr);
         dbModules.forEach(dbm => {
           if (!modulesToGrant.some(x => String(x.id) === String(dbm.id))) {

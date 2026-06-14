@@ -39,10 +39,11 @@ const getAutoScores = async (userId) => {
   // LO Achievement from Award LO module (teacher_performance_lo)
   // teacher_performance_lo uses teacher profile id (teachers.id), not user id
   let lo = 0;
+  let profileId = null;
   try {
     const [tProfileRows] = await pool.execute('SELECT id FROM teachers WHERE user_id = ?', [userId]);
     if (tProfileRows && tProfileRows.length > 0) {
-      const profileId = tProfileRows[0].id;
+      profileId = tProfileRows[0].id;
       const [loRows] = await pool.execute(
         'SELECT AVG(principal_score) AS avg_lo FROM teacher_performance_lo WHERE teacher_id = ?',
         [profileId]
@@ -54,12 +55,15 @@ const getAutoScores = async (userId) => {
   }
 
   // Observation Score from class_observations
-  const [obsRows] = await pool.execute(`
-    SELECT AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs
-    FROM class_observations
-    WHERE teacher_id = ?
-  `, [userId]);
-  const observation = parseFloat(Number(obsRows[0]?.avg_obs || 0).toFixed(1));
+  let observation = 0;
+  if (profileId) {
+    const [obsRows] = await pool.execute(`
+      SELECT AVG((total_score / 50) * 100) AS avg_obs
+      FROM class_observations
+      WHERE teacher_id = ?
+    `, [profileId]);
+    observation = parseFloat(Number(obsRows[0]?.avg_obs || 0).toFixed(1));
+  }
 
   return { syllabus, lo, observation };
 };

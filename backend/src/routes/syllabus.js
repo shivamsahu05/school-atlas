@@ -4,6 +4,7 @@ const {
   getSyllabus, getSyllabusById, createSyllabus, updateSyllabus, deleteSyllabus, 
   getSyllabusMetadata, downloadTemplate, bulkUploadSyllabus,
   getSyllabusPlan, uploadSyllabusPlan, addMicroSchedule, exportSyllabusPlan,
+  getTeacherAssignmentsForClassSubject,
   debugSyllabus
 } = require('../controllers/syllabusController')
 const { authenticate } = require('../middleware/auth')
@@ -16,8 +17,10 @@ router.use(authenticate)
 
 // 1. Specific Syllabus Plan Routes (Must be before wildcard routes like /:id)
 router.get('/plan', asyncHandler(getSyllabusPlan))
+router.get('/teacher-assignments', asyncHandler(getTeacherAssignmentsForClassSubject))
 router.post('/upload-syllabus', upload.single('file'), asyncHandler(uploadSyllabusPlan))
 router.post('/add-micro-schedule', asyncHandler(addMicroSchedule))
+router.put('/update-micro-schedule/:id', checkPermission('MICRO_SCHEDULE_EDIT'), asyncHandler(updateSyllabus))
 router.get('/export-syllabus', asyncHandler(exportSyllabusPlan))
 router.get('/debug-data', asyncHandler(debugSyllabus))
 

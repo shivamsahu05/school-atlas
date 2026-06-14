@@ -222,7 +222,7 @@ export default function AdminDashboard() {
           <div className="space-y-3 mt-2">
             {topPerformers.length === 0 ? (
               <p className="text-xs text-slate-400 text-center py-10">No performance data available</p>
-            ) : topPerformers.map((p, i) => (
+            ) : topPerformers.slice(0, 5).map((p, i) => (
               <div key={i} className="flex items-center gap-3 p-2 rounded-xl bg-slate-50/50 border border-slate-100/30">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-black
                   ${i === 0 ? 'bg-amber-400 text-white shadow-sm' : i === 1 ? 'bg-slate-300 text-slate-700' : i === 2 ? 'bg-orange-400 text-white' : 'bg-white text-slate-400 border border-slate-100'}`}>

@@ -639,14 +639,11 @@ const deleteTimeSlot = async (req, res) => {
   const existing = await prisma.time_slots.findUnique({ where: { id: Number(id) } })
   if (!existing) return sendError(res, 'Time slot not found.', 404)
 
-  // Check if any timetable entries use this slot
-  const entries = await prisma.teacher_timetable.findMany({ where: { time_slot_id: Number(id) } })
-  if (entries.length > 0) {
-    return sendError(res, `Cannot delete: ${entries.length} timetable entries use this slot. Remove them first.`, 409)
-  }
+  // Delete any timetable entries using this slot
+  await prisma.teacher_timetable.deleteMany({ where: { time_slot_id: Number(id) } })
 
   await prisma.time_slots.delete({ where: { id: Number(id) } })
-  return res.json({ success: true, message: 'Time slot deleted' })
+  return res.json({ success: true, message: 'Time slot and associated assignments deleted' })
 }
 
 const getTeacherTimetable = async (req, res) => {
@@ -666,6 +663,43 @@ const getTeacherTimetable = async (req, res) => {
     time_slot_id: r.time_slot_id,
     subject_id: r.subject_id,
     subject_name: r.subject.name,
+    class_number: r.class_number,
+    section: r.section,
+    stream_id: r.stream_id,
+    stream_name: r.stream?.name || null,
+    room_number: r.room_number,
+    start_time: r.time_slot.start_time,
+    end_time: r.time_slot.end_time,
+  }))
+
+  return res.json({ success: true, timetable })
+}
+
+const getAllTeacherTimetables = async (req, res) => {
+  const rows = await prisma.teacher_timetable.findMany({
+    include: {
+      time_slot: true,
+      subject: true,
+      stream: true,
+    },
+  })
+
+  // Also fetch teacher names via user_id lookup
+  const teacherIds = [...new Set(rows.map(r => r.teacher_id))]
+  const teacherUsers = await prisma.users.findMany({
+    where: { id: { in: teacherIds } },
+    select: { id: true, name: true },
+  })
+  const teacherMap = Object.fromEntries(teacherUsers.map(t => [t.id, t.name]))
+
+  const timetable = rows.map(r => ({
+    id: r.id,
+    day_of_week: r.day_of_week,
+    time_slot_id: r.time_slot_id,
+    subject_id: r.subject_id,
+    subject_name: r.subject.name,
+    teacher_id: r.teacher_id,
+    teacher_name: teacherMap[r.teacher_id] || 'Unknown',
     class_number: r.class_number,
     section: r.section,
     stream_id: r.stream_id,
@@ -824,7 +858,32 @@ const getResolvedTeacher = async (req, res) => {
 
     console.log(`[RESOLVE] Inputs: Class=${className}(#${classNum}), Section=${sectionName}, Subject=${subId}`);
 
-    // --- STRATEGY 1: TIMETABLE (Requested Priority) ---
+    // --- STRATEGY 1: MASTER ASSIGNMENT (teacher_assignments) ---
+    try {
+      const taQuery = `
+        SELECT t.id, u.name 
+        FROM teacher_assignments ta
+        JOIN teachers t ON ta.teacher_id = t.user_id
+        JOIN users u ON t.user_id = u.id
+        WHERE ta.class_id = ? AND ta.subject_id = ? 
+        ${section_id && section_id !== 'null' && section_id !== 'undefined' ? 'AND ta.section_id = ?' : ''}
+        LIMIT 1
+      `;
+      let taParams = [cls.id, subId];
+      if (section_id && section_id !== 'null' && section_id !== 'undefined') {
+        taParams.push(Number(section_id));
+      }
+      
+      const [taRows] = await pool.execute(taQuery, taParams);
+      if (taRows && taRows.length > 0) {
+        console.log(`[RESOLVE] Strategy 1 (teacher_assignments) Success: ${taRows[0].name} (ID: ${taRows[0].id})`);
+        return res.json({ success: true, teacher: taRows[0] });
+      }
+    } catch (err) {
+      console.warn('[RESOLVE] Strategy 1 (teacher_assignments) SQL Error:', err.message);
+    }
+
+    // --- STRATEGY 2: TIMETABLE ---
     // MUST return teachers.id (Profile ID) to match frontend dropdowns and observation/LO schemas
     try {
       const query = `
@@ -853,14 +912,14 @@ const getResolvedTeacher = async (req, res) => {
       const [rows] = await pool.execute(query, params);
 
       if (rows && rows.length > 0) {
-        console.log(`[RESOLVE] Strategy 1 (Timetable) Success: ${rows[0].name} (ID: ${rows[0].id})`);
+        console.log(`[RESOLVE] Strategy 2 (Timetable) Success: ${rows[0].name} (ID: ${rows[0].id})`);
         return res.json({ success: true, teacher: rows[0] });
       }
     } catch (err) {
-      console.warn('[RESOLVE] Strategy 1 (Timetable) SQL Error:', err.message);
+      console.warn('[RESOLVE] Strategy 2 (Timetable) SQL Error:', err.message);
     }
 
-    // --- STRATEGY 2: MASTER ASSIGNMENT (teacher_subjects) ---
+    // --- STRATEGY 3: MASTER ASSIGNMENT (teacher_subjects) ---
     try {
       const legacyClass = await prisma.classes.findFirst({
         where: {
@@ -886,7 +945,7 @@ const getResolvedTeacher = async (req, res) => {
 
         if (assignment?.teacher?.teacher_profile) {
           const tProfile = assignment.teacher.teacher_profile;
-          console.log(`[RESOLVE] Strategy 2 (Assignment) Success: ${assignment.teacher.name}`);
+          console.log(`[RESOLVE] Strategy 3 (Assignment) Success: ${assignment.teacher.name}`);
           return res.json({ 
             success: true, 
             teacher: { id: tProfile.id, name: assignment.teacher.name } 
@@ -894,8 +953,9 @@ const getResolvedTeacher = async (req, res) => {
         }
       }
     } catch (err) {
-      console.warn('[RESOLVE] Strategy 2 (Assignment) Error:', err.message);
+      console.warn('[RESOLVE] Strategy 3 (Assignment) Error:', err.message);
     }
+
 
     // --- STRATEGY 3: FUZZY FALLBACK (Subject Only) ---
     try {
@@ -935,7 +995,7 @@ module.exports = {
   assignSubjectUnified,
   getSimpleClasses,
   getTimeSlots, createTimeSlot, updateTimeSlot, deleteTimeSlot,
-  getTeacherTimetable, assignTimetableEntry, deleteTimetableEntry,
+  getTeacherTimetable, getAllTeacherTimetables, assignTimetableEntry, deleteTimetableEntry,
   getClassTimetable,
   getResolvedTeacher
 }

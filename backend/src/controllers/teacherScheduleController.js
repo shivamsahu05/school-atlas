@@ -96,93 +96,44 @@ exports.getMyAssignments = async (req, res) => {
 
     if (targetTeacherId) {
       const [rows] = await pool.execute(`
-        SELECT DISTINCT
-          ac.class_number as className,
-          COALESCE(asec.code, tt.section) as sectionCode,
-          s.name as subjectName
-        FROM teacher_timetable tt
-        JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
-        LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
-        JOIN subjects s ON tt.subject_id = s.id
-        WHERE tt.teacher_id = ?
-        ORDER BY className ASC, sectionCode ASC, subjectName ASC
+        SELECT ta.class_id as classId, c.name as className, 
+               ta.section_id as sectionId, s.name as sectionName, 
+               ta.subject_id as subjectId, sub.name as subjectName,
+               s.code as sectionCode
+        FROM teacher_assignments ta
+        JOIN academic_classes c ON ta.class_id = c.id
+        LEFT JOIN acad_sections s ON ta.section_id = s.id
+        JOIN subjects sub ON ta.subject_id = sub.id
+        WHERE ta.teacher_id = ?
+        ORDER BY className ASC, sectionName ASC, subjectName ASC
       `, [targetTeacherId]);
       assignments = rows;
     } else if (req.user.role === 'admin') {
       const [rows] = await pool.execute(`
-        SELECT DISTINCT classId, className, sectionId, sectionName, subjectId, subjectName
-        FROM (
-          SELECT DISTINCT 
-            ac.id as classId, ac.class_number as className,
-            asec.id as sectionId, asec.name as sectionName,
-            s.id as subjectId, s.name as subjectName
-          FROM teacher_timetable tt
-          JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
-          LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
-          JOIN subjects s ON tt.subject_id = s.id
-          WHERE ac.id IS NOT NULL AND s.id IS NOT NULL
-
-          UNION
-
-          SELECT DISTINCT 
-            ac.id as classId, ac.class_number as className,
-            asec.id as sectionId, asec.name as sectionName,
-            s.id as subjectId, s.name as subjectName
-          FROM syllabus sy
-          JOIN academic_classes ac ON sy.class_id = ac.id
-          LEFT JOIN acad_sections asec ON sy.section_id = asec.id
-          JOIN subjects s ON sy.subject_id = s.id
-          WHERE ac.id IS NOT NULL AND s.id IS NOT NULL
-        ) as combined
+        SELECT DISTINCT ta.class_id as classId, c.name as className, 
+               ta.section_id as sectionId, s.name as sectionName, 
+               ta.subject_id as subjectId, sub.name as subjectName,
+               s.code as sectionCode
+        FROM teacher_assignments ta
+        JOIN academic_classes c ON ta.class_id = c.id
+        LEFT JOIN acad_sections s ON ta.section_id = s.id
+        JOIN subjects sub ON ta.subject_id = sub.id
         ORDER BY className ASC, sectionName ASC
       `);
       assignments = rows;
     } else {
       const [rows] = await pool.execute(`
-        SELECT DISTINCT 
-          classId, className, sectionId, sectionName, subjectId, subjectName
-        FROM (
-          -- SOURCE A: Timetable assignments (teacher_id stores users.id)
-          SELECT 
-            ac.id as classId, ac.class_number as className,
-            asec.id as sectionId, asec.name as sectionName,
-            s.id as subjectId, s.name as subjectName
-          FROM teacher_timetable tt
-          JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
-          LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
-          JOIN subjects s ON tt.subject_id = s.id
-          WHERE tt.teacher_id = ?
-
-          UNION
-
-          -- SOURCE B: Manual Module Permissions (teacher_id stores teachers.id)
-          SELECT 
-            ac.id as classId, ac.class_number as className,
-            asec.id as sectionId, asec.name as sectionName,
-            s.id as subjectId, s.name as subjectName
-          FROM teacher_module_permissions tmp
-          JOIN academic_classes ac ON tmp.class_id = ac.id
-          LEFT JOIN acad_sections asec ON tmp.section_id = asec.id
-          JOIN subjects s ON tmp.subject_id = s.id
-          JOIN teachers t ON tmp.teacher_id = t.id
-          WHERE t.user_id = ? AND tmp.status = 'ACTIVE'
-
-          UNION
-
-          -- SOURCE C: Syllabus assignments where they are the assigned teacher
-          SELECT 
-            ac.id as classId, ac.class_number as className,
-            asec.id as sectionId, asec.name as sectionName,
-            s.id as subjectId, s.name as subjectName
-          FROM syllabus sy
-          JOIN academic_classes ac ON sy.class_id = ac.id
-          LEFT JOIN acad_sections asec ON sy.section_id = asec.id
-          JOIN subjects s ON sy.subject_id = s.id
-          WHERE sy.teacher_id = ?
-        ) as combined
-        WHERE classId IS NOT NULL AND subjectId IS NOT NULL
-        ORDER BY className ASC, sectionName ASC
-      `, [req.user.id, req.user.id, req.user.id]);
+        SELECT ta.class_id as classId, c.name as className, 
+               ta.section_id as sectionId, s.name as sectionName, 
+               ta.subject_id as subjectId, sub.name as subjectName,
+               s.code as sectionCode
+        FROM teacher_assignments ta
+        JOIN academic_classes c ON ta.class_id = c.id
+        LEFT JOIN acad_sections s ON ta.section_id = s.id
+        JOIN subjects sub ON ta.subject_id = sub.id
+        WHERE ta.teacher_id = ?
+        ORDER BY className ASC, sectionName ASC, subjectName ASC
+      `, [req.user.id]);
       assignments = rows;
     }
 
@@ -440,16 +391,27 @@ exports.updateTeacherProfile = async (req, res) => {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
-    const { mobile, dob, qualification, experience, address } = req.body;
-    if (mobile) await connection.execute('UPDATE users SET phone = ? WHERE id = ?', [mobile, req.user.id]);
+    const { mobile, email } = req.body;
+    
+    if (email !== undefined) await connection.execute('UPDATE users SET email = ? WHERE id = ?', [email || null, req.user.id]);
+    
     const [existing] = await connection.execute('SELECT id FROM teachers WHERE user_id = ?', [req.user.id]);
     if (existing.length > 0) {
-      await connection.execute('UPDATE teachers SET mobile=?, dob=?, qualification=?, experience=?, address=? WHERE user_id=?', [mobile, dob, qualification, experience, address, req.user.id]);
+      if (mobile !== undefined) {
+        await connection.execute('UPDATE teachers SET mobile=? WHERE user_id=?', [mobile || null, req.user.id]);
+      }
     } else {
-      await connection.execute('INSERT INTO teachers (user_id, mobile, dob, qualification, experience, address) VALUES (?,?,?,?,?,?)', [req.user.id, mobile, dob, qualification, experience, address]);
+      await connection.execute('INSERT INTO teachers (user_id, mobile) VALUES (?,?)', [req.user.id, mobile || null]);
     }
-    await connection.commit(); res.json({ success: true, message: 'Profile updated.' });
-  } catch (err) { if (connection) await connection.rollback(); res.status(500).json({ success: false, message: err.message }); } finally { connection.release(); }
+    
+    await connection.commit(); 
+    res.json({ success: true, message: 'Profile updated.' });
+  } catch (err) { 
+    if (connection) await connection.rollback(); 
+    res.status(500).json({ success: false, message: err.message }); 
+  } finally { 
+    connection.release(); 
+  }
 };
 
 // ─── 🏛️ ADMIN TIMETABLE MANAGEMENT ────────────────────────────────────────────

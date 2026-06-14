@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import clsx from 'clsx'
 import { BookOpen, CheckCircle, Clock, AlertCircle, Plus, Download, Filter, Loader2, RotateCcw, Trash2, Edit } from 'lucide-react'
 import { StatCard, SectionHeader, StatusBadge, ProgressBar, Modal } from '../../components/ui/index.jsx'
@@ -22,7 +22,15 @@ function downloadCSV(rows) {
   Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'syllabus-admin.csv' }).click()
 }
 
+const normalize = (val) => String(val || '').trim().toLowerCase();
+
 export default function AdminSyllabus() {
+  const currentMonthName = useMemo(() => new Date().toLocaleString('default', { month: 'long' }), []);
+  const currentWeekName = useMemo(() => {
+    const day = new Date().getDate();
+    return `Week ${Math.min(Math.ceil(day / 7), 5)}`;
+  }, []);
+
   const [items, setItems] = useState([])
   const [classes, setClasses] = useState([])
   const [subjects, setSubjects] = useState([])
@@ -389,29 +397,6 @@ export default function AdminSyllabus() {
           </div>
         )
       }
-    },
-    {
-      key: 'actions',
-      label: 'Actions',
-      textRight: true,
-      render: (_, r) => (
-        <div className="flex justify-end gap-2">
-          <button 
-            onClick={() => handleEditOpen(r)}
-            className="p-2 text-blue-500 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-all active:scale-90"
-            title="Edit Topic"
-          >
-            <Edit size={16} />
-          </button>
-          <button 
-            onClick={() => handleDelete(r)}
-            className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition-all active:scale-90"
-            title="Delete Topic"
-          >
-            <Trash2 size={16} />
-          </button>
-        </div>
-      )
     }
   ]
 
@@ -496,7 +481,13 @@ export default function AdminSyllabus() {
             columns={columns}
             rows={items}
             emptyMessage="No syllabus topics found."
-            getRowClassName={(r) => r.is_completed ? "bg-emerald-50/50 hover:bg-emerald-100/50" : "bg-white hover:bg-slate-50"}
+            getRowClassName={(r) => {
+              const isCurrent = normalize(r.month) === normalize(currentMonthName) && normalize(r.week).includes(normalize(currentWeekName));
+              const isCompleted = r.is_completed === 1 || r.is_completed === true;
+              if (isCompleted) return "bg-emerald-50/50 hover:bg-emerald-100/50 border-l-[3px] border-l-emerald-500";
+              if (isCurrent) return "bg-amber-50/40 hover:bg-amber-100/60 border-l-[3px] border-l-amber-500";
+              return "bg-white hover:bg-slate-50 border-l-[3px] border-l-transparent";
+            }}
           />
         </div>
       </div>

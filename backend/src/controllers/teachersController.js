@@ -66,47 +66,26 @@ exports.getTeachers = async (req, res) => {
 
     // Fetch class assignments for these teachers
     const teacherIds = rows.map(r => r.id);
-    let classAssignments = [];
-    let subjectAssignments = [];
+    let allAssignments = [];
     
     if (teacherIds.length > 0) {
-      const [classRows] = await pool.query(`
-        SELECT tca.teacher_id, 
-               COALESCE(ac.name, '') as class_name, 
-               COALESCE(s.name, '') as section_name
-        FROM teacher_class_assignments tca
-        LEFT JOIN academic_classes ac ON tca.class_id = ac.id
-        LEFT JOIN acad_sections s ON tca.section_id = s.id
-        WHERE tca.teacher_id IN (?)
+      const [assignRows] = await pool.query(`
+        SELECT ta.teacher_id, ta.class_id, ta.section_id, ta.subject_id,
+               c.name AS class_name, s.name AS section_name, sub.name AS subject_name,
+               s.code as section_code
+        FROM teacher_assignments ta
+        LEFT JOIN academic_classes c ON ta.class_id = c.id
+        LEFT JOIN acad_sections s ON ta.section_id = s.id
+        LEFT JOIN subjects sub ON ta.subject_id = sub.id
+        WHERE ta.teacher_id IN (?)
       `, [teacherIds]);
-      classAssignments = classRows;
-
-      const [subjectRows] = await pool.query(`
-        SELECT ts.teacher_id, ts.class_id, ts.subject_id, sub.name as subject_name,
-               COALESCE(ac.name, c.class_name, '') as class_name, 
-               COALESCE(asec.name, c.section, '') as section
-        FROM teacher_subjects ts
-        JOIN subjects sub ON ts.subject_id = sub.id
-        LEFT JOIN academic_classes ac ON ts.class_id = ac.id
-        LEFT JOIN acad_sections asec ON ts.class_id = ac.id -- Join acad_sections via academic_classes if possible, or mapping
-        LEFT JOIN classes c ON ts.class_id = c.id AND ac.id IS NULL
-        WHERE ts.teacher_id IN (?)
-      `, [teacherIds]);
-      subjectAssignments = subjectRows;
+      allAssignments = assignRows;
     }
 
     // Attach to rows
     const items = rows.map(r => ({
       ...r,
-      assignedClasses: classAssignments
-        .filter(a => a.teacher_id === r.id)
-        .map(a => `${a.class_name}-${a.section_name}`),
-      subjectAssignments: subjectAssignments
-        .filter(a => a.teacher_id === r.id)
-        .map(a => ({
-          subject: a.subject_name,
-          class: `${a.class_name}-${a.section}`
-        }))
+      assignments: allAssignments.filter(a => a.teacher_id === r.id)
     }));
 
     return res.status(200).json({
@@ -139,7 +118,20 @@ exports.getTeacherById = async (req, res) => {
     `, [req.params.id]);
 
     if (rows.length === 0) return sendResponse(res, false, null, 'Teacher not found.', 404);
-    return sendResponse(res, true, rows[0]);
+    
+    const teacher = rows[0];
+    const [assignments] = await pool.execute(`
+      SELECT ta.class_id, ta.section_id, ta.subject_id,
+             c.name AS class_name, s.name AS section_name, sub.name AS subject_name
+      FROM teacher_assignments ta
+      LEFT JOIN academic_classes c ON ta.class_id = c.id
+      LEFT JOIN acad_sections s ON ta.section_id = s.id
+      LEFT JOIN subjects sub ON ta.subject_id = sub.id
+      WHERE ta.teacher_id = ?
+    `, [req.params.id]);
+    teacher.assignments = assignments;
+
+    return sendResponse(res, true, teacher);
   } catch (error) {
     return sendResponse(res, false, null, 'Error fetching teacher.', 500);
   }
@@ -154,7 +146,7 @@ exports.createTeacher = async (req, res) => {
     await connection.beginTransaction();
 
     const { name, email, password, phone, status,
-            mobile, dob, qualification, experience, salary, subject, joining_date, address } = req.body;
+            mobile, dob, qualification, experience, salary, subject, joining_date, address, assignments } = req.body;
 
     const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
     if (existing.length > 0) {
@@ -180,6 +172,15 @@ exports.createTeacher = async (req, res) => {
       [userId, mobile || phone || '', dob || null, qualification || '', experience || '', salary || '', subject || '']
     );
 
+    // 3. Create Assignments
+    if (Array.isArray(assignments) && assignments.length > 0) {
+      const assignmentValues = assignments.map(a => [userId, a.class_id, a.section_id || null, a.subject_id]);
+      await connection.query(
+        `INSERT INTO teacher_assignments (teacher_id, class_id, section_id, subject_id) VALUES ?`,
+        [assignmentValues]
+      );
+    }
+
     await connection.commit();
     return sendResponse(res, true, { id: userId }, 'Teacher created.', 201);
   } catch (error) {
@@ -199,7 +200,7 @@ exports.updateTeacher = async (req, res) => {
   try {
     await connection.beginTransaction();
     const id = req.params.id;
-    const { name, email, phone, mobile, dob, qualification, experience, salary, subject, password } = req.body;
+    const { name, email, phone, mobile, dob, qualification, experience, salary, subject, password, assignments } = req.body;
 
     // Update User (Safe Partial)
     let userQuery = 'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), phone = COALESCE(?, phone)';
@@ -228,6 +229,18 @@ exports.updateTeacher = async (req, res) => {
         `INSERT INTO teachers (user_id, mobile, dob, qualification, experience, salary, subject) VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [id, mobile || '', dob || null, qualification || '', experience || '', salary || '', subject || '']
       );
+    }
+
+    // Update Assignments
+    if (Array.isArray(assignments)) {
+      await connection.execute('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (assignments.length > 0) {
+        const assignmentValues = assignments.map(a => [id, a.class_id, a.section_id || null, a.subject_id]);
+        await connection.query(
+          `INSERT INTO teacher_assignments (teacher_id, class_id, section_id, subject_id) VALUES ?`,
+          [assignmentValues]
+        );
+      }
     }
 
     await connection.commit();

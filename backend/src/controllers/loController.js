@@ -113,10 +113,27 @@ exports.getTeachersByClassSubject = async (req, res) => {
         let ttTeachers = [];
         if (cls) {
           const classNum = cls.class_number || cls.name.replace(/[^0-9]/g, '');
+          
+          let secCondition = {};
+          if (req.query.section_id) {
+            const sec = await prisma.acad_sections.findUnique({ where: { id: Number(req.query.section_id) } });
+            if (sec) {
+              secCondition = {
+                OR: [
+                  { section: sec.name },
+                  { section: sec.code },
+                  { section: sec.name.replace('Section ', '') },
+                  { section: '' }
+                ]
+              };
+            }
+          }
+
           const ttEntries = await prisma.teacher_timetable.findMany({
             where: {
               OR: [{ class_number: String(classNum) }, { class_number: String(cls.name) }],
-              subject_id: Number(subjectId)
+              subject_id: Number(subjectId),
+              ...secCondition
             }
           });
           if (ttEntries.length > 0) {
@@ -127,6 +144,26 @@ exports.getTeachersByClassSubject = async (req, res) => {
             });
           }
         }
+        
+        let taTeachers = [];
+        try {
+          let taQuery = `
+            SELECT t.id, u.name 
+            FROM teacher_assignments ta
+            JOIN teachers t ON ta.teacher_id = t.user_id
+            JOIN users u ON t.user_id = u.id
+            WHERE ta.class_id = ? AND ta.subject_id = ?
+          `;
+          let taParams = [Number(classId), Number(subjectId)];
+          if (req.query.section_id) {
+            taQuery += ` AND ta.section_id = ?`;
+            taParams.push(Number(req.query.section_id));
+          }
+          const [taRows] = await pool.query(taQuery, taParams);
+          taTeachers = taRows || [];
+        } catch (taErr) {
+          console.warn('[LO TEACHERS] teacher_assignments fetch error:', taErr.message);
+        }
 
         const result = new Map();
         tsTeachers.forEach(ts => {
@@ -134,6 +171,9 @@ exports.getTeachersByClassSubject = async (req, res) => {
         });
         ttTeachers.forEach(u => {
           if (u.teacher_profile) result.set(u.teacher_profile.id, { id: u.teacher_profile.id, name: u.name });
+        });
+        taTeachers.forEach(t => {
+          result.set(t.id, { id: t.id, name: t.name });
         });
 
         const finalData = Array.from(result.values());

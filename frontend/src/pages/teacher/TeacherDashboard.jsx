@@ -37,7 +37,6 @@ export default function TeacherDashboard() {
   // Filters for Overall Completion
   const [filterSubject, setFilterSubject] = useState('All')
   const [filterClass, setFilterClass] = useState('All')
-  const [filterSection, setFilterSection] = useState('All')
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -58,14 +57,12 @@ export default function TeacherDashboard() {
   // Filter Options
   const subjects = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.subject))], [syllabusRows])
   const classes = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.class_name))], [syllabusRows])
-  const sections = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.section_name).filter(Boolean))], [syllabusRows])
 
   // Filtered Syllabus Logic - FIXED: String concatenation bug + Period counting
   const filteredMetrics = useMemo(() => {
     const filtered = syllabusRows.filter(r => {
       return (filterSubject === 'All' || r.subject === filterSubject) &&
-        (filterClass === 'All' || r.class_name === filterClass) &&
-        (filterSection === 'All' || r.section_name === filterSection);
+        (filterClass === 'All' || r.class_name === filterClass);
     });
     // Use Number() to prevent string concatenation (e.g. 0 + "5" = "05")
     const total = filtered.reduce((acc, r) => acc + Number(r.total || 0), 0);
@@ -73,7 +70,7 @@ export default function TeacherDashboard() {
     const pending = total - completed;
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
     return { total, completed, pending, pct };
-  }, [syllabusRows, filterSubject, filterClass, filterSection]);
+  }, [syllabusRows, filterSubject, filterClass]);
 
   const birthdayState = useMemo(() => {
     if (!data) return { today: [], thisWeek: [], isTeacherToday: false };
@@ -243,9 +240,8 @@ export default function TeacherDashboard() {
               <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{filterSubject === 'All' ? 'All Subjects' : filterSubject} · {filterClass === 'All' ? 'All Grades' : `Grade ${filterClass}`}</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 w-full md:w-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3 w-full md:w-auto">
               <SelectDropdown label="Grade - Class" options={classes} value={filterClass} onChange={e => setFilterClass(e.target.value)} />
-              <SelectDropdown label="Section" options={sections} value={filterSection} onChange={e => setFilterSection(e.target.value)} />
               <SelectDropdown label="Subject" options={subjects} value={filterSubject} onChange={e => setFilterSubject(e.target.value)} />
             </div>
           </div>
@@ -312,7 +308,7 @@ export default function TeacherDashboard() {
         <div className="card p-6 rounded-[2rem]">
           <SectionHeader title="Top Performers" />
           <div className="space-y-2.5 mt-4">
-            {(data?.topPerformers || []).map((p, i) => (
+            {(data?.topPerformers || []).slice(0, 5).map((p, i) => (
               <div key={i} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${p.teacher_id === user?.id ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50/50 border border-slate-100/50'}`}>
                 <div className="w-6 h-6 rounded-lg bg-white shadow-sm text-[9px] font-black flex items-center justify-center text-slate-400">{i + 1}</div>
                 <div className="flex-1 min-w-0"><p className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name}</p></div>

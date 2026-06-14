@@ -85,12 +85,13 @@ const lmsIntelligenceController = {
       // Admin awards a principal_score per topic via /admin/award-lo
       // First resolve teacher profile id from user id
       let loPct = 0;
+      let teacherProfileId = null;
       try {
         const [tProfileRows] = await pool.execute(
           'SELECT id FROM teachers WHERE user_id = ?', [teacherId]
         );
         if (tProfileRows && tProfileRows.length > 0) {
-          const teacherProfileId = tProfileRows[0].id;
+          teacherProfileId = tProfileRows[0].id;
           const [loRows] = await pool.execute(`
             SELECT AVG(principal_score) AS avg_lo_score
             FROM teacher_performance_lo
@@ -104,14 +105,15 @@ const lmsIntelligenceController = {
 
       // 3. Fetch Observation Data (Observation Score 25%)
       // Language Proficiency is admin-only; not computed from observations.
-      const [obsRows] = await pool.execute(`
-        SELECT 
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs
-        FROM class_observations 
-        WHERE teacher_id = ?
-      `, [teacherId]);
-
-      const obsPct = obsRows[0]?.avg_obs || 0;
+      let obsPct = 0;
+      if (teacherProfileId) {
+        const [obsRows] = await pool.execute(`
+          SELECT AVG((total_score / 50) * 100) AS avg_obs
+          FROM class_observations 
+          WHERE teacher_id = ?
+        `, [teacherProfileId]);
+        obsPct = obsRows[0]?.avg_obs || 0;
+      }
 
       // 4. Participate Score (10%), Other Parameters (20%), Language Proficiency (15%)
       // These are ADMIN-ONLY manual values. Default to 0 until admin sets them.
@@ -258,7 +260,7 @@ const lmsIntelligenceController = {
       const [obsStats] = await pool.execute(`
         SELECT 
           teacher_id,
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs
+          AVG((total_score / 50) * 100) AS avg_obs
         FROM class_observations GROUP BY teacher_id
       `);
 
@@ -283,7 +285,12 @@ const lmsIntelligenceController = {
 
       // Map data for quick lookup
       const syllabusMap = syllabusStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
-      const obsMap = obsStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
+      // Build user_id -> avg_obs map
+      const obsMap = {};
+      obsStats.forEach(r => {
+        const userId = profileToUser[r.teacher_id];
+        if (userId) obsMap[userId] = r;
+      });
 
       // Fetch admin overrides for manual scores
       const [overrides] = await pool.execute(`

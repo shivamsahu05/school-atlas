@@ -24,6 +24,7 @@ const performanceRoutes     = require('./routes/performance')
 const leaveRoutes           = require('./routes/leave')
 const observationsRoutes    = require('./routes/observations')
 const teacherScheduleRoutes = require('./routes/teacherScheduleRoutes')
+const timetableRoutes       = require('./routes/timetableRoutes')
 const academicRoutes        = require('./routes/academic')
 const reportsRoutes         = require('./routes/reports')
 const intelligenceRoutes    = require('./routes/lmsIntelligenceRoutes')
@@ -93,6 +94,7 @@ app.use(`${A}/teacher`,        teacherScheduleRoutes) // /api/teacher/timetable,
 
 // 6. Admin Management
 app.use(`${A}/admin`,          academicRoutes)
+app.use(`${A}/timetable`,      timetableRoutes)
 app.use(`${A}/admin`,          reportsRoutes)
 app.use(`${A}/admin/permissions`, permissionsRoutes)
 app.use(`${A}/admin/system`,      systemRoutes)

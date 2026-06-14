@@ -120,9 +120,8 @@ export default function AwardLOScores() {
 
     const fetchTeachers = async () => {
       try {
-        // We use subject_id (from academic mapping) and class_id (academic class)
-        // Backend handles fallback to all teachers if no mapping exists
-        const res = await api.get(`/admin/lo/teachers/${form.class_id}/${form.subject_id}`)
+        // We use subject_id, class_id and section_id to accurately match teacher_timetable
+        const res = await api.get(`/admin/lo/teachers/${form.class_id}/${form.subject_id}?section_id=${form.section_id || ''}`)
         if (res.data.success) {
           setFilteredTeachers(Array.isArray(res.data.data) ? res.data.data : [])
         }
@@ -134,7 +133,7 @@ export default function AwardLOScores() {
     fetchTeachers()
     
     setForm(prev => ({ ...prev, teacher_id: '' }))
-  }, [form.class_id, form.subject_id])
+  }, [form.class_id, form.subject_id, form.section_id])
 
   // 3. AUTO-RESOLVE TEACHER FROM TIMETABLE
   useEffect(() => {

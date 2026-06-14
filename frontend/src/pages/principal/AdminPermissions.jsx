@@ -58,9 +58,7 @@ export default function AdminPermissions() {
   // Bulk/multi-selection states
   const [allTeachersToggled, setAllTeachersToggled] = useState(false)
   const [selectedTeacherIds, setSelectedTeacherIds] = useState([])
-  const [selectedClasses, setSelectedClasses] = useState([])
-  const [selectedSections, setSelectedSections] = useState({})
-  const [selectedSubjects, setSelectedSubjects] = useState([])
+  // Removed Class and Subject selections as they are inferred from assignments
   const [selectedModuleIds, setSelectedModuleIds] = useState([])
 
   // ── Data Fetching ──────────────────────────────────────────────────────────
@@ -178,26 +176,12 @@ export default function AdminPermissions() {
       return
     }
 
-    // Resolve scopes
-    let scopesToSend = []
-    selectedClasses.forEach(classId => {
-      const sections = selectedSections[classId] || []
-      if (sections.length === 0) {
-        // If no section is checked, it means all sections (null in DB)
-        scopesToSend.push({ class_id: classId, section_id: null })
-      } else {
-        sections.forEach(secId => {
-          scopesToSend.push({ class_id: classId, section_id: secId })
-        })
-      }
-    })
-
     try {
       const payload = {
         module_ids: selectedModuleIds,
         teacher_ids: teacherIdsToSend,
-        scopes: scopesToSend,
-        subject_ids: selectedSubjects.length > 0 ? selectedSubjects : [null],
+        scopes: [{ class_id: null, section_id: null }],
+        subject_ids: [null],
         start_date: form.start_date,
         end_date: form.end_date
       }
@@ -230,20 +214,10 @@ export default function AdminPermissions() {
     setSelectedTeacherIds([p.teacher_id])
     setSelectedModuleIds([p.module_id])
     if (p.class_id) {
-      setSelectedClasses([p.class_id])
-      if (p.section_id) {
-        setSelectedSections({ [p.class_id]: [p.section_id] })
-      } else {
-        setSelectedSections({})
-      }
-    } else {
-      setSelectedClasses([])
-      setSelectedSections({})
+      // Ignored for UI
     }
     if (p.subject_id) {
-      setSelectedSubjects([p.subject_id])
-    } else {
-      setSelectedSubjects([])
+      // Ignored for UI
     }
     setIsModalOpen(true)
   }
@@ -258,9 +232,6 @@ export default function AdminPermissions() {
     })
     setAllTeachersToggled(false)
     setSelectedTeacherIds([])
-    setSelectedClasses([])
-    setSelectedSections({})
-    setSelectedSubjects([])
     setSelectedModuleIds([])
   }
 
@@ -269,6 +240,8 @@ export default function AdminPermissions() {
     'SYLLABUS_UPLOAD': BookOpen,
     'HOMEWORK_ENTRY': ClipboardList,
     'LO_ENTRY': Brain,
+    'MICRO_SCHEDULE': Calendar,
+    'MICRO_SCHEDULE_EDIT': Edit2,
     'students_management': GraduationCap
   }
 
@@ -288,18 +261,18 @@ export default function AdminPermissions() {
     const selectedIndividualAcademic = selectedModuleIds.filter(id => {
       if (id === 'ALL_FULL' || id === 'ALL_ACADEMIC') return false;
       const targetModule = meta.modules.find(m => m.id === id);
-      return targetModule && targetModule.module_key !== 'students_management';
+      return targetModule && targetModule.module_key !== 'students_management' && targetModule.module_key !== 'MARKS_ENTRY';
     });
 
     if (moduleId === 'ALL_FULL') {
-      return hasAllAcademic || selectedIndividualAcademic.length > 0 || hasStudentsMgt;
+      return hasAllAcademic || selectedIndividualAcademic.length > 0 || hasStudentsMgt || isKeySelected('MARKS_ENTRY');
     }
     if (moduleId === 'ALL_ACADEMIC') {
       return hasAllFull || selectedIndividualAcademic.length > 0;
     }
 
     const currentModule = meta.modules.find(m => m.id === moduleId);
-    if (currentModule && currentModule.module_key === 'students_management') {
+    if (currentModule && (currentModule.module_key === 'students_management' || currentModule.module_key === 'MARKS_ENTRY')) {
       return hasAllFull;
     }
     
@@ -356,8 +329,8 @@ export default function AdminPermissions() {
       key: 'class_name', label: 'Scope', 
       render: (v, row) => (
         <div className="text-xs font-medium text-slate-600">
-          {v || 'Global Access'} {row.section ? `- ${row.section}` : ''}
-          <p className="text-[10px] text-slate-400">{row.subject || 'All Subjects'}</p>
+          {v || 'Assigned Classes'} {row.section ? `- ${row.section}` : ''}
+          <p className="text-[10px] text-slate-400">{row.subject || 'Assigned Subjects'}</p>
         </div>
       )
     },
@@ -600,7 +573,7 @@ export default function AdminPermissions() {
                            onChange={() => handleModuleToggle('ALL_ACADEMIC')}
                            className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300 disabled:opacity-50"
                          />
-                         All Academic (Excludes Students Mgt.)
+                         All Academic (Excludes Students Mgt. & Marks Entry)
                        </label>
                        <label className={`flex items-center gap-2 text-xs font-semibold p-1.5 rounded cursor-pointer transition-colors ${isModuleDisabled('ALL_FULL') ? 'opacity-40 cursor-not-allowed text-slate-400' : 'text-rose-700 hover:bg-rose-50'}`}>
                          <input 
@@ -610,7 +583,7 @@ export default function AdminPermissions() {
                            onChange={() => handleModuleToggle('ALL_FULL')}
                            className="w-3.5 h-3.5 rounded text-rose-600 focus:ring-rose-500 border-slate-300 disabled:opacity-50"
                          />
-                         Full System (Includes Students Mgt.)
+                         Full System (Includes Students Mgt. & Marks Entry)
                        </label>
                      </div>
 
@@ -638,113 +611,7 @@ export default function AdminPermissions() {
                  )}
               </div>
 
-              {/* Class & Section Scope */}
-              {!isEditMode && (
-                <div className="space-y-4">
-                  {/* Class Scope Tick Options */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Class Scope *</label>
-                    <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/30 space-y-3 max-h-60 overflow-y-auto">
-                      {meta.classes.map(c => {
-                        const isClassChecked = selectedClasses.includes(c.id);
-                        const sectionsForClass = meta.sections.filter(s => String(s.class_id) === String(c.id));
-                        
-                        return (
-                          <div key={c.id} className="space-y-2 border-b border-slate-100 last:border-0 pb-2.5 last:pb-0">
-                            <label className="flex items-center gap-2 text-xs font-bold text-slate-800 cursor-pointer hover:text-brand-600 transition-colors">
-                              <input 
-                                type="checkbox"
-                                checked={isClassChecked}
-                                onChange={e => {
-                                  if (e.target.checked) {
-                                    setSelectedClasses([...selectedClasses, c.id]);
-                                  } else {
-                                    setSelectedClasses(selectedClasses.filter(id => id !== c.id));
-                                    const updatedSec = { ...selectedSections };
-                                    delete updatedSec[c.id];
-                                    setSelectedSections(updatedSec);
-                                  }
-                                }}
-                                className="w-4 h-4 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
-                              />
-                              {c.name}
-                            </label>
-                            
-                            {/* Section Tick Options for this Class (only show if Class is Checked) */}
-                            {isClassChecked && sectionsForClass.length > 0 && (
-                              <div className="pl-6 pt-1 flex flex-wrap gap-3">
-                                {sectionsForClass.map(sec => {
-                                  const currentSecs = selectedSections[c.id] || [];
-                                  const isSecChecked = currentSecs.includes(sec.id);
-                                  return (
-                                    <label key={sec.id} className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 cursor-pointer">
-                                      <input 
-                                        type="checkbox"
-                                        checked={isSecChecked}
-                                        onChange={e => {
-                                          if (e.target.checked) {
-                                            setSelectedSections({
-                                              ...selectedSections,
-                                              [c.id]: [...currentSecs, sec.id]
-                                            });
-                                          } else {
-                                            setSelectedSections({
-                                              ...selectedSections,
-                                              [c.id]: currentSecs.filter(id => id !== sec.id)
-                                            });
-                                          }
-                                        }}
-                                        className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
-                                      />
-                                      {sec.name}
-                                    </label>
-                                  );
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Subject Scope Tick Options */}
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase ml-1 block">Subject Scope (Optional — default is All Subjects)</label>
-                    <div className="border border-slate-200 rounded-xl p-3 max-h-40 overflow-y-auto space-y-2 bg-white">
-                      <div className="flex justify-between items-center pb-1.5 border-b border-slate-100 mb-1.5">
-                        <span className="text-[10px] text-slate-400 font-bold uppercase">{selectedSubjects.length} selected</span>
-                        <button 
-                          type="button"
-                          onClick={() => setSelectedSubjects([])}
-                          className="text-[10px] font-bold text-slate-500 hover:underline"
-                        >
-                          Clear Selections
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        {meta.subjects.map(s => (
-                          <label key={s.id} className="flex items-center gap-2 text-xs font-medium text-slate-700 hover:bg-slate-50 p-1 rounded cursor-pointer transition-colors">
-                            <input 
-                              type="checkbox"
-                              checked={selectedSubjects.includes(s.id)}
-                              onChange={e => {
-                                if (e.target.checked) {
-                                  setSelectedSubjects([...selectedSubjects, s.id]);
-                                } else {
-                                  setSelectedSubjects(selectedSubjects.filter(id => id !== s.id));
-                                }
-                              }}
-                              className="w-3.5 h-3.5 rounded text-brand-600 focus:ring-brand-500 border-slate-300"
-                            />
-                            {s.name}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
+              {/* Class & Section Scope removed */}
 
               {/* Dates */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

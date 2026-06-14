@@ -49,8 +49,12 @@ const AdminStudentTimetable = () => {
 
     const formatTime = (ts) => {
         if (!ts) return '';
-        const [h, m] = ts.split(':');
+        if (ts === '-') return '';
+        if (!ts.includes(':')) return ts;
+        const parts = ts.split(':');
+        const [h, m] = parts;
         const hr = parseInt(h);
+        if (isNaN(hr)) return ts;
         return `${hr % 12 || 12}:${m} ${hr >= 12 ? 'PM' : 'AM'}`;
     };
 
@@ -60,7 +64,9 @@ const AdminStudentTimetable = () => {
     }, []);
 
     useEffect(() => {
-        if (selectedClass && selectedSection) {
+        if (selectedClass === 'ALL') {
+            fetchClassTimetable();
+        } else if (selectedClass && selectedSection) {
             fetchClassTimetable();
         } else {
             setTimetable([]);
@@ -119,9 +125,13 @@ const AdminStudentTimetable = () => {
         setLoading(true);
         try {
             const token = getToken();
-            const r = await fetch(`${API_URL}/api/admin/class-timetable?classNumber=${selectedClass}&section=${selectedSection}`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            let url = `${API_URL}/api/admin/class-timetable`;
+            if (selectedClass !== 'ALL') {
+                url += `?classNumber=${selectedClass}&section=${selectedSection}`;
+            } else {
+                url = `${API_URL}/api/admin/teacher/all`;
+            }
+            const r = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
             const d = await r.json();
             if (d.success) setTimetable(d.data || d.timetable || []);
         } catch (e) { 
@@ -187,13 +197,14 @@ const AdminStudentTimetable = () => {
                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer"
                     >
                         <option value="">Choose Class...</option>
+                        <option value="ALL">🌟 View All Classes / Full Timetable</option>
                         {[...new Set(classes.map(c => c.class_number))].sort((a, b) => a - b).map(cn => (
                             <option key={cn} value={cn}>Class {cn}</option>
                         ))}
                     </select>
                 </div>
 
-                {selectedClass && isHigherSecondaryClass(selectedClass) && (
+                {selectedClass && selectedClass !== 'ALL' && isHigherSecondaryClass(selectedClass) && (
                     <div>
                         <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Select Group/Stream</label>
                         <select 
@@ -209,22 +220,24 @@ const AdminStudentTimetable = () => {
                     </div>
                 )}
 
-                <div>
-                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Select Section</label>
-                    <select 
-                        value={selectedSection} 
-                        onChange={(e) => setSelectedSection(e.target.value)} 
-                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer"
-                        disabled={!selectedClass || (isHigherSecondaryClass(selectedClass) && !selectedStream)}
-                    >
-                        <option value="">Choose Section...</option>
-                        {sections.map(s => (
-                            <option key={s.section_id || s.id} value={s.code || s.section_code}>{s.name || s.section_name}</option>
-                        ))}
-                    </select>
-                </div>
+                {selectedClass !== 'ALL' && (
+                    <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Select Section</label>
+                        <select 
+                            value={selectedSection} 
+                            onChange={(e) => setSelectedSection(e.target.value)} 
+                            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none cursor-pointer"
+                            disabled={!selectedClass || (isHigherSecondaryClass(selectedClass) && !selectedStream)}
+                        >
+                            <option value="">Choose Section...</option>
+                            {sections.map(s => (
+                                <option key={s.section_id || s.id} value={s.code || s.section_code}>{s.name || s.section_name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
 
-                {selectedClass && selectedSection && (
+                {selectedClass && selectedClass !== 'ALL' && selectedSection && (
                     <div className="flex items-center gap-3 bg-indigo-50 px-4 py-2.5 rounded-xl border border-indigo-100 lg:col-span-1">
                         <div className="w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-sm">
                             {selectedClass}
@@ -249,10 +262,8 @@ const AdminStudentTimetable = () => {
                                         {slot.is_break ? (
                                             <span className="text-amber-600">BREAK</span>
                                         ) : (
-                                            <div className="flex flex-col gap-0.5">
+                                            <div className="flex flex-col gap-0.5 font-bold text-slate-700">
                                                 <span>{formatTime(slot.start_time)}</span>
-                                                <span className="text-[8px] opacity-50 lowercase tracking-normal">to</span>
-                                                <span>{formatTime(slot.end_time)}</span>
                                             </div>
                                         )}
                                     </th>
@@ -267,15 +278,44 @@ const AdminStudentTimetable = () => {
                                     </td>
                                     
                                     {timeSlots.map(slot => {
+                                        if (slot.is_break) {
+                                            return (
+                                                <td key={`${day}-${slot.id}`} className="px-2 py-2 border-r border-slate-100 last:border-r-0 h-28 align-top">
+                                                    <div className="h-full w-full bg-amber-50/50 flex items-center justify-center rounded-xl border border-amber-100/50">
+                                                        <span className="text-[10px] text-amber-600 font-black tracking-widest">BREAK</span>
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+
+                                        if (selectedClass === 'ALL') {
+                                            const entries = timetable.filter(e => e.day_of_week?.toUpperCase() === day.toUpperCase() && e.time_slot_id === slot.id);
+                                            return (
+                                                <td key={`${day}-${slot.id}`} className="px-2 py-2 border-r border-slate-100 last:border-r-0 h-28 align-top overflow-y-auto max-h-28">
+                                                    <div className="flex flex-col gap-1 w-full">
+                                                        {entries.map((entry, idx) => {
+                                                            const colors = getSubjectColor(entry.subject_name || entry.subject?.name);
+                                                            return (
+                                                                <div key={idx} className={`p-1.5 rounded-lg border ${colors.bg} ${colors.border}`}>
+                                                                    <div className="flex justify-between items-start">
+                                                                        <span className="text-[9px] font-black text-slate-800 truncate">Cls {entry.class_number}-{entry.section}</span>
+                                                                        <span className="text-[8px] bg-white px-1 rounded shadow-sm text-slate-500 font-bold border border-slate-100">{entry.room_number || ''}</span>
+                                                                    </div>
+                                                                    <p className="text-[10px] font-black text-indigo-800 truncate leading-tight my-0.5">{entry.subject_name || entry.subject?.name}</p>
+                                                                    <p className="text-[8px] text-slate-600 truncate uppercase flex items-center gap-1"><User className="w-2.5 h-2.5 text-slate-400" /> {entry.teacher_name || entry.teacher?.name || 'Unknown'}</p>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </td>
+                                            );
+                                        }
+
                                         const entry = getTimetableEntry(day, slot.id);
                                         const colors = getSubjectColor(entry?.subject_name);
                                         return (
                                             <td key={`${day}-${slot.id}`} className={clsx("px-2 py-2 border-r border-slate-100 last:border-r-0 transition-all h-28 align-top", entry ? colors.bg : "")}>
-                                                {slot.is_break ? (
-                                                    <div className="h-full w-full bg-amber-50/50 flex items-center justify-center rounded-xl border border-amber-100/50">
-                                                        <span className="text-[10px] text-amber-600 font-black tracking-widest">BREAK</span>
-                                                    </div>
-                                                ) : entry ? (
+                                                {entry ? (
                                                     <div className={clsx("border-2 shadow-sm rounded-xl p-3 h-full flex flex-col gap-2 hover:border-brand-400 transition-all hover:shadow-md", colors.bg, colors.border)}>
                                                         <div className="flex items-start justify-between gap-2">
                                                             <div className={clsx("p-1.5 rounded-lg border", colors.badge, colors.border)}>
@@ -316,13 +356,13 @@ const AdminStudentTimetable = () => {
                 </div>
             </div>
 
-            {!selectedClass && !selectedSection && (
+            {!selectedClass && (
                 <div className="flex flex-col items-center justify-center py-24 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-center shadow-sm">
                     <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6">
                         <Users className="w-10 h-10 text-indigo-500" />
                     </div>
-                    <h3 className="text-xl font-bold text-slate-800 mb-2">Select Class & Section</h3>
-                    <p className="text-slate-500 max-w-sm text-sm">Select a class and section from the dropdowns above to see the full weekly schedule.</p>
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">Select Class</h3>
+                    <p className="text-slate-500 max-w-sm text-sm">Select a class from the dropdown above to see the full weekly schedule.</p>
                 </div>
             )}
 

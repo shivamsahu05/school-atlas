@@ -2,11 +2,11 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   Users, UserPlus, Shield, Ban, CheckCircle, Eye,
   Mail, Phone, GraduationCap, Briefcase, IndianRupee,
-  Clock, Edit2, Trash2, Calendar, Search, Filter, Save, Download, Star, TrendingUp, Lock, FileUp, Loader2, AlertTriangle, X
+  Clock, Edit2, Trash2, Calendar, Search, Filter, Save, Download, Star, TrendingUp, Lock, FileUp, Loader2, AlertTriangle, X, Plus
 } from 'lucide-react'
 import { StatCard, SectionHeader, StatusBadge, Modal, FormInput } from '../../components/ui/index.jsx'
 import { DataTable } from '../../components/ui/DataTable.jsx'
-import { teachersApi, scheduleApi } from '../../api'
+import { teachersApi, scheduleApi, academicApi } from '../../api'
 
 export default function AdminTeachers() {
   const [teachers, setTeachers] = useState([])
@@ -19,8 +19,25 @@ export default function AdminTeachers() {
   const [submitting, setSubmitting] = useState(false)
   const [form, setForm] = useState({
     name: '', email: '', password: '', phone: '', mobile: '',
-    dob: '', qualification: '', experience: '', salary: '', subject: ''
+    dob: '', qualification: '', experience: '', salary: '', subject: '', assignments: []
   })
+  
+  const [academics, setAcademics] = useState({ classes: [], sections: [], subjects: [] })
+  const [classCache, setClassCache] = useState({})
+
+  useEffect(() => {
+    Promise.all([
+      academicApi.getClasses(),
+      academicApi.getSections(),
+      academicApi.getSubjects()
+    ]).then(([cRes, secRes, subRes]) => {
+      setAcademics({
+        classes: cRes.data || [],
+        sections: secRes.data || [],
+        subjects: subRes.data || []
+      })
+    }).catch(err => console.error("Failed to fetch academics", err))
+  }, [])
 
   const [confirmModal, setConfirmModal] = useState(false)
   const [bulkModal, setBulkModal] = useState(false)
@@ -73,12 +90,30 @@ export default function AdminTeachers() {
       name: t.name || '', email: t.email || '', password: '',
       phone: t.phone || '', mobile: t.mobile || '',
       dob: t.dob || '', qualification: t.qualification || '',
-      experience: t.experience || '', salary: t.salary || '', subject: t.subject || ''
+      experience: t.experience || '', salary: t.salary || '', subject: t.subject || '',
+      assignments: t.assignments || []
     })
   }
 
   const handlePreSubmit = (e) => {
     e.preventDefault()
+
+    if (form.assignments && form.assignments.length > 0) {
+      const assignmentSet = new Set();
+      for (const a of form.assignments) {
+        if (!a.class_id || !a.section_id || !a.subject_id) {
+          alert('Please select Class, Section, and Subject for all assignments.');
+          return;
+        }
+        const key = `${a.class_id}-${a.section_id}-${a.subject_id}`;
+        if (assignmentSet.has(key)) {
+          alert('Duplicate assignment found. A teacher cannot be assigned the same Class, Section, and Subject twice.');
+          return;
+        }
+        assignmentSet.add(key);
+      }
+    }
+
     if (!editTarget) {
       setConfirmModal(true)
     } else {
@@ -99,7 +134,7 @@ export default function AdminTeachers() {
         setAddModal(false)
         setConfirmModal(false)
       }
-      setForm({ name: '', email: '', password: '', phone: '', mobile: '', dob: '', qualification: '', experience: '', salary: '', subject: '' })
+      setForm({ name: '', email: '', password: '', phone: '', mobile: '', dob: '', qualification: '', experience: '', salary: '', subject: '', assignments: [] })
       fetchTeachers()
     } catch (err) {
       alert(err.response?.data?.message || 'Operation failed.')
@@ -107,6 +142,31 @@ export default function AdminTeachers() {
       setSubmitting(false)
     }
   }
+
+  // Pre-fetch class data when editing a teacher
+  useEffect(() => {
+    if (editTarget && form.assignments?.length > 0) {
+      form.assignments.forEach(async (a) => {
+        if (a.class_id && !classCache[a.class_id]) {
+          try {
+            const [secRes, subRes] = await Promise.all([
+              academicApi.getClassSections(a.class_id),
+              academicApi.getClassSubjects(a.class_id)
+            ]);
+            setClassCache(prev => ({
+              ...prev,
+              [a.class_id]: {
+                sections: secRes.data || secRes.sections || [],
+                subjects: subRes.data || subRes.subjects || []
+              }
+            }));
+          } catch (e) {
+            console.error("Failed to load class cache", e);
+          }
+        }
+      });
+    }
+  }, [editTarget, form.assignments]);
 
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this teacher? This cannot be undone.')) return
@@ -209,6 +269,50 @@ export default function AdminTeachers() {
     }
   }
 
+  const handleAddAssignment = () => {
+    setForm(f => ({
+      ...f,
+      assignments: [...(f.assignments || []), { class_id: '', section_id: '', subject_id: '' }]
+    }))
+  }
+
+  const handleRemoveAssignment = (index) => {
+    setForm(f => ({
+      ...f,
+      assignments: f.assignments.filter((_, i) => i !== index)
+    }))
+  }
+
+  const handleAssignmentChange = async (index, field, value) => {
+    setForm(f => {
+      const newAssignments = [...(f.assignments || [])]
+      newAssignments[index] = { ...newAssignments[index], [field]: value }
+      if (field === 'class_id') {
+        newAssignments[index].section_id = ''
+        newAssignments[index].subject_id = ''
+      }
+      return { ...f, assignments: newAssignments }
+    })
+
+    if (field === 'class_id' && value && !classCache[value]) {
+      try {
+        const [secRes, subRes] = await Promise.all([
+          academicApi.getClassSections(value),
+          academicApi.getClassSubjects(value)
+        ]);
+        setClassCache(prev => ({
+          ...prev,
+          [value]: {
+            sections: secRes.data || secRes.sections || [],
+            subjects: subRes.data || subRes.subjects || []
+          }
+        }));
+      } catch (e) {
+        console.error("Failed to fetch dynamic class options", e);
+      }
+    }
+  }
+
   const renderFormFields = () => {
     return (
       <div className="space-y-4">
@@ -265,6 +369,80 @@ export default function AdminTeachers() {
         <div className="grid grid-cols-2 gap-4">
           <FormInput label="Qualification" value={form.qualification} onChange={e => handleInputChange('qualification', e.target.value)} placeholder="e.g. M.Sc, B.Ed" />
           <FormInput label="Salary" value={form.salary} onChange={e => handleInputChange('salary', e.target.value)} placeholder="e.g. 45000" />
+        </div>
+        <div className="pt-4 border-t border-slate-100">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-bold text-slate-800">Class & Section Assignments</span>
+            <button type="button" onClick={handleAddAssignment} className="btn-secondary btn btn-sm gap-1.5">
+              <Plus size={14} /> Add Assignment
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            {(!form.assignments || form.assignments.length === 0) && (
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl text-center text-xs font-bold text-slate-400 uppercase tracking-widest py-6">
+                No assignments added yet
+              </div>
+            )}
+            {form.assignments?.map((assignment, index) => (
+              <div key={index} className="flex gap-2 items-center p-3 bg-slate-50 border border-slate-100 rounded-xl">
+                <div className="flex-1 grid grid-cols-3 gap-2">
+                  <div className="flex flex-col">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Class *</label>
+                    <select 
+                      value={assignment.class_id || ''}
+                      onChange={e => handleAssignmentChange(index, 'class_id', e.target.value)}
+                      className="form-input py-1.5 px-2 text-sm"
+                      required
+                    >
+                      <option value="">Select</option>
+                      {academics.classes.map(c => <option key={c.id} value={c.id}>{c.class_number || c.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Section</label>
+                    <select 
+                      value={assignment.section_id || ''}
+                      onChange={e => handleAssignmentChange(index, 'section_id', e.target.value)}
+                      className="form-input py-1.5 px-2 text-sm"
+                      disabled={!assignment.class_id}
+                    >
+                      <option value="">{assignment.class_id && classCache[assignment.class_id]?.sections?.length === 0 ? 'No Sections Available' : 'Select'}</option>
+                      {assignment.class_id && classCache[assignment.class_id]?.sections?.map(s => 
+                        <option key={s.section_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
+                      )}
+                      {/* Fallback to global sections if cache not yet populated but class selected */}
+                      {assignment.class_id && (!classCache[assignment.class_id] || !classCache[assignment.class_id].sections) && academics.sections.map(s => 
+                        <option key={s.id} value={s.id}>{s.name || s.code}</option>
+                      )}
+                    </select>
+                  </div>
+                  <div className="flex flex-col relative">
+                    <label className="text-[10px] uppercase font-bold text-slate-500 mb-1">Subject *</label>
+                    <select 
+                      value={assignment.subject_id || ''}
+                      onChange={e => handleAssignmentChange(index, 'subject_id', e.target.value)}
+                      className="form-input py-1.5 px-2 text-sm pr-8"
+                      required
+                      disabled={!assignment.class_id}
+                    >
+                      <option value="">{assignment.class_id && classCache[assignment.class_id]?.subjects?.length === 0 ? 'No Subjects Available' : 'Select'}</option>
+                      {assignment.class_id && classCache[assignment.class_id]?.subjects?.map(s => 
+                        <option key={s.subject_id || s.id} value={s.subject_id || s.id}>{s.subject_name || s.name}</option>
+                      )}
+                      {/* Fallback to global subjects if cache not yet populated but class selected */}
+                      {assignment.class_id && (!classCache[assignment.class_id] || !classCache[assignment.class_id].subjects) && academics.subjects.map(s => 
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      )}
+                    </select>
+                  </div>
+                </div>
+                <button type="button" onClick={() => handleRemoveAssignment(index)} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg mt-5">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     )

@@ -12,6 +12,7 @@ import {
 } from '../../components/ui/index.jsx'
 import { BarChartWidget } from '../../components/charts/index.jsx'
 import { observationApi, teacherApi, classesApi, academicApi } from '../../services/schoolApi'
+import api from '../../services/api'
 import { OBSERVATION_CRITERIA } from '../../data/constants'
 import { toast } from 'react-hot-toast'
 import clsx from 'clsx'
@@ -27,6 +28,7 @@ export default function AdminObservation() {
   const [dataLoading, setDataLoading] = useState(false)
   const [fetchingSections, setFetchingSections] = useState(false)
   const [fetchingSubjects, setFetchingSubjects] = useState(false)
+  const [filteredTeachers, setFilteredTeachers] = useState([])
 
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ 
@@ -39,7 +41,7 @@ export default function AdminObservation() {
   })
   const [saved, setSaved] = useState(false)
 
-  const [listFilters, setListFilters] = useState({ classPrefix: 'All', section: 'All', subject: 'All' })
+  const [listFilters, setListFilters] = useState({ teacher: 'All' })
 
   const CRITERIA = OBSERVATION_CRITERIA
 
@@ -58,9 +60,22 @@ export default function AdminObservation() {
     return dbClassSubjects.map(s => ({ value: s.subject_id, label: s.subject_name }))
   }, [dbClassSubjects])
 
+  const filterTeacherOptions = useMemo(() => {
+    const map = new Map()
+    obsList.forEach(o => {
+      const tid = o.teacher_id || (o.teacher && o.teacher.id)
+      const tname = o.teacher?.name
+      if (tid && tname) map.set(tid, tname)
+    })
+    return Array.from(map, ([value, label]) => ({ value, label }))
+  }, [obsList])
+
   const teacherOptions = useMemo(() => {
+    if (form.classId && form.subjectId && filteredTeachers.length > 0) {
+      return filteredTeachers.map(t => ({ value: t.id, label: t.name }))
+    }
     return dbTeachers.map(t => ({ value: t.teacher_id || t.id, label: t.name }))
-  }, [dbTeachers])
+  }, [dbTeachers, filteredTeachers, form.classId, form.subjectId])
 
   const [searchParams] = useSearchParams()
   const preSelectedId = searchParams.get('teacherId')
@@ -115,9 +130,8 @@ export default function AdminObservation() {
 
   const filteredObsList = useMemo(() => {
     return obsList.filter(obs => {
-      if (listFilters.classPrefix !== 'All' && String(obs.class_id) !== String(listFilters.classPrefix)) return false
-      if (listFilters.section !== 'All' && String(obs.section_id) !== String(listFilters.section)) return false
-      if (listFilters.subject !== 'All' && String(obs.subject_id) !== String(listFilters.subject)) return false
+      const tid = String(obs.teacher_id || (obs.teacher && obs.teacher.id));
+      if (listFilters.teacher !== 'All' && tid !== String(listFilters.teacher)) return false
       return true
     })
   }, [obsList, listFilters])
@@ -171,6 +185,29 @@ export default function AdminObservation() {
     fetchSubjects()
     return () => { isMounted = false; };
   }, [form.classId, form.sectionId])
+
+  // Fetch Filtered Teachers when Subject Changes
+  useEffect(() => {
+    let isMounted = true;
+    if (!form.classId || !form.subjectId) {
+      setFilteredTeachers([])
+      return
+    }
+
+    const fetchFilteredTeachers = async () => {
+      try {
+        const res = await api.get(`/admin/lo/teachers/${form.classId}/${form.subjectId}?section_id=${form.sectionId || ''}`)
+        if (isMounted && res.data.success) {
+          setFilteredTeachers(Array.isArray(res.data.data) ? res.data.data : [])
+        }
+      } catch (err) {
+        if (isMounted) console.error('Failed to fetch assigned teachers:', err)
+        if (isMounted) setFilteredTeachers([])
+      }
+    }
+    fetchFilteredTeachers()
+    return () => { isMounted = false; };
+  }, [form.classId, form.subjectId, form.sectionId])
 
   // 3. AUTO-RESOLVE TEACHER
   useEffect(() => {
@@ -273,17 +310,9 @@ export default function AdminObservation() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
               <SectionHeader title="Observation Records" subtitle="Detailed breakdown of feedback" />
               <div className="flex flex-wrap items-center gap-2">
-                <select className="input py-2 px-3 text-xs bg-slate-50 font-semibold text-slate-600 rounded-lg border-slate-200 w-auto min-w-[120px]" value={listFilters.classPrefix} onChange={e => setListFilters(f => ({ ...f, classPrefix: e.target.value }))}>
-                  <option value="All">All Classes</option>
-                  {classOptions.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-                <select className="input py-2 px-3 text-xs bg-slate-50 font-semibold text-slate-600 rounded-lg border-slate-200 w-auto min-w-[120px]" value={listFilters.section} onChange={e => setListFilters(f => ({ ...f, section: e.target.value }))}>
-                  <option value="All">All Sections</option>
-                  {sectionOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-                <select className="input py-2 px-3 text-xs bg-slate-50 font-semibold text-slate-600 rounded-lg border-slate-200 w-auto min-w-[120px]" value={listFilters.subject} onChange={e => setListFilters(f => ({ ...f, subject: e.target.value }))}>
-                  <option value="All">All Subjects</option>
-                  {subjectOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                <select className="input py-2 px-3 text-xs bg-slate-50 font-semibold text-slate-600 rounded-lg border-slate-200 w-auto min-w-[120px]" value={listFilters.teacher} onChange={e => setListFilters(f => ({ ...f, teacher: e.target.value }))}>
+                  <option value="All">All Teachers</option>
+                  {filterTeacherOptions.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </select>
               </div>
             </div>
@@ -421,7 +450,14 @@ export default function AdminObservation() {
                     <input type="number" min="0" max="10" step="0.5"
                       placeholder="–"
                       value={form.criteria[c] ?? ''}
-                      onChange={e => setForm(f => ({ ...f, criteria: { ...f.criteria, [c]: e.target.value } }))}
+                      onChange={e => {
+                        let val = e.target.value;
+                        if (val !== '') {
+                          if (Number(val) > 10) val = '10';
+                          if (Number(val) < 0) val = '0';
+                        }
+                        setForm(f => ({ ...f, criteria: { ...f.criteria, [c]: val } }))
+                      }}
                       className="w-full sm:w-24 h-10 text-center text-lg font-black text-slate-800 bg-transparent outline-none" />
                     <span className="text-sm font-black text-slate-400 pr-3 border-l border-slate-100 pl-3">/ 10</span>
                   </div>
@@ -429,15 +465,15 @@ export default function AdminObservation() {
               ))}
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-4 pt-6">
+            <div className="flex flex-col sm:flex-row gap-3 pt-6 sm:justify-end">
+              <button onClick={() => setShowForm(false)} className="btn-secondary btn px-6 order-2 sm:order-1">Cancel</button>
               <button 
                 onClick={handleSave} 
                 disabled={!form.teacherId}
-                className="btn-primary btn h-14 flex-1 justify-center text-lg font-black shadow-lg shadow-brand-200 disabled:opacity-50 disabled:shadow-none order-1 sm:order-2"
+                className="btn-primary btn px-6 justify-center shadow-lg shadow-brand-200 disabled:opacity-50 disabled:shadow-none order-1 sm:order-2"
               >
-                <Save size={20} /> Save Observation
+                <Save size={16} /> Save Observation
               </button>
-              <button onClick={() => setShowForm(false)} className="btn-secondary btn px-8 h-14 font-bold text-slate-500 order-2 sm:order-1">Cancel</button>
             </div>
           </div>
         </div>
