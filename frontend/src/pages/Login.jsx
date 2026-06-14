@@ -98,17 +98,7 @@ export default function Login() {
             <p className="text-slate-400 text-sm">Sign in to continue to your dashboard</p>
           </div>
 
-          {/* Demo quick-fill */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-6">
-            <button onClick={() => fillDemo('admin')}
-              className="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white hover:border-brand-400 hover:text-brand-600 text-slate-500 transition-all text-center font-medium">
-              👔 Fill Admin
-            </button>
-            <button onClick={() => fillDemo('teacher')}
-              className="text-xs py-2 px-3 rounded-xl border border-slate-200 bg-white hover:border-brand-400 hover:text-brand-600 text-slate-500 transition-all text-center font-medium">
-              📚 Fill Teacher
-            </button>
-          </div>
+
 
           <form onSubmit={submit} className="space-y-4">
             <div>
@@ -117,7 +107,7 @@ export default function Login() {
                 <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   className="input pl-10"
-                  placeholder="admin or teacher"
+                  placeholder="Username / Phone No."
                   value={form.username}
                   onChange={handle('username')}
                   autoComplete="username"
@@ -163,11 +153,6 @@ export default function Login() {
             </button>
           </form>
 
-          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-xl">
-            <p className="text-amber-700 text-xs font-semibold mb-2">Valid Login Methods</p>
-            <p className="text-amber-600 text-xs">Admin: <code className="font-mono">admin / Admin@123</code></p>
-            <p className="text-amber-600 text-xs mt-1">Teacher: <code className="font-mono">Phone No. / Teacher@123</code></p>
-          </div>
 
           <p className="text-center text-xs text-slate-400 mt-6">
             <Link to="/" className="hover:text-brand-600 transition-colors">← Back to Website</Link>
