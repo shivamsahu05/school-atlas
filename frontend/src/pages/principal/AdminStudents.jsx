@@ -496,6 +496,14 @@ export default function AdminStudents() {
             </div>
           )}
 
+          <div className="bg-brand-50 border border-brand-100 p-3 rounded-xl flex gap-2 items-start">
+            <AlertCircle size={18} className="text-brand-600 mt-0.5 shrink-0" />
+            <p className="text-xs sm:text-sm font-medium text-brand-800">
+              Please fill all mandatory fields marked with an asterisk (*). <br className="hidden sm:block" />
+              <strong>Full Name, Father Name, Class Name, and Primary Mobile</strong> are required to complete registration.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormInput label="Full Name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             <FormInput label="Father Name *" value={form.father_name} onChange={e => setForm({ ...form, father_name: e.target.value })} />
@@ -504,9 +512,13 @@ export default function AdminStudents() {
             <SelectDropdown label="Gender" options={['Male', 'Female', 'Other']} value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} />
             <SelectDropdown 
               label="Class Name *" 
-              options={['', ...(Array.isArray(acadClasses) ? acadClasses : []).map(c => c.class_name || c.name)]} 
-              value={(Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.name || (Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.class_name || ''} 
+              options={['Select class...', ...uniqueClassNames]} 
+              value={(Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.name || (Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.class_name || 'Select class...'} 
               onChange={e => {
+                if (e.target.value === 'Select class...') {
+                  setForm(prev => ({ ...prev, class_id: '', section_id: '' }));
+                  return;
+                }
                 const selectedClass = (Array.isArray(acadClasses) ? acadClasses : []).find(c => (c.class_name || c.name) === e.target.value);
                 setForm(prev => ({ ...prev, class_id: selectedClass ? selectedClass.id : '', section_id: '' }))
               }} 

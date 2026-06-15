@@ -306,13 +306,6 @@ exports.handleLifecycle = async (req, res) => {
         WHERE cs.class_id = ?
       `, [nextClassId]);
 
-      if (sections.length === 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `The target class "${nextClassName}" has no sections defined. Please create a section first.` 
-        });
-      }
-
       // If multiple sections exist and none selected, return list for UI popup
       if (sections.length > 1 && !target_section_id) {
         return res.status(200).json({
@@ -326,8 +319,8 @@ exports.handleLifecycle = async (req, res) => {
         });
       }
 
-      // Use target_section_id if provided, otherwise auto-assign if only 1 section exists
-      let finalSectionId = target_section_id;
+      // Use target_section_id if provided, otherwise auto-assign if only 1 section exists, or null if 0 sections
+      let finalSectionId = target_section_id || null;
       
       if (target_section_id) {
         // Strict Validation: Ensure the selected section belongs to the CALCULATED next class
@@ -335,15 +328,17 @@ exports.handleLifecycle = async (req, res) => {
         if (!isValid) {
           return res.status(400).json({ success: false, message: `Invalid section selection. The chosen section does not belong to ${nextClassName}.` });
         }
-      } else {
+      } else if (sections.length > 0) {
         finalSectionId = sections[0].id;
       }
 
       // Identify max roll number in the target class + section
-      const [maxRollResult] = await pool.execute(
-        'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id = ?', 
-        [nextClassId, finalSectionId]
-      );
+      const rollQuery = finalSectionId 
+        ? 'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id = ?'
+        : 'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id IS NULL';
+      const rollParams = finalSectionId ? [nextClassId, finalSectionId] : [nextClassId];
+
+      const [maxRollResult] = await pool.execute(rollQuery, rollParams);
       
       let newRollNo = 1;
       if (maxRollResult[0].maxRoll && !isNaN(parseInt(maxRollResult[0].maxRoll))) {
@@ -355,10 +350,12 @@ exports.handleLifecycle = async (req, res) => {
         'UPDATE students SET class_id = ?, section_id = ?, roll_no = ?, status = "Active", updated_at = NOW() WHERE id = ?', 
         [nextClassId, finalSectionId, String(newRollNo), id]
       );
+      
+      const msgSuffix = finalSectionId ? '' : ' (No section assigned)';
       return res.status(200).json({ 
         success: true, 
         data: [], 
-        message: `Student promoted to ${nextClassName} successfully with Roll No ${newRollNo}.` 
+        message: `Student promoted to ${nextClassName} successfully with Roll No ${newRollNo}${msgSuffix}.` 
       });
     }
 
