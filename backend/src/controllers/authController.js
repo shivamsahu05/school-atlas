@@ -23,19 +23,35 @@ const login = async (req, res) => {
       select: { id: true, name: true, email: true, password: true, role: true, status: true, phone: true },
     })
   } else {
+    console.log(`[DEBUG LOGIN] Attempting login for username: ${username.trim()}`);
+    // Temporarily logging all matching users to debug the duplicate phone issue
+    const allMatching = await prisma.users.findMany({
+      where: { phone: username.trim() },
+      select: { id: true, name: true, email: true, role: true, status: true, phone: true },
+    });
+    console.log(`[DEBUG LOGIN] Found ${allMatching.length} users with phone ${username.trim()}:`, allMatching);
+
+    // FIX: Order by id DESC so the latest active user is fetched, bypassing the old deleted ones.
     user = await prisma.users.findFirst({
       where: { phone: username.trim() },
+      orderBy: { id: 'desc' },
       select: { id: true, name: true, email: true, password: true, role: true, status: true, phone: true },
     })
+    console.log(`[DEBUG LOGIN] Selected user for authentication:`, user ? { id: user.id, name: user.name, status: user.status } : null);
   }
 
-  if (!user) return sendError(res, 'Invalid credentials.', 401)
+  if (!user) {
+    console.log(`[DEBUG LOGIN] User not found for: ${username}`);
+    return sendError(res, 'Invalid credentials.', 401)
+  }
   
   if (user.status !== 'active') {
+    console.log(`[DEBUG LOGIN] User ${user.id} is inactive`);
     return sendError(res, 'Account inactive.', 403)
   }
 
   const valid = await bcrypt.compare(password, user.password)
+  console.log(`[DEBUG LOGIN] Password check for user ${user.id}: ${valid ? 'PASS' : 'FAIL'}`);
   if (!valid) return sendError(res, 'Invalid credentials.', 401)
 
   const token = signToken({ id: user.id, email: user.email, role: user.role })

@@ -174,6 +174,23 @@ exports.createTeacher = async (req, res) => {
 
     // 3. Create Assignments
     if (Array.isArray(assignments) && assignments.length > 0) {
+      // VALIDATION: Check if class + section + subject is already assigned to another teacher
+      for (const a of assignments) {
+        const sectionCondition = a.section_id ? `ta.section_id = ?` : `ta.section_id IS NULL`;
+        const params = a.section_id ? [a.class_id, a.section_id, a.subject_id, userId] : [a.class_id, a.subject_id, userId];
+        const [conflict] = await connection.query(`
+          SELECT u.name 
+          FROM teacher_assignments ta
+          JOIN users u ON ta.teacher_id = u.id
+          WHERE ta.class_id = ? AND ${sectionCondition} AND ta.subject_id = ? AND ta.teacher_id != ?
+        `, params);
+
+        if (conflict.length > 0) {
+          await connection.rollback();
+          return res.status(409).json({ success: false, message: `Class, Section, and Subject is already assigned to ${conflict[0].name}.` });
+        }
+      }
+
       const assignmentValues = assignments.map(a => [userId, a.class_id, a.section_id || null, a.subject_id]);
       await connection.query(
         `INSERT INTO teacher_assignments (teacher_id, class_id, section_id, subject_id) VALUES ?`,
@@ -233,6 +250,25 @@ exports.updateTeacher = async (req, res) => {
 
     // Update Assignments
     if (Array.isArray(assignments)) {
+      // VALIDATION
+      if (assignments.length > 0) {
+        for (const a of assignments) {
+          const sectionCondition = a.section_id ? `ta.section_id = ?` : `ta.section_id IS NULL`;
+          const params = a.section_id ? [a.class_id, a.section_id, a.subject_id, id] : [a.class_id, a.subject_id, id];
+          const [conflict] = await connection.query(`
+            SELECT u.name 
+            FROM teacher_assignments ta
+            JOIN users u ON ta.teacher_id = u.id
+            WHERE ta.class_id = ? AND ${sectionCondition} AND ta.subject_id = ? AND ta.teacher_id != ?
+          `, params);
+
+          if (conflict.length > 0) {
+            await connection.rollback();
+            return res.status(409).json({ success: false, message: `Class, Section, and Subject is already assigned to ${conflict[0].name}.` });
+          }
+        }
+      }
+
       await connection.execute('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
       if (assignments.length > 0) {
         const assignmentValues = assignments.map(a => [id, a.class_id, a.section_id || null, a.subject_id]);
@@ -261,7 +297,12 @@ exports.deleteTeacher = async (req, res) => {
     const id = req.params.id;
     if (id == req.user.id) return res.status(400).json({ success: false, message: 'Cannot delete self.' });
     
+    // Soft delete the teacher
     await pool.execute('UPDATE teachers SET is_deleted = TRUE WHERE user_id = ?', [id]);
+    
+    // Also deactivate their login in users table to prevent duplicate login fetching
+    await pool.execute('UPDATE users SET status = "inactive" WHERE id = ?', [id]);
+    
     return res.status(200).json({ success: true, message: 'Action completed' });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Delete failed safely.' });
