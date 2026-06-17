@@ -460,7 +460,7 @@ export default function TeacherStudents() {
               >
                 <option value="All">All Sections</option>
                 {availableSectionsForFilter.map(s => (
-                  <option key={s} value={s}>Section {s}</option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             )}
@@ -619,7 +619,7 @@ export default function TeacherStudents() {
                 onChange={e => setSelectedTargetSection(e.target.value)}
               >
                 {promoteData.sections.map(s => (
-                  <option key={s.id} value={s.id}>Section {s.name}</option>
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
             </div>
@@ -733,9 +733,28 @@ export default function TeacherStudents() {
                   <p className="text-xs font-medium text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-100/50 leading-relaxed">{selectedStudent.remarks}</p>
                 </div>
               )}
+              
+              <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-4">
+                {selectedStudent.created_by && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Created By</p>
+                    <p className="text-xs font-bold text-slate-700">{selectedStudent.created_by}</p>
+                    {selectedStudent.created_at && <p className="text-[10px] text-slate-500">{new Date(selectedStudent.created_at).toLocaleDateString('en-GB')}</p>}
+                  </div>
+                )}
+                {selectedStudent.updated_by && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Last Edited By</p>
+                    <p className="text-xs font-bold text-slate-700">{selectedStudent.updated_by}</p>
+                    {selectedStudent.updated_at && <p className="text-[10px] text-slate-500">{new Date(selectedStudent.updated_at).toLocaleDateString('en-GB')}</p>}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button onClick={() => setIsViewModalOpen(false)} className="btn-secondary w-full py-2.5 mt-1 rounded-xl font-bold shadow-sm hover:shadow-md transition-all text-slate-700 text-sm">Close Profile</button>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setIsViewModalOpen(false)} className="btn-secondary px-6 py-2 rounded-xl font-bold shadow-sm hover:shadow-md transition-all text-slate-700 text-sm">Close Profile</button>
+            </div>
           </div>
         )}
       </Modal>
