@@ -93,6 +93,45 @@ const AdminAcademics = () => {
     const [subjects, setSubjects] = useState([])          // master subjects (pool)
     const [streams, setStreams] = useState([])            // master streams (for HS)
 
+    const CLASS_OPTIONS = {
+        primary: [
+            { id: 'Pre-Nursery', name: 'Pre-Nursery', sort: 1 },
+            { id: 'Nursery', name: 'Nursery', sort: 2 },
+            { id: 'LKG', name: 'LKG', sort: 3 },
+            { id: 'UKG', name: 'UKG', sort: 4 },
+            { id: '1', name: 'Class 1', sort: 5 },
+            { id: '2', name: 'Class 2', sort: 6 },
+            { id: '3', name: 'Class 3', sort: 7 },
+            { id: '4', name: 'Class 4', sort: 8 },
+            { id: '5', name: 'Class 5', sort: 9 },
+            { id: '6', name: 'Class 6', sort: 10 },
+            { id: '7', name: 'Class 7', sort: 11 },
+            { id: '8', name: 'Class 8', sort: 12 }
+        ],
+        high_school: [
+            { id: '9', name: 'Class 9', sort: 13 },
+            { id: '10', name: 'Class 10', sort: 14 }
+        ],
+        higher_secondary: [
+            { id: '11', name: 'Class 11', sort: 15 },
+            { id: '12', name: 'Class 12', sort: 16 }
+        ]
+    };
+
+    const handleClassIdentifierChange = (identifier) => {
+        const options = CLASS_OPTIONS[classForm.classCategory] || [];
+        const opt = options.find(o => o.id === identifier);
+        if (opt) {
+            setClassForm(f => ({ ...f, classNumber: opt.id, name: opt.name, sortOrder: opt.sort }));
+        } else {
+            setClassForm(f => ({ ...f, classNumber: identifier }));
+        }
+    };
+
+    const handleCategoryChange = (category) => {
+        setClassForm(f => ({ ...f, classCategory: category, classNumber: '', name: '', sortOrder: '' }));
+    };
+
     // Selection State
     const [selectedClass, setSelectedClass] = useState(null)
     const [activeTab, setActiveTab] = useState('sections') // for regular classes: 'sections' or 'subjects'
@@ -1178,19 +1217,14 @@ const AdminAcademics = () => {
                 }
             >
                 <div className="space-y-5">
-                    <Input label="Class Name" placeholder="e.g. Class 10 or Grade A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input label="Class Identifier" placeholder="e.g. 10" value={classForm.classNumber} onChange={e => setClassForm({ ...classForm, classNumber: e.target.value })} />
-                        <Input label="Sort Order" placeholder="e.g. 1" type="number" value={classForm.sortOrder} onChange={e => setClassForm({ ...classForm, sortOrder: e.target.value })} />
-                    </div>
                     <div className="space-y-1.5">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Class Category</label>
                         <select
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium transition-all"
                             value={classForm.classCategory}
-                            onChange={e => setClassForm({ ...classForm, classCategory: e.target.value })}
+                            onChange={e => handleCategoryChange(e.target.value)}
                         >
-                            <option value="primary">Primary (1-8)</option>
+                            <option value="primary">Primary (Pre-Nursery to 8)</option>
                             <option value="high_school">High School (9-10)</option>
                             <option value="higher_secondary">Higher Secondary (11-12)</option>
                         </select>
@@ -1198,6 +1232,23 @@ const AdminAcademics = () => {
                             <Info size={12} /> Higher Secondary enables group/stream selection.
                         </p>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Class Identifier *</label>
+                            <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium transition-all"
+                                value={classForm.classNumber}
+                                onChange={e => handleClassIdentifierChange(e.target.value)}
+                            >
+                                <option value="">Select Class...</option>
+                                {(CLASS_OPTIONS[classForm.classCategory] || []).map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.id}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <Input label="Sort Order *" placeholder="e.g. 1" type="number" value={classForm.sortOrder} onChange={e => setClassForm({ ...classForm, sortOrder: e.target.value })} />
+                    </div>
+                    <Input label="Class Name *" placeholder="e.g. Class 10 or Grade A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
                 </div>
             </Modal>
 

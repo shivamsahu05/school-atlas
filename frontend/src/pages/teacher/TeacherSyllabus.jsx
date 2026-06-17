@@ -147,6 +147,11 @@ export default function TeacherSyllabus() {
 
   const columns = [
     {
+      key: 'serial',
+      label: '#',
+      render: (_, __, meta) => <span className="text-xs font-bold text-slate-400">{meta.rowIndex + 1}</span>
+    },
+    {
       key: 'week', label: 'Week', sortable: true,
       render: (v, r) => (
         <div className="flex flex-col gap-1.5">

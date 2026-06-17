@@ -623,6 +623,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
             <table className="w-full text-left border-collapse min-w-[1700px] table-fixed">
               <thead className="bg-slate-50/80 border-b border-slate-200">
                 <tr>
+                  <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-12 text-center">#</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-48">Timeline / Week</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-72">Chapter/Topic</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-24 text-center">Periods</th>
@@ -637,7 +638,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {weeklyData.map((row) => {
+                {weeklyData.map((row, index) => {
                   const isAlreadyComp = row.is_completed === 1;
                   const isViewOnly = (isAlreadyComp && editingId !== row.id) || isAllView;
                   const isEffectiveComp = isAlreadyComp && editingId !== row.id;
@@ -649,6 +650,9 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                         ? "bg-indigo-50/40 border-indigo-500/80 grayscale-[0.1]"
                         : "bg-white border-transparent hover:bg-slate-50/30"
                     )}>
+                      <td className="px-5 py-5 align-top text-center">
+                        <span className="text-xs font-bold text-slate-400 mt-0.5 inline-block">{index + 1}</span>
+                      </td>
                       <td className="px-5 py-5 align-top">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">{row.month}</span>

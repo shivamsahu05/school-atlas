@@ -188,12 +188,12 @@ export default function AdminTeachers() {
   const blocked = teachers.filter(t => t.status === 'blocked').length
 
   const columns = [
+    { key: 'sr_no', label: '#', sortable: false, render: (_, __, { rowIndex }) => <span className="font-medium text-slate-500">{rowIndex + 1}</span> },
     { key: 'name', label: 'Name', sortable: true },
     { key: 'email', label: 'Email', sortable: true },
     { key: 'mobile', label: 'Mobile', sortable: false },
-    { key: 'subject', label: 'Subject', sortable: true },
+    { key: 'subject', label: 'Specialization', sortable: true },
     { key: 'qualification', label: 'Qualification', sortable: false },
-    { key: 'experience', label: 'Experience', sortable: false },
     { key: 'status', label: 'Status', sortable: true, render: v => <StatusBadge status={v || 'active'} /> },
     {
       key: '_actions', label: '', sortable: false,
@@ -363,7 +363,7 @@ export default function AdminTeachers() {
           <FormInput label="Date of Birth" type="date" value={form.dob} onChange={e => handleInputChange('dob', e.target.value)} />
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <FormInput label="Subject" value={form.subject} onChange={e => handleInputChange('subject', e.target.value)} placeholder="e.g. Mathematics" />
+          <FormInput label="Specialization *" value={form.subject} onChange={e => handleInputChange('subject', e.target.value)} placeholder="e.g. Mathematics, Physics, Computer Science, Primary Education" required />
           <FormInput label="Experience" value={form.experience} onChange={e => handleInputChange('experience', e.target.value)} placeholder="e.g. 5 years" />
         </div>
         <div className="grid grid-cols-2 gap-4">
@@ -517,6 +517,9 @@ export default function AdminTeachers() {
             <div>
               <p className="font-bold text-slate-800">Step 2: Upload Data</p>
               <p className="text-xs text-slate-500 mt-0.5">Select your filled Excel file (.xlsx or .xls)</p>
+              <div className="mt-2 mb-1 bg-amber-50 border border-amber-100 p-2.5 rounded-lg text-xs text-amber-800 font-medium">
+                <strong>Note:</strong> Class and Subject assignments cannot be done via bulk upload. You will need to edit each teacher manually after upload to assign them to specific classes and subjects.
+              </div>
             </div>
 
             {!bulkResult ? (
@@ -638,7 +641,7 @@ export default function AdminTeachers() {
               <div className="flex justify-between text-xs"><span className="text-slate-500">Name:</span> <span className="font-bold">{form.name}</span></div>
               <div className="flex justify-between text-xs"><span className="text-slate-500">Email:</span> <span className="font-bold">{form.email}</span></div>
               <div className="flex justify-between text-xs"><span className="text-slate-500">Phone:</span> <span className="font-bold">{form.phone || '—'}</span></div>
-              <div className="flex justify-between text-xs"><span className="text-slate-500">Subject:</span> <span className="font-bold">{form.subject || '—'}</span></div>
+              <div className="flex justify-between text-xs"><span className="text-slate-500">Specialization:</span> <span className="font-bold">{form.subject || '—'}</span></div>
             </div>
           </div>
           <div className="flex gap-3">
@@ -659,7 +662,7 @@ export default function AdminTeachers() {
               ['Email', viewTarget.email],
               ['Phone', viewTarget.phone || '—'],
               ['Mobile', viewTarget.mobile || '—'],
-              ['Subject', viewTarget.subject || '—'],
+              ['Specialization', viewTarget.subject || '—'],
               ['Qualification', viewTarget.qualification || '—'],
               ['Experience', viewTarget.experience || '—'],
               ['Salary', viewTarget.salary ? `₹${viewTarget.salary}` : '—'],

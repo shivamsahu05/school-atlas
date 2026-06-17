@@ -80,6 +80,9 @@ export default function AdminSchedule() {
            const validSections = teacher.sections?.filter(s => s !== null);
            if (validSections && validSections.length > 0) {
               setBulkMappedSections(validSections);
+              if (validSections.length === 1) {
+                 setBulkSectionId(validSections[0]);
+              }
            } else {
               setBulkMappedSections([]); // All sections
            }
@@ -101,8 +104,23 @@ export default function AdminSchedule() {
          const validSections = teacher.sections?.filter(s => s !== null);
          if (validSections && validSections.length > 0) {
             setBulkMappedSections(validSections);
+            if (validSections.length === 1) {
+               setBulkSectionId(validSections[0]);
+            }
          }
       }
+    }
+  };
+
+  const handleBulkSectionChange = (sectionId) => {
+    setBulkSectionId(sectionId);
+    if (sectionId && bulkMappedTeachers.length > 0) {
+       const mappedTeacher = bulkMappedTeachers.find(t => t.sections?.includes(Number(sectionId)));
+       if (mappedTeacher) {
+          setBulkTeacherId(mappedTeacher.teacher_id);
+       }
+    } else if (!sectionId && bulkMappedTeachers.length > 1) {
+       setBulkTeacherId('');
     }
   };
 
@@ -170,6 +188,9 @@ export default function AdminSchedule() {
            const validSections = teacher.sections?.filter(s => s !== null);
            if (validSections && validSections.length > 0) {
               setManualMappedSections(validSections);
+              if (validSections.length === 1) {
+                 setForm(f => ({ ...f, section_id: validSections[0] }));
+              }
            } else {
               setManualMappedSections([]); 
            }
@@ -190,8 +211,24 @@ export default function AdminSchedule() {
          const validSections = teacher.sections?.filter(s => s !== null);
          if (validSections && validSections.length > 0) {
             setManualMappedSections(validSections);
+            if (validSections.length === 1) {
+               setForm(f => ({ ...f, section_id: validSections[0] }));
+            }
          }
       }
+    }
+  };
+
+  const handleSectionChange = (sectionId) => {
+    setForm(f => ({ ...f, section_id: sectionId }));
+    
+    if (sectionId && manualMappedTeachers.length > 0) {
+       const mappedTeacher = manualMappedTeachers.find(t => t.sections?.includes(Number(sectionId)));
+       if (mappedTeacher) {
+          setForm(f => ({ ...f, teacher_id: mappedTeacher.teacher_id }));
+       }
+    } else if (!sectionId && manualMappedTeachers.length > 1) {
+       setForm(f => ({ ...f, teacher_id: '' }));
     }
   };
 
@@ -274,7 +311,7 @@ export default function AdminSchedule() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.class_id || !form.subject_id || !form.topic || !form.teacher_id) {
+    if (!form.class_id || !form.subject_id || !form.topic || (!form.teacher_id && manualMappedTeachers.length <= 1)) {
       alert('Teacher, Class, subject and topic are required.');
       return;
     }
@@ -526,12 +563,17 @@ export default function AdminSchedule() {
                 <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
                   value={form.section_id || ''}
-                  onChange={e => setForm(f => ({ ...f, section_id: e.target.value }))}
-                  required
-                  disabled={!form.subject_id || (manualMappedTeachers.length === 1 && manualMappedSections.length === 0)}
+                  onChange={e => handleSectionChange(e.target.value)}
+                  disabled={!form.subject_id || (manualMappedTeachers.length === 1 && manualMappedSections.length === 0) || manualMappedSections.length === 1}
                 >
                   {manualMappedTeachers.length === 1 && manualMappedSections.length === 0 ? (
                     <option value="">All Sections (Auto)</option>
+                  ) : manualMappedSections.length === 1 ? (
+                    manualMappedSections.map(secId => {
+                      const secObj = acadSections.find(a => String(a.section_id || a.id) === String(secId));
+                      const name = secObj ? (secObj.section_name || secObj.name || secObj.code) : `Section ${secId}`;
+                      return <option key={secId} value={secId}>{name}</option>;
+                    })
                   ) : (
                     <>
                       <option value="">Select section…</option>
@@ -558,10 +600,9 @@ export default function AdminSchedule() {
                   )}
                   value={form.teacher_id}
                   onChange={e => handleTeacherChange(e.target.value)}
-                  required
                   disabled={manualMappedTeachers.length === 1}
                 >
-                  <option value="">Select teacher…</option>
+                  <option value="">{manualMappedTeachers.length > 1 && !form.section_id ? 'All Teachers (Auto-Assign)' : 'Select teacher…'}</option>
                   {manualMappedTeachers.length > 0
                     ? manualMappedTeachers.map(t => <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>)
                     : allTeachers.map(t => <option key={t.id} value={t.id}>{t.name} (ID: {t.id})</option>)
@@ -728,14 +769,22 @@ export default function AdminSchedule() {
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Section (Fallback)</label>
               <select
                 value={bulkSectionId}
-                onChange={e => setBulkSectionId(e.target.value)}
-                disabled={!bulkClassId || (bulkMappedTeachers.length === 1 && bulkMappedSections.length === 0)}
+                onChange={e => handleBulkSectionChange(e.target.value)}
+                disabled={!bulkClassId || (bulkMappedTeachers.length === 1 && bulkMappedSections.length === 0) || bulkMappedSections.length === 1}
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50"
               >
-                <option value="">All Sections</option>
-                {bulkSections.filter(s => bulkMappedSections.length === 0 || bulkMappedSections.includes(s.section_id || s.id)).map(s => (
-                  <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
-                ))}
+                {bulkMappedSections.length === 1 ? (
+                  bulkSections.filter(s => bulkMappedSections.includes(s.section_id || s.id)).map(s => (
+                    <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="">All Sections</option>
+                    {bulkSections.filter(s => bulkMappedSections.length === 0 || bulkMappedSections.includes(s.section_id || s.id)).map(s => (
+                      <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
+                    ))}
+                  </>
+                )}
               </select>
             </div>
 
@@ -749,7 +798,7 @@ export default function AdminSchedule() {
                 disabled={bulkMappedTeachers.length === 1}
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50 disabled:bg-green-50 disabled:text-green-800 disabled:border-green-200"
               >
-                <option value="">Select teacher…</option>
+                <option value="">{bulkMappedTeachers.length > 1 && !bulkSectionId ? 'All Teachers (Auto-Assign)' : 'Select teacher…'}</option>
                 {bulkMappedTeachers.length > 0 
                   ? bulkMappedTeachers.map(t => (
                       <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>

@@ -341,6 +341,11 @@ export default function AdminSyllabus() {
 
   const columns = [
     {
+      key: 'serial',
+      label: '#',
+      render: (_, __, meta) => <span className="text-xs font-bold text-slate-400">{meta.rowIndex + 1}</span>
+    },
+    {
       key: 'teacher',
       label: 'Teacher',
       sortable: true,

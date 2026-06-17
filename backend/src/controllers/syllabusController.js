@@ -297,31 +297,42 @@ const createSyllabus = async (req, res) => {
     finalMonth = startDate.toLocaleString('default', { month: 'long' });
   }
 
-  // 5. Determine teacher_id: admin can assign to a specific teacher
-  const finalTeacherId = (req.user.role === 'admin' && bodyTeacherId)
-    ? Number(bodyTeacherId)
-    : req.user.id;
-
-  // 6. Resolve Target Sections
+  // 5. Resolve Target Sections
   let targetSectionIds = [section_id ? Number(section_id) : null];
   
   if (!section_id) {
     const [assignedSections] = await pool.execute(
-      'SELECT section_id FROM teacher_subjects WHERE teacher_id = ? AND class_id = ? AND subject_id = ?',
-      [finalTeacherId, class_id, subject_id]
+      'SELECT section_id FROM teacher_subjects WHERE class_id = ? AND subject_id = ?',
+      [class_id, subject_id]
     );
     if (assignedSections.length > 0) {
       targetSectionIds = assignedSections.map(r => r.section_id).filter(id => id);
+    } else {
+      const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [class_id]);
+      if (classSecs.length > 0) {
+        targetSectionIds = classSecs.map(s => s.section_id);
+      }
     }
   }
 
-  // 7. Check Duplicates
+  // 6. Fetch Teacher Mapping for per-section resolution
+  const [teacherMap] = await pool.execute(`
+    SELECT ta.teacher_id, ta.section_id 
+    FROM teacher_assignments ta
+    WHERE ta.class_id = ? AND ta.subject_id = ?
+  `, [class_id, subject_id]);
+
+  // 7. Check Duplicates per section
   if (week) {
     for (const secId of targetSectionIds) {
-      const [[exists]] = await pool.execute(`
-        SELECT id FROM syllabus 
-        WHERE teacher_id = ? AND class_id = ? AND section_id ${secId ? '= ?' : 'IS NULL'} AND subject_id = ? AND week = ?
-      `, secId ? [finalTeacherId, class_id, secId, subject_id, week] : [finalTeacherId, class_id, subject_id, week]);
+      const duplicateQuery = secId 
+        ? `SELECT id FROM syllabus WHERE class_id = ? AND subject_id = ? AND section_id = ? AND LOWER(month) = LOWER(?) AND LOWER(week) = LOWER(?) LIMIT 1`
+        : `SELECT id FROM syllabus WHERE class_id = ? AND subject_id = ? AND section_id IS NULL AND LOWER(month) = LOWER(?) AND LOWER(week) = LOWER(?) LIMIT 1`;
+      const dupParams = secId 
+        ? [class_id, subject_id, secId, finalMonth, week]
+        : [class_id, subject_id, finalMonth, week];
+        
+      const [[exists]] = await pool.execute(duplicateQuery, dupParams);
       
       if (exists) {
         let secName = 'All Sections';
@@ -345,11 +356,26 @@ const createSyllabus = async (req, res) => {
 
   let lastInsertId = null;
   for (const secId of targetSectionIds) {
+    let resolvedTeacherId = bodyTeacherId ? Number(bodyTeacherId) : null;
+
+    if (!resolvedTeacherId) {
+      if (teacherMap.length > 0) {
+        const secMap = teacherMap.find(m => m.section_id === secId);
+        if (secMap) {
+          resolvedTeacherId = secMap.teacher_id;
+        } else {
+          resolvedTeacherId = teacherMap[0].teacher_id;
+        }
+      } else {
+        resolvedTeacherId = req.user.id; // Admin fallback
+      }
+    }
+
     const [result] = await pool.execute(sql, [
       Number(class_id),
       secId,
       Number(subject_id),
-      finalTeacherId,
+      resolvedTeacherId,
       chapter || null,
       topic,
       week || null,
@@ -538,79 +564,74 @@ const bulkUploadSyllabus = async (req, res) => {
         const sub = subjects.find(s => s.name === subName || s.name.includes(subName));
         const sec = sections.find(s => s.name === secName || s.name.includes(secName));
 
-        // Resolve Teacher (by Mapping first, then Fallback, then Admin)
-        let resolvedTeacherId = null;
-        let mappedSections = [];
-        
+        // Resolve Explicit Teacher from Excel or UI Fallback
+        let explicitTeacherId = null;
+        if (tName) {
+          const tMatch = teachers.find(t => t.name.toLowerCase() === tName.toLowerCase() || String(t.teacher_id) === tName || String(t.user_id) === tName);
+          if (tMatch) explicitTeacherId = tMatch.user_id;
+        } else if (req.body.teacher_id) {
+          const tMatch = teachers.find(t => String(t.teacher_id) === String(req.body.teacher_id) || String(t.user_id) === String(req.body.teacher_id));
+          if (tMatch) explicitTeacherId = tMatch.user_id;
+        }
+
         const [teacherMap] = await pool.execute(`
           SELECT ta.teacher_id, ta.section_id 
           FROM teacher_assignments ta
           WHERE ta.class_id = ? AND ta.subject_id = ?
         `, [cls.id, sub.id]);
-        
-        if (teacherMap.length > 0) {
-          // If a section is specified, find the teacher for that section
-          if (sec) {
-            const secMap = teacherMap.find(m => m.section_id === sec.id);
-            if (secMap) {
-              resolvedTeacherId = secMap.teacher_id;
-            } else {
-              // fallback to first teacher mapped
-              resolvedTeacherId = teacherMap[0].teacher_id;
-            }
-          } else {
-            resolvedTeacherId = teacherMap[0].teacher_id;
-          }
-        } else if (tName) {
-          const tMatch = teachers.find(t => t.name.toLowerCase() === tName.toLowerCase() || String(t.teacher_id) === tName || String(t.user_id) === tName);
-          if (tMatch) resolvedTeacherId = tMatch.user_id;
-        } else if (req.body.teacher_id) {
-          const tMatch = teachers.find(t => String(t.teacher_id) === String(req.body.teacher_id) || String(t.user_id) === String(req.body.teacher_id));
-          if (tMatch) resolvedTeacherId = tMatch.user_id;
-        } else {
-          resolvedTeacherId = req.user.id; // Fallback to current user
-        }
 
         if (!cls) throw new Error(`Class '${clsName}' not found.`);
         if (!sub) throw new Error(`Subject '${subName}' not found.`);
 
-        // Duplicate Week Check
-        const [existingWeek] = await pool.execute(`
-          SELECT id FROM syllabus 
-          WHERE class_id = ? AND subject_id = ? AND LOWER(month) = LOWER(?) AND LOWER(week) = LOWER(?) LIMIT 1
-        `, [cls.id, sub.id, month, week]);
-        
-        if (existingWeek.length > 0) {
-          throw new Error(`Schedule already exists for ${week} of ${month}.`);
-        }
-
         const { startDate, endDate } = calculateDates(month, week);
 
-        // Resolve Sections (If no section provided, apply to ALL sections of the class mapped to this teacher)
+        // Resolve Sections (If no section provided, apply to ALL sections of the class)
         let targetSections = [];
         if (sec) {
           targetSections.push(sec.id);
         } else if (req.body.section_id) {
           targetSections.push(req.body.section_id);
         } else {
-          // if using mapped teacher, use mapped sections
-          if (teacherMap.length > 0 && resolvedTeacherId) {
-            const tSecs = teacherMap.filter(m => m.teacher_id === resolvedTeacherId && m.section_id !== null).map(m => m.section_id);
-            if (tSecs.length > 0) {
-              targetSections = tSecs;
-            }
-          }
-          if (targetSections.length === 0) {
-            const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [cls.id]);
-            if (classSecs.length > 0) {
-              targetSections = classSecs.map(s => s.section_id);
-            } else {
-              targetSections.push(null);
-            }
+          const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [cls.id]);
+          if (classSecs.length > 0) {
+            targetSections = classSecs.map(s => s.section_id);
+          } else {
+            targetSections.push(null);
           }
         }
 
         for (const targetSecId of targetSections) {
+          // Resolve Teacher for this specific section
+          let resolvedTeacherId = explicitTeacherId;
+
+          if (!resolvedTeacherId) {
+            if (teacherMap.length > 0) {
+              const secMap = teacherMap.find(m => m.section_id === targetSecId);
+              if (secMap) {
+                resolvedTeacherId = secMap.teacher_id;
+              } else {
+                resolvedTeacherId = teacherMap[0].teacher_id;
+              }
+            } else {
+              resolvedTeacherId = req.user.id; // Admin fallback
+            }
+          }
+
+          // Duplicate Week Check for this specific section
+          const duplicateQuery = targetSecId 
+            ? `SELECT id FROM syllabus WHERE class_id = ? AND subject_id = ? AND section_id = ? AND LOWER(month) = LOWER(?) AND LOWER(week) = LOWER(?) LIMIT 1`
+            : `SELECT id FROM syllabus WHERE class_id = ? AND subject_id = ? AND section_id IS NULL AND LOWER(month) = LOWER(?) AND LOWER(week) = LOWER(?) LIMIT 1`;
+          
+          const dupParams = targetSecId 
+            ? [cls.id, sub.id, targetSecId, month, week]
+            : [cls.id, sub.id, month, week];
+
+          const [existingWeek] = await pool.execute(duplicateQuery, dupParams);
+          
+          if (existingWeek.length > 0) {
+            throw new Error(`Schedule already exists for ${week} of ${month} in this section.`);
+          }
+
           const sql = `
             INSERT INTO syllabus (
               teacher_id, class_id, section_id, subject_id, chapter, week, month, topic, 

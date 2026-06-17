@@ -293,7 +293,7 @@ exports.downloadTeacherTemplate = async (req, res) => {
   try {
     const headers = [
       'Full Name', 'Email', 'Password', 'Phone (used for Login)', 'Mobile', 
-      'Date of Birth', 'Subject', 'Experience', 'Qualification', 'Salary'
+      'Date of Birth', 'Specialization', 'Experience', 'Qualification', 'Salary'
     ];
 
     const sampleData = [
@@ -330,7 +330,7 @@ exports.exportTeachers = async (req, res) => {
     `;
     const [rows] = await pool.execute(query);
 
-    const headers = ['Name', 'Email', 'Login Phone', 'Password', 'Mobile', 'Subject', 'Qualification', 'Experience', 'Salary', 'Status'];
+    const headers = ['Name', 'Email', 'Login Phone', 'Password', 'Mobile', 'Specialization', 'Qualification', 'Experience', 'Salary', 'Status'];
     const data = rows.map(r => [
       r.name, r.email, r.login_phone || '', '', r.mobile || '', r.subject || '', 
       r.qualification || '', r.experience || '', r.salary || '', r.status || 'active'
@@ -373,7 +373,7 @@ exports.bulkUploadTeachers = async (req, res) => {
         const phone = row['Phone (used for Login)'] || row['Login Phone'];
         const mobile = row['Mobile'];
         const dob = row['Date of Birth'] || row['DOB'];
-        const subject = row['Subject'];
+        const subject = row['Specialization'] || row['Subject'];
         const experience = row['Experience'];
         const qualification = row['Qualification'];
         const salary = row['Salary'];
