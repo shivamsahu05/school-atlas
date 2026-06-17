@@ -238,11 +238,28 @@ exports.updateStudent = async (req, res) => {
  * DELETE /api/students/:id
  */
 exports.deleteStudent = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    await pool.execute('DELETE FROM students WHERE id = ?', [req.params.id]);
+    const studentId = req.params.id;
+    await connection.beginTransaction();
+
+    // Cascade delete related records
+    await connection.execute('DELETE FROM homework_submissions WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM learning_outcomes WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM micro_schedule_student_status WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM micro_schedule_tracking WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM student_marks WHERE student_id = ?', [studentId]);
+    
+    await connection.execute('DELETE FROM students WHERE id = ?', [studentId]);
+    
+    await connection.commit();
     return sendResponse(res, true, [], 'Student deleted.');
   } catch (error) {
-    return sendResponse(res, false, [], 'Delete failed.', 500);
+    if (connection) await connection.rollback();
+    console.error("Failed to delete student:", error);
+    return sendResponse(res, false, [], 'Delete failed: ' + error.message, 500);
+  } finally {
+    if (connection) connection.release();
   }
 };
 

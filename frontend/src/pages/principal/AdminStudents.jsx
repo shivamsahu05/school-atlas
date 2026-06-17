@@ -570,25 +570,27 @@ export default function AdminStudents() {
                     setConfirmDialog({
                       isOpen: true,
                       title: 'Delete Student',
-                      message: 'Are you sure you want to delete this student?',
+                      message: `Are you sure you want to delete ${form.name}?`,
                       type: 'danger',
                       onConfirm: () => {
-                        setConfirmDialog({
+                        setTimeout(() => {
+                          setConfirmDialog({
                             isOpen: true,
                             title: 'Permanent Deletion',
-                            message: 'Are you really sure? This student will be permanently deleted.',
+                            message: `Are you really sure? ${form.name} will be permanently deleted.`,
                             type: 'danger',
                             onConfirm: async () => {
                               try {
-                                await studentApi.delete(editId);
+                                await studentsApi.delete(editId);
                                 toast.success('Student deleted successfully');
                                 setIsAddModalOpen(false);
                                 fetchAllData();
                               } catch (err) {
-                                toast.error('Failed to delete student');
+                                toast.error(err.response?.data?.message || err.message || 'Failed to delete student');
                               }
                             }
                           });
+                        }, 100);
                       }
                     });
                   }} 

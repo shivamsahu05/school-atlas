@@ -367,7 +367,7 @@ export default function TeacherSyllabus() {
                     <tr key={row.id || idx} className={rowClass}>
                       {columns.map(col => (
                         <td key={col.key} className="px-3 py-2 sm:px-6 sm:py-4">
-                          {col.render ? col.render(row[col.key], row) : row[col.key]}
+                          {col.render ? col.render(row[col.key], row, { rowIndex: idx }) : row[col.key]}
                         </td>
                       ))}
                     </tr>

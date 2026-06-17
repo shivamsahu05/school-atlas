@@ -123,24 +123,44 @@ export default function TeacherDashboard() {
         <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Hello,</p>
-              {(() => {
-                const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
-                if (rankIndex === 0) return <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-amber-400/30 uppercase tracking-tighter">🏆 Top Performer</span>;
-                if (rankIndex === 1) return <span className="bg-blue-400/20 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-400/30 uppercase tracking-tighter">🥈 Top Second Performer</span>;
-                if (rankIndex === 2) return <span className="bg-slate-400/20 text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-slate-400/30 uppercase tracking-tighter">🥉 Top Third Performer</span>;
-                return null;
-              })()}
+              <div className="flex items-center gap-3">
+                <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Hello,</p>
+                {(() => {
+                  const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+                  if (rankIndex === 0) return <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-amber-400/30 uppercase tracking-tighter">⭐ Top 1 Performer</span>;
+                  if (rankIndex === 1) return <span className="bg-blue-400/20 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-400/30 uppercase tracking-tighter">⭐ Top 2 Performer</span>;
+                  if (rankIndex === 2) return <span className="bg-slate-400/20 text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-slate-400/30 uppercase tracking-tighter">⭐ Top 3 Performer</span>;
+                  return null;
+                })()}
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Dear <span className="text-white">{user?.name || 'Teacher'}</span></h1>
+              <div className="space-y-1">
+                {(() => {
+                  const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+                  const rank = rankIndex !== -1 ? rankIndex + 1 : null;
+                  const score = rankIndex !== -1 ? Number(data?.topPerformers[rankIndex]?.weighted_score || 0) : 0;
+                  const isStar = (rank && rank <= 5) || score >= 85;
+                  if (isStar) {
+                    return <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — You are one of the Star Performers of the School 🌟</p>;
+                  }
+                  return <p className="text-blue-300 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — Keep up the great work and continue making an impact.</p>;
+                })()}
+                <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
+              </div>
             </div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Dear <span className="text-white">{user?.name || 'Teacher'}</span></h1>
-            <div className="space-y-1">
-              <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — YOU ARE THE STAR PERFORMER 🌟</p>
-              <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
-            </div>
-          </div>
-          <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
-          <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+            {(() => {
+               const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+               const rank = rankIndex !== -1 ? rankIndex + 1 : null;
+               const score = rankIndex !== -1 ? Number(data?.topPerformers[rankIndex]?.weighted_score || 0) : 0;
+               const isStar = (rank && rank <= 5) || score >= 85;
+               if (!isStar) return null;
+               return (
+                 <div className="flex gap-2">
+                   <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+                   <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+                 </div>
+               )
+            })()}
         </div>
       </div>
 

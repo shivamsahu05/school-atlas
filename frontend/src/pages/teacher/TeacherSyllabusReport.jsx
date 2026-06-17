@@ -63,7 +63,6 @@ export default function TeacherSyllabusReport() {
       let completedYearly = 0;
 
       g.items.forEach(item => {
-        const periods = Number(item.periods || 0);
         const isCompleted = item.is_completed || item.status === 'completed';
 
         // Check if planned_end_date exists and is <= today
@@ -71,22 +70,26 @@ export default function TeacherSyllabusReport() {
         const isPlannedTillToday = plannedEnd && plannedEnd <= today;
 
         if (isPlannedTillToday) {
-          plannedTillToday += periods;
+          plannedTillToday += 1;
           if (isCompleted) {
-            completedTillToday += periods;
+            completedTillToday += 1;
           }
         }
 
-        totalYearly += periods;
+        totalYearly += 1;
         if (isCompleted) {
-          completedYearly += periods;
+          completedYearly += 1;
         }
       });
 
-      // Calculate till today row
-      if (plannedTillToday > 0) {
+      // Accumulate overall stats for all subjects (even those hidden from the tables below)
+      overallPlannedTillToday += plannedTillToday;
+      overallCompletedTillToday += completedTillToday;
+
+      // Calculate till today row (Only show if completion > 0)
+      if (plannedTillToday > 0 && completedTillToday > 0) {
         const completionPct = Math.round((completedTillToday / plannedTillToday) * 100);
-        const pendingPeriods = Math.max(0, plannedTillToday - completedTillToday);
+        const pendingTopics = Math.max(0, plannedTillToday - completedTillToday);
         
         let status = 'DELAYED';
         let statusColor = 'text-rose-600 bg-rose-50 border-rose-100';
@@ -105,17 +108,14 @@ export default function TeacherSyllabusReport() {
           planned: plannedTillToday,
           completed: completedTillToday,
           percent: completionPct,
-          pending: pendingPeriods,
+          pending: pendingTopics,
           status,
           statusColor
         });
-
-        overallPlannedTillToday += plannedTillToday;
-        overallCompletedTillToday += completedTillToday;
       }
 
-      // Calculate yearly row
-      if (totalYearly > 0) {
+      // Calculate yearly row (Only show if completion > 0)
+      if (totalYearly > 0 && completedYearly > 0) {
         const completionPct = Math.round((completedYearly / totalYearly) * 100);
         rowsYearly.push({
           class: g.class,
