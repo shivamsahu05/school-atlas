@@ -86,7 +86,7 @@ export default function TeacherSyllabus() {
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchMonth  = !selectedMonth  || normalize(item.month) === normalize(selectedMonth)
-      const matchWeek   = !selectedWeek   || normalize(item.week).includes(selectedWeek.replace('Week ', ''))
+      const matchWeek   = !selectedWeek   || normalize(item.week).includes(normalize(selectedWeek))
       const matchStatus = filterStatus === 'All' || normalize(item.status) === normalize(filterStatus)
       const itemCls = String(item.class || item.className || '').trim().replace(/^Class\s+/i, '');
       const selCls = String(filterCls || '').trim().replace(/^Class\s+/i, '');
