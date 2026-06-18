@@ -123,7 +123,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   }, [selClassId, selSectionId, selectedSubject, isAllView]);
 
   const loadPlan = async () => {
-    if (!isAllView && (!selClassId || !selectedSubject)) return;
+    if (!isAllView && (!selClassId || !selSectionId || !selectedSubject)) return;
     setLoading(true); setError(null);
     try {
       if (isAllView) {
@@ -134,7 +134,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       } else {
         const params = {
           class_id: selClassId === 'All' ? null : selClassId,
-          section_id: selSectionId === 'All' || !isAllView ? null : selSectionId,
+          section_id: selSectionId === 'All' ? null : selSectionId,
           subject_id: selectedSubject === 'All' ? null : selectedSubject,
           month: filterMonth === 'All' ? null : filterMonth
         };
@@ -315,7 +315,9 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
         notebookChecked: row.notebook_checked || 'No',
         class_understanding_level: row.class_understanding_level || '',
         is_completed: Number(row.is_completed || 0),
-        subject_name: row.subjectName || row.subject_name || row.subject
+        subject_name: row.subjectName || row.subject_name || row.subject,
+        class: row.className || row.class || '',
+        section: row.sectionName || row.section || ''
       };
     });
     setWeeklyData(formatted);
@@ -496,7 +498,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       <div className="bg-white p-5 rounded-lg border border-slate-200 flex flex-wrap gap-5 items-end shadow-sm">
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Class Level</label>
-          <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId('All'); setSelectedSubject('All'); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
+          <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId(isAllView ? 'All' : ''); setSelectedSubject(isAllView ? 'All' : ''); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Classes</option>}
             {!isAllView && <option value="">Select class…</option>}
             {effectiveAssignments.map(c => {
@@ -505,19 +507,17 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
             })}
           </select>
         </div>
-        {isAllView && shouldShowSection && (
-          <div className="flex-1 min-w-[150px]">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
-            <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
-              {isAllView && <option value="All">All Sections</option>}
-              {!isAllView && <option value="">Select section…</option>}
-              {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
-            </select>
-          </div>
-        )}
+        <div className="flex-1 min-w-[150px]">
+          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
+          <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject(isAllView ? 'All' : ''); }} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+            {isAllView && <option value="All">All Sections</option>}
+            {!isAllView && <option value="">Select section…</option>}
+            {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
+          </select>
+        </div>
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Subject Area</label>
-          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!isAllView && (!selClassId || !selSectionId)} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Subjects</option>}
             {!isAllView && <option value="">Select subject…</option>}
             {effectiveSubjects.map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
