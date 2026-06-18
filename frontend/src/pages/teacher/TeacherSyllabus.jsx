@@ -357,11 +357,6 @@ export default function TeacherSyllabus() {
                     const isCompleted = normalize(row.status) === 'completed';
                     
                     let rowClass = "hover:bg-slate-50/50 transition-colors group border-l-[3px] border-l-transparent";
-                    if (isCompleted) {
-                      rowClass = "bg-emerald-50/30 hover:bg-emerald-50/50 transition-colors group border-l-[3px] border-l-emerald-500";
-                    } else if (isCurrent) {
-                      rowClass = "bg-amber-50/40 hover:bg-amber-100/60 transition-colors group border-l-[3px] border-l-amber-500";
-                    }
 
                     return (
                     <tr key={row.id || idx} className={rowClass}>
