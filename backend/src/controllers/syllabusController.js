@@ -298,12 +298,12 @@ const createSyllabus = async (req, res) => {
   }
 
   // 5. Resolve Target Sections
-  let targetSectionIds = [section_id ? Number(section_id) : null];
+  let targetSectionIds = [];
   
-  if (!section_id) {
+  if (!section_id || String(section_id).toLowerCase() === 'all') {
     const [assignedSections] = await pool.execute(
-      'SELECT section_id FROM teacher_subjects WHERE class_id = ? AND subject_id = ?',
-      [class_id, subject_id]
+      'SELECT section_id FROM teacher_assignments WHERE teacher_id = ? AND class_id = ? AND subject_id = ?',
+      [bodyTeacherId || req.user.id, class_id, subject_id]
     );
     if (assignedSections.length > 0) {
       targetSectionIds = assignedSections.map(r => r.section_id).filter(id => id);
@@ -311,8 +311,12 @@ const createSyllabus = async (req, res) => {
       const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [class_id]);
       if (classSecs.length > 0) {
         targetSectionIds = classSecs.map(s => s.section_id);
+      } else {
+        targetSectionIds = [null];
       }
     }
+  } else {
+    targetSectionIds = [Number(section_id)];
   }
 
   // 6. Fetch Teacher Mapping for per-section resolution
@@ -985,26 +989,65 @@ const addMicroSchedule = async (req, res) => {
       }
     }
 
+    // Determine target sections
+    let targetSections = [];
+    if (section_id) {
+      targetSections.push(section_id);
+    } else {
+      if (req.user.role === 'teacher') {
+        const [assignments] = await pool.execute(
+          'SELECT section_id FROM teacher_assignments WHERE teacher_id = ? AND class_id = ? AND subject_id = ?',
+          [userId, class_id, subject_id]
+        );
+        if (assignments.length > 0) {
+          targetSections = assignments.map(a => a.section_id);
+        } else {
+          targetSections.push(null);
+        }
+      } else {
+        const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [class_id]);
+        if (classSecs.length > 0) {
+          targetSections = classSecs.map(s => s.section_id);
+        } else {
+          targetSections.push(null);
+        }
+      }
+    }
+
     // 2. Insert into syllabus (SSOT)
-    const [result] = await pool.execute(
-      `INSERT INTO syllabus (
-        class_id, section_id, subject_id, teacher_id, topic, week, month,
-        planned_start_date, planned_end_date, periods, periods_needed, status,
-        is_completed, completed_date, learning_outcome, notebook_checked
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        class_id, section_id, subject_id, userId, topic, week, month,
-        startDate, endDate, Number(periods || 0), Number(periods || 0), finalStatus,
-        finalStatus === 'completed' ? 1 : 0,
-        finalStatus === 'completed' ? new Date() : null,
-        learning_outcome || '', notebook_checked || 'No'
-      ]
-    );
+    const insertedIds = [];
+    for (const secId of targetSections) {
+      const [existing] = await pool.execute(
+        'SELECT id FROM syllabus WHERE class_id = ? AND (section_id = ? OR section_id IS NULL) AND subject_id = ? AND topic = ? AND week = ?',
+        [class_id, secId, subject_id, topic, week]
+      );
+      if (existing.length > 0) continue; // Skip if already exists for this section
+
+      const [result] = await pool.execute(
+        `INSERT INTO syllabus (
+          class_id, section_id, subject_id, teacher_id, topic, week, month,
+          planned_start_date, planned_end_date, periods, periods_needed, status,
+          is_completed, completed_date, learning_outcome, notebook_checked
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          class_id, secId, subject_id, finalTeacherId, topic, week, month,
+          startDate, endDate, Number(periods || 0), Number(periods || 0), finalStatus,
+          finalStatus === 'completed' ? 1 : 0,
+          finalStatus === 'completed' ? new Date() : null,
+          learning_outcome || '', notebook_checked || 'No'
+        ]
+      );
+      insertedIds.push(result.insertId);
+    }
+
+    if (insertedIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'This topic already exists in the schedule for the selected sections.' });
+    }
 
     return res.json({
       success: true,
       message: 'Micro schedule added successfully.',
-      data: { id: result.insertId }
+      data: { id: insertedIds[0], insertedIds }
     });
   } catch (error) {
     console.error('[ADD MICRO SCHEDULE ERROR]:', error);

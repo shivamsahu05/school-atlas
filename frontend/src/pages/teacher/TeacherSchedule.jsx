@@ -41,6 +41,26 @@ export default function TeacherSchedule() {
     }
   }, [message]);
 
+  // Auto-select Class if only 1 option is available
+  React.useEffect(() => {
+    if (modalOpen && !form.class_id && assignments.assignments && assignments.assignments.length > 0) {
+      const uniqueClasses = [...new Set(assignments.assignments.map(a => a.classId))];
+      if (uniqueClasses.length === 1) {
+        setForm(prev => ({ ...prev, class_id: uniqueClasses[0] }));
+      }
+    }
+  }, [modalOpen, form.class_id, assignments]);
+
+  // Auto-select Subject if only 1 option is available
+  React.useEffect(() => {
+    if (modalOpen && form.class_id && !form.subject_id && assignments.assignments) {
+      const availableSubjects = [...new Map(assignments.assignments.filter(a => String(a.classId) === String(form.class_id)).map(a => [a.subjectName, a])).values()];
+      if (availableSubjects.length === 1) {
+        setForm(prev => ({ ...prev, subject_id: availableSubjects[0].subjectId }));
+      }
+    }
+  }, [modalOpen, form.class_id, form.subject_id, assignments]);
+
   // Auto-hide bulk results after 10 seconds
   React.useEffect(() => {
     if (uploadResults) {

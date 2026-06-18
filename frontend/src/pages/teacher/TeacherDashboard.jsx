@@ -67,9 +67,13 @@ export default function TeacherDashboard() {
     // Use Number() to prevent string concatenation (e.g. 0 + "5" = "05")
     const total = filtered.reduce((acc, r) => acc + Number(r.total || 0), 0);
     const completed = filtered.reduce((acc, r) => acc + Number(r.completed || 0), 0);
+    const total_periods = filtered.reduce((acc, r) => acc + Number(r.total_periods || 0), 0);
+    const completed_periods = filtered.reduce((acc, r) => acc + Number(r.completed_periods || 0), 0);
+    const pending_periods = total_periods - completed_periods;
     const pending = total - completed;
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, pending, pct };
+    const period_pct = total_periods > 0 ? Math.round((completed_periods / total_periods) * 100) : 0;
+    return { total, completed, pending, pct, total_periods, completed_periods, pending_periods, period_pct };
   }, [syllabusRows, filterSubject, filterClass]);
 
   const birthdayState = useMemo(() => {
@@ -285,15 +289,35 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 md:gap-4 pt-2 md:pt-4">
+          <div className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div className="space-y-1">
+                <p className="text-[10px] md:text-sm font-black text-slate-400 uppercase tracking-tight">Periods successfully completed</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl md:text-3xl font-black text-indigo-900 tracking-tighter">{filteredMetrics.completed_periods}</span>
+                  <span className="text-slate-300 text-base md:text-lg font-bold">/ {filteredMetrics.total_periods}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-300 leading-none mb-1">{filteredMetrics.completed_periods}/{filteredMetrics.total_periods}</p>
+                <p className="text-xl md:text-2xl font-black text-slate-800 tracking-tighter leading-none">{filteredMetrics.period_pct}%</p>
+              </div>
+            </div>
+            <div className="h-2.5 md:h-3.5 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000 shadow-[0_0_12px_rgba(99,102,241,0.3)]" style={{ width: `${filteredMetrics.period_pct}%` }} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 pt-2 md:pt-4">
             {[
-              { val: filteredMetrics.total, lab: 'Total Week', col: 'slate', bg: 'bg-slate-50/50', border: 'border-slate-100', text: 'text-slate-800' },
-              { val: filteredMetrics.completed, lab: 'Completed', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' },
-              { val: filteredMetrics.pending, lab: 'Pending', col: 'amber', bg: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600' }
+              { val: filteredMetrics.total, lab: 'Total Weeks', col: 'slate', bg: 'bg-slate-50/50', border: 'border-slate-100', text: 'text-slate-800' },
+              { val: filteredMetrics.completed, lab: 'Completed Weeks', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' },
+              { val: filteredMetrics.total_periods, lab: 'Total Periods', col: 'indigo', bg: 'bg-indigo-50/50', border: 'border-indigo-100', text: 'text-indigo-600' },
+              { val: filteredMetrics.completed_periods, lab: 'Completed Periods', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' }
             ].map((item, idx) => (
               <div key={idx} className={clsx(item.bg, item.border, "p-3 md:p-5 rounded-2xl md:rounded-3xl border text-center group hover:bg-white hover:shadow-md transition-all flex flex-col items-center justify-center")}>
                 <p className={clsx("text-2xl md:text-[36px] font-black tracking-tighter leading-none mb-1 md:mb-2", item.text)}>{item.val}</p>
-                <p className={clsx("text-[7px] md:text-[10px] font-black uppercase tracking-widest leading-none", idx === 0 ? "text-slate-400" : idx === 1 ? "text-emerald-500" : "text-amber-500")}>{item.lab}</p>
+                <p className={clsx("text-[7px] md:text-[10px] font-black uppercase tracking-widest leading-none", idx === 0 ? "text-slate-400" : (idx === 1 || idx === 3) ? "text-emerald-500" : "text-indigo-500")}>{item.lab}</p>
               </div>
             ))}
           </div>

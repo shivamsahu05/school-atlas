@@ -337,6 +337,8 @@ exports.getTeacherDashboard = async (req, res) => {
           s.class_id,
           COUNT(*) AS total,
           SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+          SUM(COALESCE(s.periods, 0)) AS total_periods,
+          SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN COALESCE(s.periods, 0) ELSE 0 END) AS completed_periods,
           ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0) * 100) AS pct
         FROM syllabus s
         LEFT JOIN academic_classes ac ON s.class_id = ac.id

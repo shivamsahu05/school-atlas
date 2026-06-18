@@ -538,6 +538,7 @@ export default function AdminSyllabus() {
                   disabled={!form.class_id}
                 >
                   <option value="">Select section…</option>
+                  <option value="All">All Sections</option>
                   {acadSections.map(s => <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>)}
                 </select>
               </div>

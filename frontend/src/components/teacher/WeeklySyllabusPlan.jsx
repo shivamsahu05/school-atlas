@@ -38,6 +38,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   const [editingId, setEditingId] = useState(null);
 
   const [studentDataMap, setStudentDataMap] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const init = useCallback(async () => {
     try {
@@ -161,10 +162,50 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
     const handleSync = () => {
       init();
       loadPlan();
+      setSelectedIds(new Set());
     };
     window.addEventListener('syllabus-updated', handleSync);
     return () => window.removeEventListener('syllabus-updated', handleSync);
   }, [loadPlan, init]);
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(weeklyData.map(r => r.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`You have selected ${selectedIds.size} weeks/topics. Are you sure you want to delete them?`)) {
+      return;
+    }
+    if (!window.confirm(`Are you absolutely sure? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await Promise.all(Array.from(selectedIds).map(id => syllabusApi.delete(id)));
+      setSelectedIds(new Set());
+      loadPlan();
+      window.dispatchEvent(new Event('syllabus-updated'));
+      window.dispatchEvent(new Event('insights-refresh'));
+      alert('Selected schedules deleted successfully.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete some schedules. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // In isAllView: build dropdown options from syllabusData filtered by teacher only
   // This is stable because syllabusData is always the full dataset in isAllView mode
@@ -271,6 +312,31 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
     });
     return allSubjects;
   }, [effectiveAssignments, selClassId, selSectionId, isAllView]);
+
+  // Auto-select dropdowns if only 1 option is available
+  useEffect(() => {
+    if (!isAllView) {
+      if (effectiveAssignments.length === 1 && !selClassId) {
+        setSelClassId(effectiveAssignments[0].classId);
+      }
+    }
+  }, [effectiveAssignments, isAllView, selClassId]);
+
+  useEffect(() => {
+    if (!isAllView && selClassId && selClassId !== 'All') {
+      if (effectiveSections.length === 1 && (!selSectionId || selSectionId === 'All')) {
+        setSelSectionId(effectiveSections[0].sectionId);
+      }
+    }
+  }, [effectiveSections, isAllView, selSectionId, selClassId]);
+
+  useEffect(() => {
+    if (!isAllView && selClassId && selClassId !== 'All' && selSectionId && selSectionId !== 'All') {
+      if (effectiveSubjects.length === 1 && (!selectedSubject || selectedSubject === 'All')) {
+        setSelectedSubject(effectiveSubjects[0].subjectId);
+      }
+    }
+  }, [effectiveSubjects, isAllView, selectedSubject, selClassId, selSectionId]);
 
   const shouldShowSection = useMemo(() => {
     if (!isAllView) return true;
@@ -623,6 +689,16 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
             <table className="w-full text-left border-collapse min-w-[1700px] table-fixed">
               <thead className="bg-slate-50/80 border-b border-slate-200">
                 <tr>
+                  {isAllView && !!onEditClick && (
+                    <th className="px-5 py-4 text-center w-12">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 text-red-500 focus:ring-red-500/20 cursor-pointer w-4 h-4"
+                        checked={weeklyData.length > 0 && selectedIds.size === weeklyData.length}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
+                  )}
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-12 text-center">#</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-48">Timeline / Week</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-72">Chapter/Topic</th>
@@ -648,8 +724,18 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                       "transition-all duration-300 border-l-[6px]",
                       isEffectiveComp
                         ? "bg-indigo-50/40 border-indigo-500/80 grayscale-[0.1]"
-                        : "bg-white border-transparent hover:bg-slate-50/30"
+                        : selectedIds.has(row.id) ? "bg-red-50/50 border-red-400" : "bg-white border-transparent hover:bg-slate-50/30"
                     )}>
+                      {isAllView && !!onEditClick && (
+                        <td className="px-5 py-5 align-top text-center">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-slate-300 text-red-500 focus:ring-red-500/20 cursor-pointer w-4 h-4 mt-1"
+                            checked={selectedIds.has(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
+                          />
+                        </td>
+                      )}
                       <td className="px-5 py-5 align-top text-center">
                         <span className="text-xs font-bold text-slate-400 mt-0.5 inline-block">{index + 1}</span>
                       </td>
@@ -872,6 +958,20 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       )}
 
       {/* Student Tracker Modal */}
+      {/* Modals and Floating Elements */}
+      {isAllView && !!onEditClick && selectedIds.size > 0 && (
+        <div className="fixed bottom-8 right-8 z-50 animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <button
+            onClick={handleBulkDelete}
+            disabled={loading}
+            className="flex items-center gap-2.5 bg-red-600 text-white px-6 py-3.5 rounded-2xl shadow-xl shadow-red-600/20 hover:bg-red-700 hover:-translate-y-1 transition-all font-black text-sm active:scale-95 disabled:opacity-50"
+          >
+            <Trash2 size={18} strokeWidth={3} />
+            DELETE SELECTED ({selectedIds.size})
+          </button>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]" onClick={() => setIsModalOpen(false)} />
