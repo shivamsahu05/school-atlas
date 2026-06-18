@@ -16,7 +16,7 @@ const safeParse = (data) => {
 const lmsIntelligenceController = {
   getTeacherDashboard: async (req, res) => {
     const result = {
-      syllabus: { completed: 0, total: 0, percentage: 0 },
+      syllabus: { completed: 0, total: 0, percentage: 0, periods_completed: 0, periods_total: 0 },
       lo: { approaching: 0, meeting: 0, exceeding: 0, total: 0 },
       not_done_students: [], 
       overall_score: 0,
@@ -48,8 +48,12 @@ const lmsIntelligenceController = {
 
       rows.forEach(row => {
         result.syllabus.total++;
+        result.syllabus.periods_total += Number(row.periods || 0);
         const isTopicDone = row.is_completed === 1 || row.status === 'completed';
-        if (isTopicDone) result.syllabus.completed++;
+        if (isTopicDone) {
+          result.syllabus.completed++;
+          result.syllabus.periods_completed += Number(row.periods || 0);
+        }
 
         const students = safeParse(row.students_data);
         const classLvl = (row.class_understanding_level || '').toLowerCase();
@@ -79,7 +83,8 @@ const lmsIntelligenceController = {
         }
       });
 
-      const syllabusPct = result.syllabus.total > 0 ? (result.syllabus.completed / result.syllabus.total) * 100 : 0;
+      const syllabusPct = result.syllabus.periods_total > 0 ? (result.syllabus.periods_completed / result.syllabus.periods_total) * 100 : 0;
+      result.syllabus.percentage = Math.round(syllabusPct);
 
       // 2. LO Achievement — sourced from Award LO module (teacher_performance_lo)
       // Admin awards a principal_score per topic via /admin/award-lo
