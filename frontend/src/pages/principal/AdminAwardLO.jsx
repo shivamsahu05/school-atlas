@@ -33,8 +33,8 @@ export default function AwardLOScores() {
     class_id: '',
     section_id: '',
     subject_id: '',
-    month: new Date().toLocaleString('default', { month: 'long' }),
-    week: 'Week 1',
+    month: '',
+    week: '',
     topic: '',
     learning_outcome_id: '',
     score: '',
@@ -433,6 +433,7 @@ export default function AwardLOScores() {
                       value={form.month}
                       onChange={e => setForm({...form, month: e.target.value})}
                     >
+                      <option value="">Select month...</option>
                       {['January','February','March','April','May','June','July','August','September','October','November','December'].map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                  </div>
@@ -443,6 +444,7 @@ export default function AwardLOScores() {
                       value={form.week}
                       onChange={e => setForm({...form, week: e.target.value})}
                     >
+                      <option value="">Select week...</option>
                       {['Week 1','Week 2','Week 3','Week 4','Week 5'].map(w => <option key={w} value={w}>{w}</option>)}
                     </select>
                  </div>
@@ -530,17 +532,20 @@ export default function AwardLOScores() {
                 onClick={handleAward}
                 disabled={!isFormValid || submitting}
                 className={clsx(
-                  "w-full py-4.5 rounded-2xl flex items-center justify-center gap-3 font-black text-base transition-all duration-300 uppercase tracking-[0.2em] relative overflow-hidden group",
-                  isFormValid 
+                  "w-full py-4 rounded-2xl flex items-center justify-center gap-3 font-black text-base transition-all duration-300 uppercase tracking-[0.2em] relative overflow-hidden group",
+                  isFormValid && !submitting
                     ? "bg-gradient-to-r from-blue-600 via-blue-500 to-blue-600 text-white shadow-[0_10px_30px_-10px_rgba(37,99,235,0.5)] hover:shadow-[0_15px_40px_-12px_rgba(37,99,235,0.6)] hover:-translate-y-1 active:translate-y-0 active:scale-[0.98]" 
                     : "bg-slate-100 text-slate-400 cursor-not-allowed shadow-none"
                 )}
               >
-                {isFormValid && (
+                {isFormValid && !submitting && (
                   <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 -translate-x-full group-hover:animate-shimmer" />
                 )}
                 {submitting ? (
-                  <span className="w-6 h-6 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                  <div className="flex items-center gap-3 relative z-10 text-slate-500">
+                    <span className="w-5 h-5 border-[3px] border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                    <span>Awarding...</span>
+                  </div>
                 ) : (
                   <div className="flex items-center gap-3 relative z-10">
                     <Trophy 
