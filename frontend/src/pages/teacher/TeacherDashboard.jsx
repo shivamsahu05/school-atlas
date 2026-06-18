@@ -171,10 +171,7 @@ export default function TeacherDashboard() {
       {/* KPI StatCards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
         <StatCard title="Periods Completed" value={`${syllabusStats.periods_completed || 0}/${syllabusStats.periods_total || 0}`} subtitle={`${syllabusStats.percentage || 0}% of syllabus`} icon={BookOpen} color="brand" trend={syllabusStats.percentage || 0} />
-        {(() => {
-          const loPct = loSummary.total > 0 ? Math.round(((loSummary.exceeding * 100) + (loSummary.meeting * 80) + (loSummary.approaching * 60)) / loSummary.total) : 0;
-          return <StatCard title="LO Achievement" value={`${loPct}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={loPct} />;
-        })()}
+        <StatCard title="LO Achievement" value={`${intelData?.performance?.lo || 0}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={intelData?.performance?.lo || 0} />
         <StatCard title="Latest Obs." value={`${latestObs.pct}%`} subtitle="Classroom observation" icon={Eye} color="teal" trend={latestObs.pct} />
         <StatCard title="Overall Performance" value={`${Math.round(overallPerf)}%`} subtitle="Weighted score" icon={TrendingUp} color="amber" trend={overallPerf} />
       </div>

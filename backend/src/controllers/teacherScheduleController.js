@@ -175,11 +175,20 @@ exports.getMicroSchedule = async (req, res) => {
       JOIN academic_classes ac ON syl.class_id = ac.id
       JOIN acad_sections asec ON syl.section_id = asec.id
       JOIN subjects sub ON syl.subject_id = sub.id
-      WHERE syl.class_id = ? AND syl.section_id = ? AND syl.subject_id = ?
+      WHERE syl.class_id = ?
     `;
-    const params = [class_id, section_id, subject_id];
+    const params = [class_id];
+    
+    if (section_id && section_id !== 'All') { sql += ' AND syl.section_id = ?'; params.push(section_id); }
+    if (subject_id && subject_id !== 'All') { sql += ' AND syl.subject_id = ?'; params.push(subject_id); }
     if (month && month !== 'All') { sql += ' AND syl.month = ?'; params.push(month); }
     if (week && week !== 'All') { sql += ' AND syl.week = ?'; params.push(week); }
+    
+    // Ensure teachers only see their own micro schedule unless admin
+    if (req.user && req.user.role !== 'admin') {
+      sql += ' AND syl.teacher_id = ?';
+      params.push(req.user.id);
+    }
 
     const [rows] = await pool.execute(sql, params);
     res.json({ success: true, data: rows });

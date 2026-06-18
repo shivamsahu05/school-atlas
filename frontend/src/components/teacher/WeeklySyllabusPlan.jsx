@@ -239,61 +239,46 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
 
   // Build effective sections for selected class (only those that exist for selected class)
   const effectiveSections = useMemo(() => {
-    if (!isAllView) {
-      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-        .filter(s => s.sectionName && s.sectionName.trim() !== '');
-    }
-    // In allView: if a class is selected, only show sections of that class; else all unique sections
-    if (selClassId !== 'All') {
-      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-        .filter(s => s.sectionName && s.sectionName.trim() !== '');
-    }
-    // All classes - aggregate all unique sections
-    const allSecs = [];
-    effectiveAssignments.forEach(cls => {
+    let sourceClasses = isAllView && selClassId === 'All' 
+      ? effectiveAssignments 
+      : [effectiveAssignments.find(c => String(c.classId) === String(selClassId))].filter(Boolean);
+    
+    let allSecs = [];
+    sourceClasses.forEach(cls => {
       cls.sections.forEach(sec => {
-        if (sec.sectionName && !allSecs.find(s => s.sectionId === sec.sectionId)) {
+        if (sec.sectionName && sec.sectionName.trim() !== '' && !allSecs.find(s => String(s.sectionId) === String(sec.sectionId))) {
+          // If subject is selected, only show sections that contain this subject
+          if (selectedSubject && selectedSubject !== 'All') {
+            if (!sec.subjects.find(sub => String(sub.subjectId) === String(selectedSubject))) return;
+          }
           allSecs.push(sec);
         }
       });
     });
     return allSecs;
-  }, [effectiveAssignments, selClassId, isAllView]);
+  }, [effectiveAssignments, selClassId, selectedSubject, isAllView]);
 
   // Build effective subjects for selected class+section
   const effectiveSubjects = useMemo(() => {
-    if (!isAllView) {
-      const cls = effectiveAssignments.find(c => String(c.classId) === String(selClassId));
-      if (!cls) return [];
-      const allSubjects = [];
-      cls.sections.forEach(sec => {
-        sec.subjects.forEach(sub => {
-          if (!allSubjects.find(s => s.subjectId === sub.subjectId)) {
-            allSubjects.push(sub);
-          }
-        });
-      });
-      return allSubjects;
-    }
-    // In allView: filter by selected class and/or section
-    let sourceAssignments = effectiveAssignments;
-    if (selClassId !== 'All') {
-      sourceAssignments = sourceAssignments.filter(c => String(c.classId) === String(selClassId));
-    }
-    const allSubjects = [];
-    sourceAssignments.forEach(cls => {
-      const secs = selSectionId !== 'All' 
+    let sourceClasses = isAllView && selClassId === 'All' 
+      ? effectiveAssignments 
+      : [effectiveAssignments.find(c => String(c.classId) === String(selClassId))].filter(Boolean);
+      
+    let allSubs = [];
+    sourceClasses.forEach(cls => {
+      let secs = (selSectionId && selSectionId !== 'All') 
         ? cls.sections.filter(s => String(s.sectionId) === String(selSectionId))
         : cls.sections;
+        
       secs.forEach(sec => {
         sec.subjects.forEach(sub => {
-          if (!allSubjects.find(s => s.subjectId === sub.subjectId)) {
-            allSubjects.push(sub);
+          if (!allSubs.find(s => String(s.subjectId) === String(sub.subjectId))) {
+            allSubs.push(sub);
           }
         });
       });
     });
-    return allSubjects;
+    return allSubs;
   }, [effectiveAssignments, selClassId, selSectionId, isAllView]);
 
   // Auto-select dropdowns if only 1 option is available
@@ -305,21 +290,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
     }
   }, [effectiveAssignments, isAllView, selClassId]);
 
-  useEffect(() => {
-    if (!isAllView && selClassId && selClassId !== 'All') {
-      if (effectiveSections.length === 1 && (!selSectionId || selSectionId === 'All')) {
-        setSelSectionId(effectiveSections[0].sectionId);
-      }
-    }
-  }, [effectiveSections, isAllView, selSectionId, selClassId]);
 
-  useEffect(() => {
-    if (!isAllView && selClassId && selClassId !== 'All' && selSectionId && selSectionId !== 'All') {
-      if (effectiveSubjects.length === 1 && (!selectedSubject || selectedSubject === 'All')) {
-        setSelectedSubject(effectiveSubjects[0].subjectId);
-      }
-    }
-  }, [effectiveSubjects, isAllView, selectedSubject, selClassId, selSectionId]);
 
   const shouldShowSection = useMemo(() => {
     if (!isAllView) return true;
@@ -558,17 +529,15 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
         </div>
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
-          <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject(isAllView ? 'All' : ''); }} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
-            {isAllView && <option value="All">All Sections</option>}
-            {!isAllView && <option value="">Select section…</option>}
+          <select value={selSectionId} onChange={(e) => setSelSectionId(e.target.value)} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+            <option value="All">All Sections</option>
             {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Subject Area</label>
-          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!isAllView && (!selClassId || !selSectionId)} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
-            {isAllView && <option value="All">All Subjects</option>}
-            {!isAllView && <option value="">Select subject…</option>}
+          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+            <option value="All">All Subjects</option>
             {effectiveSubjects.map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
           </select>
         </div>
@@ -576,7 +545,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Month</label>
           <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             <option value="All">All Months</option>
-            {MONTHS.map(m => <option key={m} value={m}>{m}</option>)}
+            {MONTHS.filter(m => m !== 'All').map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[120px]">
