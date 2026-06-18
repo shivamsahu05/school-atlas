@@ -506,7 +506,15 @@ export default function AwardLOScores() {
                     placeholder="Enter score..."
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500/10"
                     value={form.score}
-                    onChange={e => setForm({...form, score: e.target.value})}
+                    onChange={e => {
+                      let val = e.target.value;
+                      if (val !== '') {
+                        val = Number(val);
+                        if (val > 100) val = 100;
+                        if (val < 0) val = 0;
+                      }
+                      setForm({...form, score: val});
+                    }}
                   />
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-300 pointer-events-none">
                     %
@@ -644,7 +652,20 @@ export default function AwardLOScores() {
             </div>
             <div>
               <label className="label">Score (%)</label>
-              <input type="number" className="input" value={editItem.score || ""} onChange={e => setEditItem({...editItem, score: e.target.value})} />
+              <input 
+                type="number" 
+                className="input" 
+                value={editItem.score || ""} 
+                onChange={e => {
+                  let val = e.target.value;
+                  if (val !== '') {
+                    val = Number(val);
+                    if (val > 100) val = 100;
+                    if (val < 0) val = 0;
+                  }
+                  setEditItem({...editItem, score: val});
+                }} 
+              />
             </div>
             <div>
               <label className="label">Status</label>
