@@ -508,6 +508,22 @@ exports.getTeacherLOAnalytics = async (req, res) => {
       breakdown: { content: o.content_mastery, pedagogy: o.pedagogy, engagement: o.student_engagement, communication: o.communication, assessment: o.assessment }
     }));
 
+    // 6. Award LO Scores
+    const [awardRows] = await pool.query(`
+      SELECT tp.id, tp.created_at as date, tp.principal_score as score, tp.lo_status, tp.topic, tp.month, tp.week,
+             c.class_name, c.section, s.name as subject_name
+      FROM teacher_performance_lo tp
+      LEFT JOIN classes c ON tp.class_id = c.id
+      LEFT JOIN subjects s ON tp.subject_id = s.id
+      WHERE tp.teacher_id = ?
+      ORDER BY tp.created_at DESC LIMIT 5
+    `, [teacherId]);
+
+    const awardLo = (awardRows || []).map(a => ({
+      id: a.id, date: a.date, score: a.score, status: a.lo_status, topic: a.topic,
+      month: a.month, week: a.week, class_name: a.class_name, section: a.section, subject: a.subject_name
+    }));
+
     const [assigned] = await pool.query(`
       SELECT DISTINCT s.class_id, ac.name as class_name, s.section_id, asec.name as section_name, s.subject_id, sub.name as subject_name
       FROM syllabus s
@@ -524,6 +540,7 @@ exports.getTeacherLOAnalytics = async (req, res) => {
         timeline,
         rankings,
         observations,
+        awardLo,
         meta: { assigned }
       }
     });

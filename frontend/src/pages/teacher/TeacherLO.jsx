@@ -109,7 +109,7 @@ export default function TeacherLO() {
     )
   }
 
-  const { stats, timeline = {}, rankings, observations, meta } = data || {}
+  const { stats, timeline = {}, rankings, observations, awardLo, meta } = data || {}
 
   return (
     <div className="space-y-6 lg:space-y-8 animate-in fade-in duration-700 py-2 sm:py-4 px-0">
@@ -399,6 +399,48 @@ export default function TeacherLO() {
                         </div>
                       ))}
                     </div>
+                  </div>
+                </div>
+              ))
+            )}
+            <p className="text-center text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] pt-4">
+               ℹ️ Data is read-only. Awarded by Admin.
+            </p>
+          </div>
+          </div>
+
+        {/* AWARD LO SCORES */}
+          <SectionHeader title="Award LO Scores" subtitle="Learning Outcome Assessment" />
+          <div className="space-y-4">
+            {awardLo?.length === 0 ? (
+              <div className="bg-white rounded-[2rem] p-10 text-center border border-slate-100 shadow-sm">
+                <Trophy size={48} className="text-slate-100 mx-auto mb-4" />
+                <p className="text-xs font-black text-slate-300 uppercase tracking-widest">No Award LO records</p>
+              </div>
+            ) : (
+              awardLo?.map((award) => (
+                <div key={award.id} className="bg-white rounded-[1.5rem] p-5 sm:p-6 border border-slate-100 shadow-sm hover:border-brand-200 transition-all group">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{new Date(award.date).toLocaleDateString('en-GB')}</p>
+                      <h5 className="text-sm font-black text-slate-800">{award.topic || 'No Topic'}</h5>
+                    </div>
+                    <div className={clsx(
+                      "text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest",
+                      award.status === 'Exceeding' || award.status === 'Meeting' ? "bg-emerald-100 text-emerald-700" :
+                      "bg-amber-100 text-amber-700"
+                    )}>
+                      {award.status || 'Meeting'}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-xs font-bold mb-3">
+                    <span className="text-slate-500">{award.class_name} {award.section ? `- ${award.section}` : ''}</span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-brand-600">{award.subject}</span>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{award.month} • {award.week}</span>
+                    <span className="text-lg font-black text-slate-800">{award.score}/100</span>
                   </div>
                 </div>
               ))
