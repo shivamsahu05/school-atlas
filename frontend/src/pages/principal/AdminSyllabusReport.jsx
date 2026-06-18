@@ -100,7 +100,7 @@ export default function AdminSyllabusReport() {
       });
 
       // Calculate till today row
-      if (plannedTillToday > 0) {
+      if (plannedTillToday > 0 && completedTillToday > 0) {
         const completionPct = Math.round((completedTillToday / plannedTillToday) * 100);
         const pendingPeriods = Math.max(0, plannedTillToday - completedTillToday);
         
@@ -132,7 +132,7 @@ export default function AdminSyllabusReport() {
       }
 
       // Calculate yearly row
-      if (totalYearly > 0) {
+      if (totalYearly > 0 && completedYearly > 0) {
         const completionPct = Math.round((completedYearly / totalYearly) * 100);
         rowsYearly.push({
           class: g.class,
