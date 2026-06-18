@@ -95,26 +95,9 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
         if (!isAllView && meta.months?.length > 0 && filterMonth === 'All') {
           const now = new Date();
           const currentMonthName = now.toLocaleString('default', { month: 'long' });
-          let targetMonth = currentMonthName;
+          
+          let targetMonth = meta.months.includes(currentMonthName) ? currentMonthName : (meta.months.length > 0 ? meta.months[0] : currentMonthName);
           let targetWeek = 'All';
-
-          const extractWeek = (str) => {
-            const match = String(str).toLowerCase().match(/week\s*\d+/);
-            return match ? match[0] : 'All';
-          };
-
-          const futureOrCurrentItems = meta.syllabus.filter(s => new Date(s.planned_start_date) >= now.setHours(0,0,0,0));
-          if (futureOrCurrentItems.length > 0) {
-             futureOrCurrentItems.sort((a,b) => new Date(a.planned_start_date) - new Date(b.planned_start_date));
-             targetMonth = futureOrCurrentItems[0].month;
-             targetWeek = extractWeek(futureOrCurrentItems[0].week);
-          } else if (meta.syllabus.length > 0) {
-             meta.syllabus.sort((a,b) => new Date(b.planned_start_date) - new Date(a.planned_start_date));
-             targetMonth = meta.syllabus[0].month;
-             targetWeek = extractWeek(meta.syllabus[0].week);
-          } else {
-             targetMonth = meta.months.includes(currentMonthName) ? currentMonthName : meta.months[0];
-          }
 
           setFilterMonth(targetMonth);
           setFilterWeek(targetWeek);
