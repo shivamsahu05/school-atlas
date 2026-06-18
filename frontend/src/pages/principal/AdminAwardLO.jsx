@@ -209,7 +209,7 @@ export default function AwardLOScores() {
     const selectedSec = filteredSections.find(s => String(s.section_id) === String(form.section_id))
     const payload = {
       ...form,
-      className: selectedClass?.class_name,
+      className: selectedClass?.name || selectedClass?.class_name,
       sectionName: selectedSec?.section_name || selectedSec?.name || selectedSec?.code
     }
 

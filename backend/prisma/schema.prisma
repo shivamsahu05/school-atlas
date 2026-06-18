@@ -30,7 +30,6 @@ model users {
   observations_given   observations[]    @relation("ObservedBy")
   performance_scores   performance_scores?
   leave_requests       leave_requests[]
-  teacher_lo_entries   teacher_performance_lo[] @relation("TeacherPerformanceLO")
   teacher_profile      teachers?
   class_observations_given class_observations[] @relation("ObserverClassObs")
 
@@ -62,6 +61,7 @@ model teachers {
 
   user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
   class_observations class_observations[]
+  teacher_performance_lo teacher_performance_lo[]
 }
 
 // ─── classes ─────────────────────────────────────────────────────────────────
@@ -533,7 +533,7 @@ model teacher_performance_lo {
   created_at      DateTime @default(now())
   updated_at      DateTime @updatedAt
 
-  teacher users    @relation("TeacherPerformanceLO", fields: [teacher_id], references: [id], onDelete: Cascade)
+  teacher teachers @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
   class   classes  @relation(fields: [class_id], references: [id], onDelete: Cascade)
   subject subjects @relation(fields: [subject_id], references: [id], onDelete: Cascade)
 
