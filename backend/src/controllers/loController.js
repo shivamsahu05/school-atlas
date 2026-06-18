@@ -559,3 +559,18 @@ exports.getTeacherLOAnalytics = async (req, res) => {
     return res.status(500).json({ success: false, message: "LO fetch failed", error: err.message });
   }
 };
+
+exports.fixDb = async (req, res) => {
+  try {
+    await pool.query('SET @id:=0');
+    await pool.query('UPDATE teacher_performance_lo SET id = (@id:=@id+1)');
+    await pool.query('ALTER TABLE teacher_performance_lo ADD PRIMARY KEY (id)');
+    await pool.query('ALTER TABLE teacher_performance_lo MODIFY id int(11) NOT NULL AUTO_INCREMENT');
+    return res.json({ success: true, message: 'Database schema fixed successfully!' });
+  } catch (error) {
+    if (error.code === 'ER_MULTIPLE_PRI_KEY') {
+      return res.json({ success: true, message: 'Database schema was already fixed.' });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to fix DB', error: error.message });
+  }
+};
