@@ -407,7 +407,6 @@ export default function TeacherLO() {
                ℹ️ Data is read-only. Awarded by Admin.
             </p>
           </div>
-          </div>
 
         {/* AWARD LO SCORES */}
           <SectionHeader title="Award LO Scores" subtitle="Learning Outcome Assessment" />
