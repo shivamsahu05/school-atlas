@@ -13,7 +13,7 @@ exports.getTeacherOptions = async (req, res) => {
       if (t.length > 0) teacherId = t[0].id;
     }
     
-    const [classes] = await pool.execute('SELECT id, name FROM academic_classes ORDER BY name');
+    const [classes] = await pool.execute('SELECT id, name, sort_order FROM academic_classes ORDER BY sort_order ASC, name ASC');
     const [sections] = await pool.execute('SELECT s.id, s.name, cs.class_id FROM acad_sections s JOIN acad_class_sections cs ON s.id = cs.section_id ORDER BY s.name');
     const [subjects] = await pool.execute('SELECT id, name FROM subjects ORDER BY name');
 
@@ -31,12 +31,21 @@ exports.getTeacherOptions = async (req, res) => {
       AND (m.module_key = 'MARKS_ENTRY' OR m.module_key = 'ALL_ACADEMIC' OR m.module_key = 'ALL_FULL')
     `, [teacherId]);
 
-    const hasGlobal = perms.some(p => p.class_id === null);
-    if (hasGlobal) {
-      return sendOk(res, { classes, sections, subjects, globalAccess: true });
+    const hasModuleAccess = perms.length > 0;
+
+    if (hasModuleAccess) {
+      // Fetch actual teaching assignments to restrict dropdowns to assigned classes/sections/subjects
+      const [assignments] = await pool.execute(`
+        SELECT class_id, section_id, subject_id
+        FROM teacher_assignments
+        WHERE teacher_id = ?
+      `, [req.user.id]);
+      
+      return sendOk(res, { classes, sections, subjects, permissions: assignments, globalAccess: false });
     }
 
-    return sendOk(res, { classes, sections, subjects, permissions: perms, globalAccess: false });
+    // No module access at all
+    return sendOk(res, { classes, sections, subjects, permissions: [], globalAccess: false });
   } catch (err) {
     return sendErr(res, err.message);
   }

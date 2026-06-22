@@ -142,21 +142,20 @@ export default function TeacherDashboard() {
                 {(() => {
                   const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
                   const rank = rankIndex !== -1 ? rankIndex + 1 : null;
-                  const score = rankIndex !== -1 ? Number(data?.topPerformers[rankIndex]?.weighted_score || 0) : 0;
-                  const isStar = (rank && rank <= 5) || score >= 85;
+                  const score = intelData.overall_score || 0;
+                  const isStar = score >= 85;
                   if (isStar) {
                     return <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — You are one of the Star Performers of the School 🌟</p>;
                   }
-                  return <p className="text-blue-300 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — Keep up the great work and continue making an impact.</p>;
+                  return <p className="text-blue-300 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — Keep Growing – You're Making Progress.</p>;
                 })()}
                 <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
               </div>
             </div>
             {(() => {
                const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
-               const rank = rankIndex !== -1 ? rankIndex + 1 : null;
-               const score = rankIndex !== -1 ? Number(data?.topPerformers[rankIndex]?.weighted_score || 0) : 0;
-               const isStar = (rank && rank <= 5) || score >= 85;
+               const score = intelData.overall_score || 0;
+               const isStar = score >= 85;
                if (!isStar) return null;
                return (
                  <div className="flex gap-2">
@@ -349,13 +348,17 @@ export default function TeacherDashboard() {
         <div className="card p-6 rounded-[2rem]">
           <SectionHeader title="Top Performers" />
           <div className="space-y-2.5 mt-4">
-            {(data?.topPerformers || []).slice(0, 5).map((p, i) => (
-              <div key={i} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${p.teacher_id === user?.id ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50/50 border border-slate-100/50'}`}>
-                <div className="w-6 h-6 rounded-lg bg-white shadow-sm text-[9px] font-black flex items-center justify-center text-slate-400">{i + 1}</div>
-                <div className="flex-1 min-w-0"><p className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name}</p></div>
-                <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">{Number(p.weighted_score).toFixed(1)}%</div>
-              </div>
-            ))}
+            {(!data?.topPerformers || data.topPerformers.length === 0) ? (
+              <p className="text-sm font-bold text-slate-400 text-center py-4 italic">Insufficient performance data available.</p>
+            ) : (
+              data.topPerformers.slice(0, 5).map((p, i) => (
+                <div key={i} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${p.teacher_id === user?.id ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50/50 border border-slate-100/50'}`}>
+                  <div className="w-6 h-6 rounded-lg bg-white shadow-sm text-[9px] font-black flex items-center justify-center text-slate-400">{i + 1}</div>
+                  <div className="flex-1 min-w-0"><p className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name}</p></div>
+                  <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">{Number(p.weighted_score).toFixed(1)}%</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
         <div className="card p-6 rounded-[2rem]">

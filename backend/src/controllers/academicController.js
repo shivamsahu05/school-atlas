@@ -793,13 +793,22 @@ const deleteTimetableEntry = async (req, res) => {
 
 const getClassTimetable = async (req, res) => {
   const { classNumber, section } = req.query
-  if (!classNumber || !section) return sendError(res, 'classNumber and section are required.', 400)
+  if (!classNumber) return sendError(res, 'classNumber is required.', 400)
+
+  // Build where clause — normalize section to handle both "A" and "Section A" stored formats
+  const where = { class_number: String(classNumber) }
+  if (section && section !== 'ALL') {
+    const raw = String(section).trim()
+    const stripped = raw.replace(/^Section\s+/i, '').trim()   // "Section A" → "A"
+    where.OR = [
+      { section: stripped },
+      { section: `Section ${stripped}` },
+      { section: raw },
+    ]
+  }
 
   const rows = await prisma.teacher_timetable.findMany({
-    where: {
-      class_number: String(classNumber),
-      section: String(section),
-    },
+    where,
     include: {
       time_slot: true,
       subject: true,

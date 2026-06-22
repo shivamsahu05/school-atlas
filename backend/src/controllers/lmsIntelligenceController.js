@@ -177,6 +177,7 @@ const lmsIntelligenceController = {
       result.other_score = Math.round(finalOther);
       result.lang_score = Math.round(finalLang);
       result.admin_scores_set = adminScoresSet;
+      result.assessment_incomplete = !adminScoresSet;
       result.remarks = remarks;
       
       result.not_done_students = result.not_done_students.slice(0, 15);
@@ -299,12 +300,12 @@ const lmsIntelligenceController = {
 
       // Fetch admin overrides for manual scores
       const [overrides] = await pool.execute(`
-        SELECT teacher_id, participate_score, other_score, lang_score, overall_score 
+        SELECT teacher_id, participate_score, other_score, lang_score, overall_score, updated_at 
         FROM teacher_performance_overrides
       `);
       const overrideMap = overrides.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
 
-      const rankedTeachers = teachers.map(t => {
+      let rankedTeachers = teachers.map(t => {
         const s = syllabusMap[t.id] || { total: 0, completed: 0, extra_periods: 0 };
         const o = obsMap[t.id] || { avg_obs: 0 };
         const ov = overrideMap[t.id] || {};
@@ -314,12 +315,19 @@ const lmsIntelligenceController = {
         const obsPct = o.avg_obs || 0;
         
         // Admin set scores or default 0
-        const partPct = ov.participate_score != null ? Number(ov.participate_score) : 0;
-        const otherScore = ov.other_score != null ? Number(ov.other_score) : 0;
-        const langPct = ov.lang_score != null ? Number(ov.lang_score) : 0;
+        const hasParticipate = ov.participate_score != null;
+        const hasOther = ov.other_score != null;
+        const hasLang = ov.lang_score != null;
+        const hasOverall = ov.overall_score != null;
+        const adminScoresSet = hasParticipate && hasOther && hasLang;
+        const assessmentIncomplete = !adminScoresSet && !hasOverall;
+
+        const partPct = hasParticipate ? Number(ov.participate_score) : 0;
+        const otherScore = hasOther ? Number(ov.other_score) : 0;
+        const langPct = hasLang ? Number(ov.lang_score) : 0;
 
         let weightedScore = 0;
-        if (ov.overall_score != null) {
+        if (hasOverall) {
           weightedScore = Number(ov.overall_score);
         } else {
           weightedScore = 
@@ -331,15 +339,41 @@ const lmsIntelligenceController = {
             (langPct * 0.15);
         }
 
+        const updatedAt = ov.updated_at ? new Date(ov.updated_at).getTime() : 0;
+
         return {
           teacher_id: t.id,
           teacher_name: t.name,
           weighted_score: parseFloat(weightedScore.toFixed(1)),
+          admin_scores_set: adminScoresSet || hasOverall,
+          assessment_incomplete: assessmentIncomplete,
+          updated_at: updatedAt,
           details: { syllabusPct, loPct, obsPct, partPct, otherScore, langPct }
         };
       });
 
-      rankedTeachers.sort((a, b) => b.weighted_score - a.weighted_score);
+      // 1. Filter out incomplete assessments and scores = 0
+      rankedTeachers = rankedTeachers.filter(t => t.admin_scores_set && t.weighted_score > 0);
+
+      // If no eligible teachers exist, return empty array
+      if (rankedTeachers.length === 0) {
+        if (res) res.json({ success: true, data: [] });
+        return [];
+      }
+
+      // 2. Sort according to tie-breaker logic
+      rankedTeachers.sort((a, b) => {
+        // Primary Sort: Overall Weighted Score (Descending)
+        if (b.weighted_score !== a.weighted_score) return b.weighted_score - a.weighted_score;
+        // Tie Breaker 1: LO Achievement (Descending)
+        if (b.details.loPct !== a.details.loPct) return b.details.loPct - a.details.loPct;
+        // Tie Breaker 2: Classroom Observation (Descending)
+        if (b.details.obsPct !== a.details.obsPct) return b.details.obsPct - a.details.obsPct;
+        // Tie Breaker 3: Latest Updated (Descending)
+        if (b.updated_at !== a.updated_at) return b.updated_at - a.updated_at;
+        // Final Tie Breaker: Name (Ascending)
+        return a.teacher_name.localeCompare(b.teacher_name);
+      });
       
       if (res) res.json({ success: true, data: rankedTeachers.slice(0, 10) });
       return rankedTeachers;

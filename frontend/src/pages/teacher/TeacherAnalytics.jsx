@@ -40,16 +40,16 @@ export default function TeacherAnalytics() {
   const overallScore = intelPerf?.overall_score || 0
   const avgObsPct = metrics.observation || 0
   const adminScoresSet = intelPerf?.admin_scores_set ?? false
+  const assessmentIncomplete = intelPerf?.assessment_incomplete ?? false
 
   // 1. Calculate Grade
   const getGrade = (score) => {
-    if (score >= 95) return { label: 'A+', color: 'emerald' }
-    if (score >= 85) return { label: 'A',  color: 'blue' }
-    if (score >= 70) return { label: 'B',  color: 'indigo' }
-    if (score >= 50) return { label: 'C',  color: 'amber' }
-    return { label: 'D', color: 'rose' }
+    if (score >= 85) return { label: 'A', color: 'emerald' } // Green/Gold
+    if (score >= 70) return { label: 'B', color: 'blue' }    // Blue
+    if (score >= 50) return { label: 'C', color: 'amber' }   // Orange
+    return { label: 'D', color: 'slate' }                    // Neutral/White
   }
-  const grade = getGrade(overallScore)
+  const grade = assessmentIncomplete ? { label: 'Pending', color: 'slate' } : getGrade(overallScore)
 
   // 2. Calculate Observation Trend
   const calculateObsTrend = () => {
@@ -198,17 +198,18 @@ export default function TeacherAnalytics() {
         />
         <StatCard 
           title="Overall Weighted Score"    
-          value={`${Math.round(overallScore)}%`}            
+          value={assessmentIncomplete ? 'Pending' : `${Math.round(overallScore)}%`}            
           icon={TrendingUp}
-          color="green"  
-          trend={overallScore}
+          color={assessmentIncomplete ? 'slate' : grade.color}  
+          trend={assessmentIncomplete ? 0 : overallScore}
+          subtitle={assessmentIncomplete ? 'Awaiting Admin Assessment' : ''}
         />
         <StatCard 
           title="Academic Grade"    
           value={grade.label}            
           icon={Star}
           color={grade.color}  
-          subtitle="Based on performance"
+          subtitle={assessmentIncomplete ? 'Awaiting Admin Assessment' : 'Based on performance'}
         />
       </div>
 
@@ -298,30 +299,33 @@ export default function TeacherAnalytics() {
 
           {/* Footer Overall Weighted Score */}
           <div className="mt-12 pt-8 border-t border-slate-100">
-            <div className="flex items-end justify-between mb-4">
-              <div className="space-y-1">
-                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Overall Weighted Score</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{overallScore}/100</p>
+            {assessmentIncomplete ? (
+              <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col items-center justify-center text-center gap-2">
+                <AlertTriangle size={24} className="text-amber-500" />
+                <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Awaiting Admin Assessment</h4>
+                <p className="text-xs text-slate-500 max-w-md">
+                  Participate Score, Other Parameters, and Language Proficiency are pending Admin entry. Your overall ranking and score will be calculated once Admin saves these values.
+                </p>
               </div>
-              <div className="text-right">
-                <span className="text-3xl font-black text-blue-600 tracking-tighter">{Math.round(overallScore)}%</span>
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">{Math.round(overallScore)}%</p>
-              </div>
-            </div>
-            <div className="h-3 w-full bg-slate-50 rounded-full border border-slate-100 overflow-hidden shadow-inner">
-              <div 
-                className="h-full bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all duration-1000"
-                style={{ width: `${Math.min(overallScore, 100)}%` }}
-              />
-            </div>
-
-            {!adminScoresSet && (
-              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl flex gap-2 items-start text-xs text-amber-700">
-                <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong>Participate Score, Other Parameters, and Language Proficiency</strong> are pending Admin entry. Your overall score will update once Admin saves those values.
-                </span>
-              </div>
+            ) : (
+              <>
+                <div className="flex items-end justify-between mb-4">
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-black text-slate-800 uppercase tracking-tight">Overall Weighted Score</h4>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{overallScore}/100</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-3xl font-black text-blue-600 tracking-tighter">{Math.round(overallScore)}%</span>
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-1">{Math.round(overallScore)}%</p>
+                  </div>
+                </div>
+                <div className="h-3 w-full bg-slate-50 rounded-full border border-slate-100 overflow-hidden shadow-inner">
+                  <div 
+                    className="h-full bg-emerald-500 rounded-full shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all duration-1000"
+                    style={{ width: `${Math.min(overallScore, 100)}%` }}
+                  />
+                </div>
+              </>
             )}
 
             {intelPerf?.remarks && (

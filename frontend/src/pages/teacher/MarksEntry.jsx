@@ -32,7 +32,7 @@ export default function MarksEntry({ isAdmin = false }) {
 
   const [filters, setFilters] = useState({
     academic_year: defaultYear,
-    exam_type: 'Unit Test',
+    exam_type: '',
     class_id: '',
     section_id: '',
     subject_id: ''
@@ -158,7 +158,13 @@ export default function MarksEntry({ isAdmin = false }) {
 
   const handleMarksChange = (idx, value) => {
     const updated = [...students];
-    updated[idx].marks_obtained = value;
+    const max = globalTotalMarks !== '' ? Number(globalTotalMarks) : null;
+    let num = value === '' ? '' : Number(value);
+    // Enforce min 0
+    if (num !== '' && num < 0) num = 0;
+    // Enforce max (clamp to max marks)
+    if (num !== '' && max !== null && num > max) num = max;
+    updated[idx].marks_obtained = num === '' ? '' : num;
     setStudents(updated);
   };
 
@@ -167,6 +173,19 @@ export default function MarksEntry({ isAdmin = false }) {
     if (!globalTotalMarks) {
       return toast.error("Please enter the Max Marks for this exam before saving.");
     }
+    const max = Number(globalTotalMarks);
+
+    // Validate: no blank marks, no marks > max
+    const blankStudents = students.filter(s => s.status !== 'final_saved' && (s.marks_obtained === '' || s.marks_obtained === null || s.marks_obtained === undefined));
+    const overLimitStudents = students.filter(s => s.status !== 'final_saved' && Number(s.marks_obtained) > max);
+
+    if (blankStudents.length > 0) {
+      return toast.error(`Please enter marks for all students before saving. ${blankStudents.length} student(s) have blank marks.`);
+    }
+    if (overLimitStudents.length > 0) {
+      return toast.error(`Marks cannot exceed Max Marks (${max}). Please check ${overLimitStudents.length} student(s).`);
+    }
+
     if (isFinal) {
       if (!window.confirm("Are you sure you want to Final Save? You will not be able to edit these marks again.")) {
         return;
@@ -227,14 +246,16 @@ export default function MarksEntry({ isAdmin = false }) {
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading modules...</div>;
 
-  let availableClasses = options.classes;
+  let availableClasses = [...options.classes];
   if (!options.globalAccess) {
     const classIds = new Set(options.permissions.map(p => p.class_id).filter(Boolean));
     const hasAllClasses = options.permissions.some(p => p.class_id === null);
     if (!hasAllClasses) {
-      availableClasses = options.classes.filter(c => classIds.has(c.id));
+      availableClasses = availableClasses.filter(c => classIds.has(c.id));
     }
   }
+  // Sort by sort_order ascending (Pre-Nursery → Nursery → LKG → Class 1 → ... → Class 12)
+  availableClasses.sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
 
   return (
     <div className="py-2 sm:py-4 px-0 animate-fade-in space-y-6">
@@ -292,6 +313,7 @@ export default function MarksEntry({ isAdmin = false }) {
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Exam Type *</label>
                 <select className="select" value={filters.exam_type} onChange={e => setFilters({...filters, exam_type: e.target.value})}>
+                  <option value="">Select Exam Type...</option>
                   <option value="Unit Test">Unit Test</option>
                   <option value="Half Yearly Exam">Half Yearly Exam</option>
                   <option value="Annual Exam">Annual Exam</option>
@@ -409,17 +431,24 @@ export default function MarksEntry({ isAdmin = false }) {
                           <input 
                             type="number"
                             step="0.01"
+                            min="0"
+                            max={globalTotalMarks || undefined}
                             disabled={disabled}
                             value={student.marks_obtained ?? ''}
                             onChange={(e) => handleMarksChange(idx, e.target.value)}
                             className={clsx(
                               "input w-24 text-center py-1.5",
-                              disabled && "bg-slate-100 text-slate-400 border-transparent cursor-not-allowed"
+                              disabled && "bg-slate-100 text-slate-400 border-transparent cursor-not-allowed",
+                              !disabled && globalTotalMarks && Number(student.marks_obtained) > Number(globalTotalMarks) && "border-red-400 bg-red-50 text-red-600 focus:ring-red-400",
+                              !disabled && (student.marks_obtained === '' || student.marks_obtained === null) && "border-amber-300"
                             )}
-                            placeholder="e.g. 18.5"
+                            placeholder="0"
                           />
                           <span className="text-sm font-medium text-slate-400">/ {globalTotalMarks || '-'}</span>
                         </div>
+                        {!disabled && globalTotalMarks && Number(student.marks_obtained) > Number(globalTotalMarks) && (
+                          <p className="text-[10px] text-red-500 font-bold mt-1">Exceeds max!</p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-2">
