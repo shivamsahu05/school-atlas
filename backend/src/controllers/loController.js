@@ -256,6 +256,24 @@ exports.getLOHistory = async (req, res) => {
     const formatted = await Promise.all(rows.map(async (row) => {
       let cName = row.class?.class_name || 'Unknown';
       let sec = row.class?.section || '';
+
+      // If class is unknown, it might be an academic_classes ID
+      if (cName === 'Unknown' && row.class_id) {
+        try {
+          const ac = await prisma.academic_classes.findUnique({ where: { id: row.class_id } });
+          if (ac) cName = ac.name;
+          
+          // Also try to find section from teacher_assignments
+          const assignment = await prisma.teacher_assignments.findFirst({
+            where: { teacher_id: row.teacher_id, class_id: row.class_id, subject_id: row.subject_id },
+            include: { acad_sections: true }
+          });
+          if (assignment?.acad_sections) {
+            sec = assignment.acad_sections.name || assignment.acad_sections.code || '';
+          }
+        } catch (e) {}
+      }
+
       return {
         id: row.id, teacher_id: row.teacher_id, class_id: row.class_id, subject_id: row.subject_id,
         month: row.month, week: row.week, topic: row.topic, lo_status: row.lo_status,
@@ -268,12 +286,18 @@ exports.getLOHistory = async (req, res) => {
     console.warn('[LO HISTORY] Prisma fallback:', error.message);
     try {
       const [rows] = await pool.query(`
-        SELECT tp.*, tp.principal_score as score, u.name as teacher_name, c.class_name, c.section, s.name as subject_name
+        SELECT tp.*, tp.principal_score as score, u.name as teacher_name, 
+               COALESCE(c.class_name, ac.name, 'Unknown') as class_name, 
+               COALESCE(c.section, sec.name, sec.code, '') as section, 
+               sub.name as subject_name
         FROM teacher_performance_lo tp
         LEFT JOIN teachers t ON tp.teacher_id = t.id
         LEFT JOIN users u ON t.user_id = u.id
         LEFT JOIN classes c ON tp.class_id = c.id
-        LEFT JOIN subjects s ON tp.subject_id = s.id
+        LEFT JOIN academic_classes ac ON tp.class_id = ac.id
+        LEFT JOIN teacher_assignments ta ON ta.teacher_id = tp.teacher_id AND ta.class_id = tp.class_id AND ta.subject_id = tp.subject_id
+        LEFT JOIN acad_sections sec ON ta.section_id = sec.id
+        LEFT JOIN subjects sub ON tp.subject_id = sub.id
         ORDER BY tp.created_at DESC
       `);
       return res.json({ success: true, data: rows });

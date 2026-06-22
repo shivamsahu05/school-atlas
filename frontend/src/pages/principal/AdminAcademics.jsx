@@ -168,7 +168,8 @@ const AdminAcademics = () => {
         class: false,
         section: false,    // for adding a new section directly to the selected class
         subject: false,    // for adding a new subject directly to the selected class
-        stream: false
+        stream: false,
+        editMasterSection: false
     })
 
     // Form States
@@ -179,6 +180,7 @@ const AdminAcademics = () => {
     
     const [editingId, setEditingId] = useState(null)
     const [editingStreamId, setEditingStreamId] = useState(null)
+    const [editingMasterSectionId, setEditingMasterSectionId] = useState(null)
 
     const token = JSON.parse(localStorage.getItem('sams_session') || '{}')?.token
     const headers = { 'Authorization': `Bearer ${token}` }
@@ -382,7 +384,7 @@ const AdminAcademics = () => {
             if (secData.success) {
                 sectionId = secData.section?.id || secData.id
             } else {
-                // Section already exists — find its ID from the master list
+                // Section already exists - find its ID from the master list
                 const existingSection = sections.find(
                     s => s.name?.toLowerCase() === sectionForm.name.toLowerCase() ||
                          s.code?.toLowerCase() === sectionForm.code.toLowerCase()
@@ -394,8 +396,8 @@ const AdminAcademics = () => {
                     const refreshRes = await fetch(`${API_URL}/api/admin/sections`, { headers })
                     const refreshData = await refreshRes.json()
                     if (refreshData.success) {
-                        setSections(refreshData.sections)
-                        const found = refreshData.sections.find(
+                        setSections(refreshData.sections || refreshData.data || [])
+                        const found = (refreshData.sections || refreshData.data || []).find(
                             s => s.name?.toLowerCase() === sectionForm.name.toLowerCase() ||
                                  s.code?.toLowerCase() === sectionForm.code.toLowerCase()
                         )
@@ -412,21 +414,50 @@ const AdminAcademics = () => {
             const assignRes = await fetch(`${API_URL}/api/admin/class-sections`, {
                 method: 'POST',
                 headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ class_id: selectedClass.id, section_id: sectionId })
+                body: JSON.stringify({ class_id: selectedClass.id, section_id: sectionId, stream_id: selectedStream?.id })
             })
             const assignData = await assignRes.json()
             if (assignData.success) {
-                toast.success('Section assigned to class')
+                toast.success('Section created and assigned')
                 setModals({ ...modals, section: false })
                 setSectionForm({ name: '', code: '', description: '' })
-                fetchInitialData()           // refresh master sections
-                fetchClassDetails(selectedClass.id)  // refresh class sections
-            } else {
-                toast.error('Assignment failed: ' + assignData.message)
-            }
+                fetchClassDetails(selectedClass.id)
+                if (selectedStream) fetchStreamDetails(selectedStream.id)
+                fetchInitialData() // refresh master sections pool
+            } else throw new Error(assignData.message)
         } catch (error) {
-            console.error('Error creating section:', error)
-            toast.error('Failed to create section')
+            toast.error(error.message || 'Failed to create section')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    const handleUpdateMasterSection = async () => {
+        if (!sectionForm.name || !sectionForm.code) {
+            toast.error('Name and Code are required')
+            return
+        }
+        setActionLoading(true)
+        try {
+            const res = await fetch(`${API_URL}/api/admin/sections/${editingMasterSectionId}`, {
+                method: 'PUT',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: sectionForm.name, code: sectionForm.code, description: sectionForm.description })
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success('Master Section updated')
+                setModals({ ...modals, editMasterSection: false })
+                setEditingMasterSectionId(null)
+                setSectionForm({ name: '', code: '', description: '' })
+                fetchInitialData() // refresh master sections pool
+                if (selectedClass) {
+                    fetchClassDetails(selectedClass.id)
+                    if (selectedStream) fetchStreamDetails(selectedStream.id)
+                }
+            } else throw new Error(data.message)
+        } catch (error) {
+            toast.error(error.message || 'Failed to update section')
         } finally {
             setActionLoading(false)
         }
@@ -766,7 +797,7 @@ const AdminAcademics = () => {
                                     }`}
                                 onClick={() => setSelectedClass(cls)}
                             >
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedClass?.id === cls.id ? 'bg-white/20' : 'bg-slate-100 group-hover:bg-indigo-100'}`}>
+                                <div className={`min-w-[2rem] px-2 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedClass?.id === cls.id ? 'bg-white/20' : 'bg-slate-100 group-hover:bg-indigo-100'}`}>
                                     <span className={selectedClass?.id === cls.id ? 'text-white' : 'text-indigo-600'}>
                                         {cls.class_number || '?'}
                                     </span>
@@ -803,7 +834,7 @@ const AdminAcademics = () => {
                     {/* Class Header */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-8 border-b border-slate-100">
                         <div className="flex items-center gap-5">
-                            <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-100">
+                            <div className="min-w-[4rem] px-4 w-auto h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-100">
                                 {selectedClass.class_number}
                             </div>
                             <div>
@@ -1098,17 +1129,22 @@ const AdminAcademics = () => {
                                                 {sortedSections.map(sec => {
                                                     const isAssigned = classSections.some(cs => cs.section_id === sec.id)
                                                     return (
-                                                        <button
-                                                            key={sec.id}
-                                                            onClick={() => !isAssigned && handleAssignExistingSection(sec.id)}
-                                                            disabled={actionLoading || isAssigned}
-                                                            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold transition-all rounded-xl border ${isAssigned
-                                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:shadow-sm active:scale-95'
-                                                                }`}>
-                                                            {isAssigned ? <Check size={12} /> : <Plus size={12} />}
-                                                            {sec.name}
-                                                        </button>
+                                                        <div key={sec.id} className={`flex rounded-xl border transition-all ${isAssigned ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-sm overflow-hidden'}`}>
+                                                            <button
+                                                                onClick={() => !isAssigned && handleAssignExistingSection(sec.id)}
+                                                                disabled={actionLoading || isAssigned}
+                                                                className="flex-1 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 active:scale-95 transition-all">
+                                                                {isAssigned ? <Check size={12} className="text-slate-400" /> : <Plus size={12} className="text-indigo-500" />}
+                                                                {sec.name}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setSectionForm({ name: sec.name, code: sec.code, description: sec.description || '' }); setEditingMasterSectionId(sec.id); setModals({ ...modals, editMasterSection: true }) }}
+                                                                className="px-3 py-2 border-l border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 transition-colors"
+                                                                title="Edit Master Section"
+                                                            >
+                                                                <Pencil size={12} />
+                                                            </button>
+                                                        </div>
                                                     )
                                                 })}
                                             </div>
