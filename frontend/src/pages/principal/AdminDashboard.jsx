@@ -11,6 +11,7 @@ import { StatCard, SectionHeader, ProgressBar, StatusBadge, DataTable, SelectDro
 import { BarChartWidget } from '../../components/charts/index.jsx'
 import { MONTHS, COLOR_MAP } from '../../data/constants'
 import { dashboardApi, intelligenceApi } from '../../api'
+import { systemApi } from '../../services/schoolApi'
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 const TODAY = new Date()
@@ -71,19 +72,22 @@ export default function AdminDashboard() {
   const [loading, setLoading] = useState(true)
   const [hwNotifications, setHwNotifications] = useState([])
   const [liveNotifications, setLiveNotifications] = useState([])
+  const [activeSession, setActiveSession] = useState('2026-27')
 
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
       try {
-        const [dashRes, intelRes, hwRes, notifRes] = await Promise.all([
+        const [dashRes, intelRes, hwRes, notifRes, sysRes] = await Promise.all([
           dashboardApi.getAdminMetrics(),
           intelligenceApi.getAdminDashboard(),
           dashboardApi.getHomeworkNotifications(),
-          dashboardApi.getNotifications()
+          dashboardApi.getNotifications(),
+          systemApi.getStatus().catch(() => ({ data: { session: '2026-27' } }))
         ])
         
         if (isMounted) {
+          setActiveSession(sysRes?.data?.session || '2026-27')
           setIntel(intelRes?.data || null)
           setHwNotifications(hwRes?.data || [])
           setLiveNotifications(notifRes?.data || [])
@@ -122,18 +126,22 @@ export default function AdminDashboard() {
     <div className="space-y-6 animate-fade-in">
 
       {/* ── Welcome Banner ─────────────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-2xl bg-slate-900 p-6 lg:p-8">
-        <div className="absolute inset-0 opacity-20" style={{
-          backgroundImage: 'radial-gradient(circle at 10% 80%, #1a56db 0%, transparent 50%), radial-gradient(circle at 90% 20%, #0d9488 0%, transparent 50%)',
-        }} />
-        <div className="relative flex items-start justify-between gap-4">
-          <div>
-            <p className="text-slate-400 text-sm mb-1">Principal Dashboard</p>
-            <h2 className="font-display text-2xl lg:text-3xl text-white mb-2">Welcome, {user?.name || 'Admin'}</h2>
-            <p className="text-slate-300 text-sm">School Academic Management System · Live Database Connected</p>
+      <div className="relative overflow-hidden bg-[#0d225c] rounded-[2rem] p-6 md:p-8 lg:p-10 text-white shadow-xl">
+        <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl pointer-events-none" />
+        <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+          <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Principal Dashboard</p>
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Welcome, <span className="text-white">{user?.name || 'Admin'}</span></h1>
+              <div className="space-y-1">
+                <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS - School Academic Management System</p>
+                <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{activeSession} (Academic Year) · Admin Portal</p>
+              </div>
           </div>
-          <div className="hidden sm:flex w-14 h-14 bg-white/10 rounded-2xl items-center justify-center">
-            <GraduationCap size={28} className="text-white" />
+          <div className="flex gap-2 shrink-0">
+            <div className="hidden lg:flex w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+            <div className="hidden lg:flex w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
           </div>
         </div>
       </div>
@@ -564,9 +572,9 @@ function LiveActivityFeed({ notifications = [] }) {
       
       <div className="space-y-4 mt-4">
         {notifications.map((n, i) => (
-          <div key={n.event_id || i} className="flex items-start gap-4 p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-rose-200 hover:bg-rose-50/30 transition-all group">
-            <div className="relative">
-              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0">
+          <div key={n.event_id || i} className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-rose-200 hover:bg-rose-50/30 transition-all group">
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center">
                 <AlertTriangle size={18} />
               </div>
               {i === 0 && (
@@ -575,20 +583,20 @@ function LiveActivityFeed({ notifications = [] }) {
             </div>
             
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-slate-800 group-hover:text-rose-700 transition-colors">
+              <p className="text-[13px] sm:text-sm font-semibold leading-tight sm:leading-normal text-slate-800 group-hover:text-rose-700 transition-colors">
                 {n.text}
               </p>
-              <div className="flex items-center gap-3 mt-1.5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">{n.type}</span>
-                <span className="w-1 h-1 rounded-full bg-slate-300" />
-                <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                  <Clock size={10} />
-                  {new Date(n.time).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: 'short' })}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 sm:mt-1.5">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-slate-500">{n.type}</span>
+                <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300" />
+                <span className="text-[10px] sm:text-[11px] text-slate-400 flex items-center gap-1 whitespace-nowrap">
+                  <Clock size={10} className="flex-shrink-0" />
+                  {new Date(n.time).toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             </div>
             
-            <button className="text-xs font-semibold text-rose-600 bg-rose-50 px-3 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+            <button className="text-[10px] sm:text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1.5 sm:px-3 sm:py-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity text-center leading-[1.1] shrink-0 w-14 sm:w-auto sm:whitespace-nowrap">
               Action Required
             </button>
           </div>
