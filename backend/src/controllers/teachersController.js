@@ -148,10 +148,18 @@ exports.createTeacher = async (req, res) => {
     const { name, email, password, phone, status,
             mobile, dob, qualification, experience, salary, subject, joining_date, address, assignments } = req.body;
 
-    const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
+    const loginPhone = phone || mobile || '';
+    const [existing] = await connection.execute('SELECT id, email, phone FROM users WHERE email = ? OR (phone != "" AND phone = ?)', [email, loginPhone]);
     if (existing.length > 0) {
+      const emailConflict = existing.some(u => u.email === email);
+      const phoneConflict = loginPhone && existing.some(u => String(u.phone) === String(loginPhone));
+      let msgs = [];
+      if (emailConflict) msgs.push('Email');
+      if (phoneConflict) msgs.push('Phone number');
+      
+      const msg = `${msgs.join(' and ')} already exists.`;
       connection.release();
-      return sendResponse(res, false, null, 'Email already exists.', 409);
+      return sendResponse(res, false, null, msg, 409);
     }
 
     const hashed = await bcrypt.hash(password || '123456', SALT_ROUNDS);
@@ -425,11 +433,19 @@ exports.bulkUploadTeachers = async (req, res) => {
           continue;
         }
 
-        // Email conflict check
-        const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
+        // Email and Phone conflict check
+        const loginPhone = phone || mobile || '';
+        const [existing] = await connection.execute('SELECT id, email, phone FROM users WHERE email = ? OR (phone != "" AND phone = ?)', [email, loginPhone]);
         if (existing.length > 0) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Email ${email} already registered.`);
+          const emailConflict = existing.some(u => u.email === email);
+          const phoneConflict = loginPhone && existing.some(u => String(u.phone) === String(loginPhone));
+          
+          let msgs = [];
+          if (emailConflict) msgs.push(`Email ${email}`);
+          if (phoneConflict) msgs.push(`Phone ${loginPhone}`);
+          
+          results.errors.push(`Row ${index + 2}: ${msgs.join(' and ')} already registered.`);
           continue;
         }
 

@@ -533,8 +533,10 @@ export default function AdminTeachers() {
                     if (!file) return
                     try {
                       setSubmitting(true)
-                      const res = await teachersApi.bulkUpload(file)
-                      setBulkResult(res.data.data)
+                      const formData = new FormData();
+                      formData.append('file', file);
+                      const res = await teachersApi.bulkUpload(formData)
+                      setBulkResult(res.data)
                       fetchTeachers()
                     } catch (err) {
                       alert(err.response?.data?.message || 'Upload failed.')
