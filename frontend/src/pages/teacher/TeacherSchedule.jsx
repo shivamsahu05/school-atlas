@@ -125,6 +125,7 @@ export default function TeacherSchedule() {
       const formData = new FormData();
       formData.append('file', uploadFile);
       if (bulkForm.class_id) formData.append('class_id', bulkForm.class_id);
+      if (bulkForm.section_id) formData.append('section_id', bulkForm.section_id);
       if (bulkForm.subject_id) formData.append('subject_id', bulkForm.subject_id);
       
       const res = await syllabusApi.uploadPlan(formData);
@@ -320,17 +321,27 @@ export default function TeacherSchedule() {
               <Upload size={24} className="text-brand-600" />
             </div>
             
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 text-left">
+            <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-left">
               <div>
                 <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Class</label>
                 <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-200"
-                  value={bulkForm.class_id} onChange={e => setBulkForm({ ...bulkForm, class_id: e.target.value, subject_id: '' })} required>
+                  value={bulkForm.class_id} onChange={e => setBulkForm({ ...bulkForm, class_id: e.target.value, section_id: 'All', subject_id: '' })} required>
                   <option value="">Select Class…</option>
                   {Array.isArray(assignments.assignments) && [...new Set(assignments.assignments.map(a => a.classId))].map(id => {
                     const name = assignments.assignments.find(a => a.classId === id)?.className;
                     const displayName = name?.startsWith('Class') ? name : `Class ${name}`;
                     return <option key={id} value={id}>{displayName}</option>
                   })}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Section</label>
+                <select className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-brand-200 disabled:opacity-50"
+                  value={bulkForm.section_id} onChange={e => setBulkForm({ ...bulkForm, section_id: e.target.value })} disabled={!bulkForm.class_id}>
+                  <option value="All">All Sections</option>
+                  {bulkForm.class_id && [...new Map(assignments.assignments.filter(a => String(a.classId) === String(bulkForm.class_id) && a.sectionId).map(a => [a.sectionId, a])).values()].map(a => (
+                    <option key={a.sectionId} value={a.sectionId}>{a.sectionName}</option>
+                  ))}
                 </select>
               </div>
               <div>

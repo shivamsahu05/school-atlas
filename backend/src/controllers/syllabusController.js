@@ -589,20 +589,31 @@ const bulkUploadSyllabus = async (req, res) => {
 
         const { startDate, endDate } = calculateDates(month, week);
 
-        // Resolve Sections (If no section provided, apply to ALL sections of the class)
+        // Resolve Sections (If no section provided, apply to ALL assigned sections, or ALL sections of the class)
         let targetSections = [];
         if (sec) {
           targetSections.push(sec.id);
-        } else if (req.body.section_id) {
+        } else if (req.body.section_id && String(req.body.section_id).toLowerCase() !== 'all') {
           targetSections.push(req.body.section_id);
         } else {
-          const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [cls.id]);
-          if (classSecs.length > 0) {
-            targetSections = classSecs.map(s => s.section_id);
+          const [assignedSections] = await pool.execute(
+            'SELECT section_id FROM teacher_assignments WHERE teacher_id = ? AND class_id = ? AND subject_id = ?',
+            [explicitTeacherId || req.user.id, cls.id, sub.id]
+          );
+          if (assignedSections.length > 0) {
+            targetSections = assignedSections.map(s => s.section_id).filter(Boolean);
           } else {
-            targetSections.push(null);
+            const [classSecs] = await pool.execute('SELECT section_id FROM acad_class_sections WHERE class_id = ?', [cls.id]);
+            if (classSecs.length > 0) {
+              targetSections = classSecs.map(s => s.section_id);
+            } else {
+              targetSections.push(null);
+            }
           }
         }
+
+        let rowInserted = 0;
+        let rowSkippedMsgs = [];
 
         for (const targetSecId of targetSections) {
           // Resolve Teacher for this specific section
@@ -633,7 +644,9 @@ const bulkUploadSyllabus = async (req, res) => {
           const [existingWeek] = await pool.execute(duplicateQuery, dupParams);
           
           if (existingWeek.length > 0) {
-            throw new Error(`Schedule already exists for ${week} of ${month} in this section.`);
+            let secName = targetSecId ? sections.find(s => s.id === targetSecId)?.name : 'All Sections';
+            rowSkippedMsgs.push(secName || `Section ${targetSecId}`);
+            continue;
           }
 
           const sql = `
@@ -659,7 +672,18 @@ const bulkUploadSyllabus = async (req, res) => {
             lo
           ]);
 
-          if (dbRes.affectedRows === 1) results.inserted++;
+          if (dbRes.affectedRows === 1) {
+            rowInserted++;
+            results.inserted++;
+          }
+        }
+
+        if (rowSkippedMsgs.length > 0) {
+          if (rowInserted === 0) {
+             throw new Error(`Duplicate Week: '${week}' already scheduled for ${rowSkippedMsgs.join(', ')}.`);
+          } else {
+             results.errors.push({ row: rowNum, error: `Skipped ${rowSkippedMsgs.join(', ')} ('${week}' already exists). Inserted for others.` });
+          }
         }
 
       } catch (err) {
@@ -771,9 +795,9 @@ const getSyllabusPlan = async (req, res) => {
       notebook_checked: r.notebook_checked || 'No',
       homework_checked: r.homework_status || 'Incomplete',
       is_completed: Boolean(r.is_completed),
-      startDate: r.planned_start_date ? new Date(r.planned_start_date).toISOString().split('T')[0] : null,
-      endDate: r.planned_end_date ? new Date(r.planned_end_date).toISOString().split('T')[0] : null,
-      month: r.month || (r.planned_start_date ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : ''),
+      startDate: (r.planned_start_date && !isNaN(new Date(r.planned_start_date))) ? new Date(r.planned_start_date).toISOString().split('T')[0] : null,
+      endDate: (r.planned_end_date && !isNaN(new Date(r.planned_end_date))) ? new Date(r.planned_end_date).toISOString().split('T')[0] : null,
+      month: r.month || ((r.planned_start_date && !isNaN(new Date(r.planned_start_date))) ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : ''),
       teacher: { name: r.teacherName || '—', id: r.teacher_id },
       updatedAt: r.updated_at
     }));
@@ -1102,10 +1126,10 @@ const exportSyllabusPlan = async (req, res) => {
       'Topic': r.topic || '—',
       'Week': r.week || '—',
       'Month': r.month || (r.planned_start_date ? new Date(r.planned_start_date).toLocaleString('default', { month: 'long' }) : '—'),
-      'Planned Start': r.planned_start_date ? new Date(r.planned_start_date).toISOString().split('T')[0] : '—',
-      'Planned End': r.planned_end_date ? new Date(r.planned_end_date).toISOString().split('T')[0] : '—',
-      'Status': r.is_completed ? 'Completed' : 'Pending',
-      'Completion Date': r.completed_date ? new Date(r.completed_date).toISOString().split('T')[0] : '—'
+      'Planned Start': (r.planned_start_date && !isNaN(new Date(r.planned_start_date))) ? new Date(r.planned_start_date).toISOString().split('T')[0] : '—',
+      'Planned End': (r.planned_end_date && !isNaN(new Date(r.planned_end_date))) ? new Date(r.planned_end_date).toISOString().split('T')[0] : '—',
+      'Status': r.status || (r.is_completed ? 'completed' : 'pending'),
+      'Completion Date': (r.completed_date && !isNaN(new Date(r.completed_date))) ? new Date(r.completed_date).toISOString().split('T')[0] : '—'
     }));
 
     const workbook = xlsx.utils.book_new();

@@ -32,7 +32,13 @@ export default function TimetableGrid() {
     return () => window.removeEventListener('syllabus-updated', handleSync);
   }, []);
 
-  const formatTime = (time) => time ? String(time).slice(0, 5) : '--:--';
+  const formatTime = (time) => {
+    if (!time) return '--:--';
+    const t = String(time);
+    if (t.match(/^\d{2}:\d{2}:\d{2}$/)) return t.slice(0, 5);
+    if (t.match(/^\d{2}:\d{2}$/)) return t;
+    return t;
+  };
   const formatClassLabel = (item) => `Class ${item.class_name || '?'}-${item.section_name || '?'}`;
 
   const uniqueTimeSlots = useMemo(() => {
@@ -163,7 +169,9 @@ export default function TimetableGrid() {
                           <div className="font-black text-[9px] sm:text-xs text-brand-900 leading-snug text-center tracking-tight">{entry.subject_name}</div>
                           <div className="text-[8px] sm:text-[9px] font-black text-slate-600 bg-slate-100 px-1 sm:px-2 py-0.5 rounded-md border border-slate-200 mt-1 sm:mt-1.5 tracking-wider">{formatClassLabel(entry)}</div>
                           {entry.room_number ? (
-                            <div className="text-[8px] sm:text-[9px] font-semibold text-slate-500 mt-0.5 sm:mt-1">Room {entry.room_number}</div>
+                            <div className="text-[8px] sm:text-[9px] font-semibold text-slate-500 mt-0.5 sm:mt-1 flex items-center gap-0.5">
+                              <span>📍</span> {entry.room_number}
+                            </div>
                           ) : (
                             <div className="h-2.5" />
                           )}
