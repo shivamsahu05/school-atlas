@@ -3,6 +3,7 @@ const express      = require('express')
 const cors         = require('cors')
 const helmet       = require('helmet')
 const morgan       = require('morgan')
+const path         = require('path')
 require('dotenv').config()
 
 const { notFound, errorHandler } = require('./middleware/errorHandler')
@@ -47,9 +48,8 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'https://school-atlas-sam
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    console.warn(`[CORS Blocked]: ${origin}`);
-    return cb(null, true); // Fallback to true for production debugging if needed, or strict false
+    // Dynamic origin handling: allow all for unified deployment
+    return cb(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -101,6 +101,18 @@ app.use(`${A}/admin/system`,      systemRoutes)
 
 // 7. Marks Entry
 app.use(`${A}/marks`,          marksRoutes)
+
+// ─── Serve Frontend (Production) ──────────────────────────────────────────────
+// In production, the Express backend serves the built React frontend
+if (process.env.NODE_ENV === 'production') {
+  const frontendDistPath = path.join(__dirname, '../../frontend/dist');
+  app.use(express.static(frontendDistPath));
+  
+  // SPA Fallback: Any route not matching API routes gets the React index.html
+  app.get(/^(?!\/api).*/, (req, res) => {
+    res.sendFile(path.resolve(frontendDistPath, 'index.html'));
+  });
+}
 
 // ─── Error Handling ───────────────────────────────────────────────────────────
 app.use(notFound)

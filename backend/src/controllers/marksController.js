@@ -15,7 +15,7 @@ exports.getTeacherOptions = async (req, res) => {
     
     const [classes] = await pool.execute('SELECT id, name, sort_order FROM academic_classes ORDER BY sort_order ASC, name ASC');
     const [sections] = await pool.execute('SELECT s.id, s.name, cs.class_id FROM acad_sections s JOIN acad_class_sections cs ON s.id = cs.section_id ORDER BY s.name');
-    const [subjects] = await pool.execute('SELECT id, name FROM subjects ORDER BY name');
+    const [subjects] = await pool.execute('SELECT s.id, s.name, cs.class_id FROM subjects s JOIN acad_class_subjects cs ON s.id = cs.subject_id ORDER BY s.name');
 
     if (role === 'admin' || role === 'principal') {
       return sendOk(res, { classes, sections, subjects, globalAccess: true });
@@ -124,15 +124,15 @@ exports.saveMarks = async (req, res) => {
       if (existing.length > 0) {
         await connection.execute(`
           UPDATE student_marks 
-          SET marks_obtained = ?, total_marks = ?, status = ?, teacher_id = ?
+          SET marks_obtained = ?, total_marks = ?, status = ?, teacher_id = ?, entered_by_user_id = ?
           WHERE student_id = ? AND subject_id = ? AND exam_type = ?
-        `, [mObt, tMrk, studentStatus, req.user.id, student_id, subject_id, exam_type]);
+        `, [mObt, tMrk, studentStatus, teacherId, req.user.id, student_id, subject_id, exam_type]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, total_marks, status, teacher_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, tMrk, studentStatus, req.user.id]);
+          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, total_marks, status, teacher_id, entered_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, tMrk, studentStatus, teacherId, req.user.id]);
       }
     }
 

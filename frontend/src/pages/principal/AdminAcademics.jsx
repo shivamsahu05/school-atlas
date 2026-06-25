@@ -1206,15 +1206,8 @@ const AdminAcademics = () => {
                                             {classSubjects.map((sub, index) => (
                                                 <div key={sub.mapping_id || `subject-${index}`} className="group relative bg-white border border-slate-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all">
                                                     <div className="absolute top-2 right-2 flex gap-1">
-                                                        <button
-                                                            onClick={() => { const sid = sub.subject_id || sub.id; const s = subjects.find(x => x.id === sid); if (s) { setSubjectForm({ name: s.name, code: s.code, description: s.description || '' }); setEditingMasterSubjectId(s.id); setModals({ ...modals, editMasterSubject: true }); } }}
-                                                            className="p-1.5 text-slate-300 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"
-                                                            title="Edit Subject"
-                                                        >
-                                                            <Pencil size={12} />
-                                                        </button>
                                                         <button onClick={() => handleUnassignSubject(sub.mapping_id, sub.subject_id)}
-                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
+                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Remove subject">
                                                             <X size={14} />
                                                         </button>
                                                     </div>
@@ -1253,13 +1246,6 @@ const AdminAcademics = () => {
                                                                 className="flex-1 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 active:scale-95 transition-all">
                                                                 {isAssigned ? <Check size={12} className="text-slate-400" /> : <Plus size={12} className="text-amber-500" />}
                                                                 {sub.name}
-                                                            </button>
-                                                            <button
-                                                                onClick={() => { setSubjectForm({ name: sub.name, code: sub.code, description: sub.description || '' }); setEditingMasterSubjectId(sub.id); setModals({ ...modals, editMasterSubject: true }); }}
-                                                                className="px-3 py-2 border-l border-slate-200 bg-slate-50 hover:bg-amber-50 hover:text-amber-600 text-slate-400 transition-colors"
-                                                                title="Edit Master Subject"
-                                                            >
-                                                                <Pencil size={12} />
                                                             </button>
                                                         </div>
                                                     )

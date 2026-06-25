@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { toast } from 'react-hot-toast';
 import { timetableApi } from '../../api';
+import * as XLSX from 'xlsx';
 
 const API_URL = import.meta.env.VITE_API_URL?.replace(/\/api$/, '') || '';
 
@@ -412,6 +413,71 @@ const AdminTeacherTimeTable = () => {
         }
     };
 
+    const handleExportTimetable = () => {
+        if (!selectedTeacher) {
+            toast.error("Please select a teacher first to export their timetable");
+            return;
+        }
+        
+        let teacherName = "All_Teachers";
+        if (selectedTeacher !== 'ALL') {
+            const t = teachers.find(t => t.id === Number(selectedTeacher) || String(t.id) === String(selectedTeacher));
+            if (t) teacherName = t.name;
+        }
+
+        const data = [];
+        
+        // Header Row
+        const headerRow = ["Day / Time"];
+        timeSlots.forEach(slot => {
+            if (slot.is_break) {
+                headerRow.push("BREAK");
+            } else {
+                headerRow.push(`${formatTime(slot.start_time)} - ${formatTime(slot.end_time)}`);
+            }
+        });
+        data.push(headerRow);
+
+        // Data Rows
+        days.forEach(day => {
+            const row = [day.charAt(0).toUpperCase() + day.slice(1).toLowerCase()];
+            timeSlots.forEach(slot => {
+                if (slot.is_break) {
+                    row.push("BREAK");
+                } else {
+                    if (selectedTeacher === 'ALL') {
+                        const entries = timetable.filter(e => e.day_of_week?.toUpperCase() === day.toUpperCase() && e.time_slot_id === slot.id);
+                        if (entries.length > 0) {
+                            row.push(entries.map(e => `${e.teacher_name || e.teacher?.name || 'Unknown'} (${e.class_number}-${e.section} ${e.subject_name || e.subject?.name})`).join(" | "));
+                        } else {
+                            row.push("-");
+                        }
+                    } else {
+                        const entry = getTimetableEntry(day, slot.id);
+                        if (entry) {
+                            row.push(`${entry.class_number}-${entry.section} ${entry.subject_name}`);
+                        } else {
+                            row.push("-");
+                        }
+                    }
+                }
+            });
+            data.push(row);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        
+        // Auto-size columns
+        const colWidths = [{ wch: 15 }];
+        timeSlots.forEach(() => colWidths.push({ wch: selectedTeacher === 'ALL' ? 40 : 25 }));
+        ws['!cols'] = colWidths;
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Timetable");
+        XLSX.writeFile(wb, `Timetable_${teacherName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`);
+        toast.success("Timetable exported successfully!");
+    };
+
     /* ─── RENDER ─── */
     return (
         <div className="space-y-6 animate-fade-in pb-8">
@@ -433,6 +499,12 @@ const AdminTeacherTimeTable = () => {
                     </select>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                    <button 
+                        onClick={handleExportTimetable}
+                        className="px-4 py-2 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-colors flex items-center gap-2 shadow-sm"
+                    >
+                        <span>📥 Export Timetable</span>
+                    </button>
                     <button 
                         onClick={handleDownloadTemplate}
                         className="px-4 py-2 bg-emerald-50 text-emerald-600 border border-emerald-200 rounded-xl text-sm font-bold hover:bg-emerald-100 transition-colors flex items-center gap-2 shadow-sm"

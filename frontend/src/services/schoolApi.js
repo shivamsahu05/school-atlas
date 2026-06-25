@@ -119,6 +119,7 @@ export const systemApi = {
   resetPermissions: () => api.post('/admin/system/reset-permissions'),
   cleanupData: () => api.post('/admin/system/cleanup'),
   rolloverYear: () => api.post('/admin/system/rollover'),
+  bulkPromote: (data) => api.post('/admin/system/bulk-promote', data),
 };
 
 export default api;

@@ -77,7 +77,7 @@ export default function MarksEntry({ isAdmin = false }) {
     const cId = Number(filters.class_id);
     if (options.globalAccess) {
       setAvailableSections(options.sections.filter(s => s.class_id === cId));
-      setAvailableSubjects(options.subjects);
+      setAvailableSubjects(options.subjects.filter(s => s.class_id === cId));
     } else {
       const classPerms = options.permissions.filter(p => p.class_id === cId || p.class_id === null);
       const secIds = new Set(classPerms.map(p => p.section_id).filter(Boolean));
@@ -90,9 +90,9 @@ export default function MarksEntry({ isAdmin = false }) {
       const subIds = new Set(classPerms.map(p => p.subject_id).filter(Boolean));
       const hasAllSubjects = classPerms.some(p => p.subject_id === null);
       if (hasAllSubjects) {
-        setAvailableSubjects(options.subjects);
+        setAvailableSubjects(options.subjects.filter(s => s.class_id === cId));
       } else {
-        setAvailableSubjects(options.subjects.filter(s => subIds.has(s.id)));
+        setAvailableSubjects(options.subjects.filter(s => s.class_id === cId && subIds.has(s.id)));
       }
     }
     setFilters(f => ({ ...f, section_id: '', subject_id: '' }));
