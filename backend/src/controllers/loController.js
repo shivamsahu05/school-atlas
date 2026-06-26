@@ -113,10 +113,27 @@ exports.getTeachersByClassSubject = async (req, res) => {
         let ttTeachers = [];
         if (cls) {
           const classNum = cls.class_number || cls.name.replace(/[^0-9]/g, '');
+          
+          let secCondition = {};
+          if (req.query.section_id) {
+            const sec = await prisma.acad_sections.findUnique({ where: { id: Number(req.query.section_id) } });
+            if (sec) {
+              secCondition = {
+                OR: [
+                  { section: sec.name },
+                  { section: sec.code },
+                  { section: sec.name.replace('Section ', '') },
+                  { section: '' }
+                ]
+              };
+            }
+          }
+
           const ttEntries = await prisma.teacher_timetable.findMany({
             where: {
               OR: [{ class_number: String(classNum) }, { class_number: String(cls.name) }],
-              subject_id: Number(subjectId)
+              subject_id: Number(subjectId),
+              ...secCondition
             }
           });
           if (ttEntries.length > 0) {
@@ -127,6 +144,26 @@ exports.getTeachersByClassSubject = async (req, res) => {
             });
           }
         }
+        
+        let taTeachers = [];
+        try {
+          let taQuery = `
+            SELECT t.id, u.name 
+            FROM teacher_assignments ta
+            JOIN teachers t ON ta.teacher_id = t.user_id
+            JOIN users u ON t.user_id = u.id
+            WHERE ta.class_id = ? AND ta.subject_id = ?
+          `;
+          let taParams = [Number(classId), Number(subjectId)];
+          if (req.query.section_id) {
+            taQuery += ` AND ta.section_id = ?`;
+            taParams.push(Number(req.query.section_id));
+          }
+          const [taRows] = await pool.query(taQuery, taParams);
+          taTeachers = taRows || [];
+        } catch (taErr) {
+          console.warn('[LO TEACHERS] teacher_assignments fetch error:', taErr.message);
+        }
 
         const result = new Map();
         tsTeachers.forEach(ts => {
@@ -134,6 +171,9 @@ exports.getTeachersByClassSubject = async (req, res) => {
         });
         ttTeachers.forEach(u => {
           if (u.teacher_profile) result.set(u.teacher_profile.id, { id: u.teacher_profile.id, name: u.name });
+        });
+        taTeachers.forEach(t => {
+          result.set(t.id, { id: t.id, name: t.name });
         });
 
         const finalData = Array.from(result.values());
@@ -210,20 +250,34 @@ exports.awardLOScore = async (req, res) => {
 exports.getLOHistory = async (req, res) => {
   try {
     const rows = await prisma.teacher_performance_lo.findMany({
-      include: { teacher: { include: { teacher_profile: true } }, class: true, subject: true },
+      include: { teacher: { include: { user: true } }, class: true, subject: true },
       orderBy: { created_at: 'desc' }
     });
     const formatted = await Promise.all(rows.map(async (row) => {
       let cName = row.class?.class_name || 'Unknown';
       let sec = row.class?.section || '';
-      if (cName === 'Unknown') {
-        const acad = await prisma.academic_classes.findUnique({ where: { id: row.class_id } });
-        if (acad) cName = acad.name;
+
+      // If class is unknown, it might be an academic_classes ID
+      if (cName === 'Unknown' && row.class_id) {
+        try {
+          const ac = await prisma.academic_classes.findUnique({ where: { id: row.class_id } });
+          if (ac) cName = ac.name;
+          
+          // Also try to find section from teacher_assignments
+          const assignment = await prisma.teacher_assignments.findFirst({
+            where: { teacher_id: row.teacher_id, class_id: row.class_id, subject_id: row.subject_id },
+            include: { acad_sections: true }
+          });
+          if (assignment?.acad_sections) {
+            sec = assignment.acad_sections.name || assignment.acad_sections.code || '';
+          }
+        } catch (e) {}
       }
+
       return {
         id: row.id, teacher_id: row.teacher_id, class_id: row.class_id, subject_id: row.subject_id,
         month: row.month, week: row.week, topic: row.topic, lo_status: row.lo_status,
-        score: Number(row.principal_score || 0), teacher_name: row.teacher?.name || 'Unknown',
+        score: Number(row.principal_score || 0), teacher_name: row.teacher?.user?.name || 'Unknown',
         class_name: cName, section: sec, subject_name: row.subject?.name || 'Unknown', created_at: row.created_at
       };
     }));
@@ -232,12 +286,18 @@ exports.getLOHistory = async (req, res) => {
     console.warn('[LO HISTORY] Prisma fallback:', error.message);
     try {
       const [rows] = await pool.query(`
-        SELECT tp.*, tp.principal_score as score, u.name as teacher_name, c.class_name, c.section, s.name as subject_name
+        SELECT tp.*, tp.principal_score as score, u.name as teacher_name, 
+               COALESCE(c.class_name, ac.name, 'Unknown') as class_name, 
+               COALESCE(c.section, sec.name, sec.code, '') as section, 
+               sub.name as subject_name
         FROM teacher_performance_lo tp
         LEFT JOIN teachers t ON tp.teacher_id = t.id
         LEFT JOIN users u ON t.user_id = u.id
         LEFT JOIN classes c ON tp.class_id = c.id
-        LEFT JOIN subjects s ON tp.subject_id = s.id
+        LEFT JOIN academic_classes ac ON tp.class_id = ac.id
+        LEFT JOIN teacher_assignments ta ON ta.teacher_id = tp.teacher_id AND ta.class_id = tp.class_id AND ta.subject_id = tp.subject_id
+        LEFT JOIN acad_sections sec ON ta.section_id = sec.id
+        LEFT JOIN subjects sub ON tp.subject_id = sub.id
         ORDER BY tp.created_at DESC
       `);
       return res.json({ success: true, data: rows });
@@ -468,6 +528,22 @@ exports.getTeacherLOAnalytics = async (req, res) => {
       breakdown: { content: o.content_mastery, pedagogy: o.pedagogy, engagement: o.student_engagement, communication: o.communication, assessment: o.assessment }
     }));
 
+    // 6. Award LO Scores
+    const [awardRows] = await pool.query(`
+      SELECT tp.id, tp.created_at as date, tp.principal_score as score, tp.lo_status, tp.topic, tp.month, tp.week,
+             c.class_name, c.section, s.name as subject_name
+      FROM teacher_performance_lo tp
+      LEFT JOIN classes c ON tp.class_id = c.id
+      LEFT JOIN subjects s ON tp.subject_id = s.id
+      WHERE tp.teacher_id = ?
+      ORDER BY tp.created_at DESC LIMIT 5
+    `, [teacherId]);
+
+    const awardLo = (awardRows || []).map(a => ({
+      id: a.id, date: a.date, score: a.score, status: a.lo_status, topic: a.topic,
+      month: a.month, week: a.week, class_name: a.class_name, section: a.section, subject: a.subject_name
+    }));
+
     const [assigned] = await pool.query(`
       SELECT DISTINCT s.class_id, ac.name as class_name, s.section_id, asec.name as section_name, s.subject_id, sub.name as subject_name
       FROM syllabus s
@@ -484,6 +560,7 @@ exports.getTeacherLOAnalytics = async (req, res) => {
         timeline,
         rankings,
         observations,
+        awardLo,
         meta: { assigned }
       }
     });
@@ -504,5 +581,20 @@ exports.getTeacherLOAnalytics = async (req, res) => {
     }
 
     return res.status(500).json({ success: false, message: "LO fetch failed", error: err.message });
+  }
+};
+
+exports.fixDb = async (req, res) => {
+  try {
+    await pool.query('SET @id:=0');
+    await pool.query('UPDATE teacher_performance_lo SET id = (@id:=@id+1)');
+    await pool.query('ALTER TABLE teacher_performance_lo ADD PRIMARY KEY (id)');
+    await pool.query('ALTER TABLE teacher_performance_lo MODIFY id int(11) NOT NULL AUTO_INCREMENT');
+    return res.json({ success: true, message: 'Database schema fixed successfully!' });
+  } catch (error) {
+    if (error.code === 'ER_MULTIPLE_PRI_KEY') {
+      return res.json({ success: true, message: 'Database schema was already fixed.' });
+    }
+    return res.status(500).json({ success: false, message: 'Failed to fix DB', error: error.message });
   }
 };

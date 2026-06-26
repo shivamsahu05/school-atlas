@@ -8,7 +8,7 @@ export default function TeacherTimeTable() {
   if (!user) return <div className="p-4 text-center text-slate-400">Loading...</div>;
 
   return (
-    <div className="space-y-8 animate-fade-in p-4 sm:p-8">
+    <div className="space-y-8 animate-fade-in py-2 sm:py-4 px-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Time Table</h1>

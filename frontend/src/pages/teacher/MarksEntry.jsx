@@ -32,7 +32,7 @@ export default function MarksEntry({ isAdmin = false }) {
 
   const [filters, setFilters] = useState({
     academic_year: defaultYear,
-    exam_type: 'Unit Test',
+    exam_type: '',
     class_id: '',
     section_id: '',
     subject_id: ''
@@ -77,7 +77,7 @@ export default function MarksEntry({ isAdmin = false }) {
     const cId = Number(filters.class_id);
     if (options.globalAccess) {
       setAvailableSections(options.sections.filter(s => s.class_id === cId));
-      setAvailableSubjects(options.subjects);
+      setAvailableSubjects(options.subjects.filter(s => s.class_id === cId));
     } else {
       const classPerms = options.permissions.filter(p => p.class_id === cId || p.class_id === null);
       const secIds = new Set(classPerms.map(p => p.section_id).filter(Boolean));
@@ -90,9 +90,9 @@ export default function MarksEntry({ isAdmin = false }) {
       const subIds = new Set(classPerms.map(p => p.subject_id).filter(Boolean));
       const hasAllSubjects = classPerms.some(p => p.subject_id === null);
       if (hasAllSubjects) {
-        setAvailableSubjects(options.subjects);
+        setAvailableSubjects(options.subjects.filter(s => s.class_id === cId));
       } else {
-        setAvailableSubjects(options.subjects.filter(s => subIds.has(s.id)));
+        setAvailableSubjects(options.subjects.filter(s => s.class_id === cId && subIds.has(s.id)));
       }
     }
     setFilters(f => ({ ...f, section_id: '', subject_id: '' }));
@@ -109,14 +109,14 @@ export default function MarksEntry({ isAdmin = false }) {
   }, [viewMode]);
 
   const loadData = async () => {
-    if (!filters.class_id) {
-      return toast.error('Class is required.');
-    }
-    if (viewMode !== 'marksheet' && !filters.subject_id) {
-      return toast.error('Subject is required.');
-    }
-    if (viewMode === 'entry' && !filters.exam_type) {
-      return toast.error('Exam Type is required.');
+    const missing = [];
+    if (viewMode === 'entry' && !filters.exam_type) missing.push('Exam Type');
+    if (!filters.class_id) missing.push('Class');
+    if (!filters.section_id) missing.push('Section');
+    if (viewMode !== 'marksheet' && !filters.subject_id) missing.push('Subject');
+
+    if (missing.length > 0) {
+      return toast.error(`Please select: ${missing.join(', ')}`);
     }
 
     try {
@@ -158,7 +158,13 @@ export default function MarksEntry({ isAdmin = false }) {
 
   const handleMarksChange = (idx, value) => {
     const updated = [...students];
-    updated[idx].marks_obtained = value;
+    const max = globalTotalMarks !== '' ? Number(globalTotalMarks) : null;
+    let num = value === '' ? '' : Number(value);
+    // Enforce min 0
+    if (num !== '' && num < 0) num = 0;
+    // Enforce max (clamp to max marks)
+    if (num !== '' && max !== null && num > max) num = max;
+    updated[idx].marks_obtained = num === '' ? '' : num;
     setStudents(updated);
   };
 
@@ -167,6 +173,19 @@ export default function MarksEntry({ isAdmin = false }) {
     if (!globalTotalMarks) {
       return toast.error("Please enter the Max Marks for this exam before saving.");
     }
+    const max = Number(globalTotalMarks);
+
+    // Validate: no blank marks, no marks > max
+    const blankStudents = students.filter(s => s.status !== 'final_saved' && (s.marks_obtained === '' || s.marks_obtained === null || s.marks_obtained === undefined));
+    const overLimitStudents = students.filter(s => s.status !== 'final_saved' && Number(s.marks_obtained) > max);
+
+    if (blankStudents.length > 0) {
+      return toast.error(`Please enter marks for all students before saving. ${blankStudents.length} student(s) have blank marks.`);
+    }
+    if (overLimitStudents.length > 0) {
+      return toast.error(`Marks cannot exceed Max Marks (${max}). Please check ${overLimitStudents.length} student(s).`);
+    }
+
     if (isFinal) {
       if (!window.confirm("Are you sure you want to Final Save? You will not be able to edit these marks again.")) {
         return;
@@ -180,7 +199,8 @@ export default function MarksEntry({ isAdmin = false }) {
         globalTotalMarks,
         marksData: students.map(s => ({
           student_id: s.student_id,
-          marks_obtained: s.marks_obtained
+          marks_obtained: s.marks_obtained,
+          status: s.status
         }))
       };
 
@@ -226,17 +246,19 @@ export default function MarksEntry({ isAdmin = false }) {
 
   if (loading) return <div className="p-8 text-center text-slate-500">Loading modules...</div>;
 
-  let availableClasses = options.classes;
+  let availableClasses = [...options.classes];
   if (!options.globalAccess) {
     const classIds = new Set(options.permissions.map(p => p.class_id).filter(Boolean));
     const hasAllClasses = options.permissions.some(p => p.class_id === null);
     if (!hasAllClasses) {
-      availableClasses = options.classes.filter(c => classIds.has(c.id));
+      availableClasses = availableClasses.filter(c => classIds.has(c.id));
     }
   }
+  // Sort by sort_order ascending (Pre-Nursery → Nursery → LKG → Class 1 → ... → Class 12)
+  availableClasses.sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
 
   return (
-    <div className="p-4 sm:p-8 animate-fade-in space-y-6">
+    <div className="py-2 sm:py-4 px-0 animate-fade-in space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <SectionHeader 
           title="Marks Entry Portal" 
@@ -291,6 +313,7 @@ export default function MarksEntry({ isAdmin = false }) {
               <div>
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Exam Type *</label>
                 <select className="select" value={filters.exam_type} onChange={e => setFilters({...filters, exam_type: e.target.value})}>
+                  <option value="">Select Exam Type...</option>
                   <option value="Unit Test">Unit Test</option>
                   <option value="Half Yearly Exam">Half Yearly Exam</option>
                   <option value="Annual Exam">Annual Exam</option>
@@ -307,9 +330,9 @@ export default function MarksEntry({ isAdmin = false }) {
             </div>
 
             <div>
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Section</label>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block">Section *</label>
               <select className="select" value={filters.section_id} onChange={e => setFilters({...filters, section_id: e.target.value})} disabled={!filters.class_id}>
-                <option value="">All Sections</option>
+                <option value="">Select Section...</option>
                 {availableSections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
             </div>
@@ -326,7 +349,7 @@ export default function MarksEntry({ isAdmin = false }) {
           </div>
           
           <div className="flex justify-end">
-            <button onClick={loadData} disabled={fetchingStudents || !filters.class_id || (viewMode !== 'marksheet' && !filters.subject_id)} className="btn-primary">
+            <button onClick={loadData} disabled={fetchingStudents} className="btn-primary">
               <Search size={16} className="mr-2" /> {viewMode === 'entry' ? 'Load Students' : viewMode === 'marksheet' ? 'Generate Marksheet' : 'Generate History'}
             </button>
           </div>
@@ -363,20 +386,24 @@ export default function MarksEntry({ isAdmin = false }) {
                   <Unlock size={16} className="text-amber-500" /> Unlock All
                 </button>
               )}
-              <button 
-                onClick={() => saveMarks(false)} 
-                disabled={saving}
-                className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2"
-              >
-                <Save size={16} className="text-brand-500" /> Save Draft
-              </button>
-              <button 
-                onClick={() => saveMarks(true)} 
-                disabled={saving}
-                className="btn bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
-              >
-                <CheckCircle size={16} /> Final Save
-              </button>
+              {students.some(s => s.status !== 'final_saved') && (
+                <>
+                  <button 
+                    onClick={() => saveMarks(false)} 
+                    disabled={saving}
+                    className="btn bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 flex items-center gap-2"
+                  >
+                    <Save size={16} className="text-brand-500" /> Save Draft
+                  </button>
+                  <button 
+                    onClick={() => saveMarks(true)} 
+                    disabled={saving}
+                    className="btn bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-2"
+                  >
+                    <CheckCircle size={16} /> Final Save
+                  </button>
+                </>
+              )}
             </div>
           </div>
           
@@ -393,7 +420,7 @@ export default function MarksEntry({ isAdmin = false }) {
               <tbody className="divide-y divide-slate-100">
                 {students.map((student, idx) => {
                   const isFinal = student.status === 'final_saved';
-                  const disabled = isFinal && !isAdmin;
+                  const disabled = isFinal;
 
                   return (
                     <tr key={student.student_id} className="hover:bg-slate-50/50 transition-colors">
@@ -404,17 +431,24 @@ export default function MarksEntry({ isAdmin = false }) {
                           <input 
                             type="number"
                             step="0.01"
+                            min="0"
+                            max={globalTotalMarks || undefined}
                             disabled={disabled}
                             value={student.marks_obtained ?? ''}
                             onChange={(e) => handleMarksChange(idx, e.target.value)}
                             className={clsx(
                               "input w-24 text-center py-1.5",
-                              disabled && "bg-slate-100 text-slate-400 border-transparent cursor-not-allowed"
+                              disabled && "bg-slate-100 text-slate-400 border-transparent cursor-not-allowed",
+                              !disabled && globalTotalMarks && Number(student.marks_obtained) > Number(globalTotalMarks) && "border-red-400 bg-red-50 text-red-600 focus:ring-red-400",
+                              !disabled && (student.marks_obtained === '' || student.marks_obtained === null) && "border-amber-300"
                             )}
-                            placeholder="e.g. 18.5"
+                            placeholder="0"
                           />
                           <span className="text-sm font-medium text-slate-400">/ {globalTotalMarks || '-'}</span>
                         </div>
+                        {!disabled && globalTotalMarks && Number(student.marks_obtained) > Number(globalTotalMarks) && (
+                          <p className="text-[10px] text-red-500 font-bold mt-1">Exceeds max!</p>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-2">

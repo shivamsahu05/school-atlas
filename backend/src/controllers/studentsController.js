@@ -50,7 +50,11 @@ exports.getStudents = async (req, res) => {
         s.*,
         ac.name as class_name,
         asec.name as section_name,
-        s.house
+        s.house,
+        s.created_by,
+        s.updated_by,
+        s.created_at,
+        s.updated_at
       FROM students s
       LEFT JOIN academic_classes ac ON s.class_id = ac.id
       LEFT JOIN acad_sections asec ON s.section_id = asec.id
@@ -137,12 +141,14 @@ exports.createStudent = async (req, res) => {
     const safeValue = (val) => (val === undefined || val === '') ? null : val;
     let formattedDob = parseExcelDate(dob);
 
+    const createdBy = req.user?.name || 'Admin';
+
     const sql = `
       INSERT INTO students (
         name, roll_no, email, class_id, section_id, gender, dob, 
         father_name, mother_name, mobile, optional_mobile, 
-        house, address, remarks, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        house, address, remarks, status, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `;
     
     const [result] = await pool.execute(sql, [
@@ -160,7 +166,8 @@ exports.createStudent = async (req, res) => {
       safeValue(house) || 'Not Assigned',
       safeValue(address),
       safeValue(remarks),
-      safeValue(status) || 'Active'
+      safeValue(status) || 'Active',
+      createdBy
     ]);
 
     return sendResponse(res, true, [{ id: result.insertId }], 'Student created.', 201);
@@ -186,20 +193,34 @@ exports.updateStudent = async (req, res) => {
 
     let formattedDob = parseExcelDate(dob);
 
-    const sql = `
+    const updatedBy = req.user?.name || 'Admin';
+
+    // If roll_no is provided, we update it (useful for Admin). If not, we keep the existing one.
+    // However, since it's just an update, if they send it we update it.
+    const { roll_no } = req.body;
+
+    const sql = roll_no !== undefined ? `
       UPDATE students 
       SET name=?, father_name=?, mother_name=?, mobile=?, optional_mobile=?, 
           class_id=?, section_id=?, dob=?, gender=?, house=?, address=?, remarks=?, 
-          status=?, updated_at=NOW()
+          status=?, updated_at=NOW(), updated_by=?, roll_no=?
+      WHERE id=?
+    ` : `
+      UPDATE students 
+      SET name=?, father_name=?, mother_name=?, mobile=?, optional_mobile=?, 
+          class_id=?, section_id=?, dob=?, gender=?, house=?, address=?, remarks=?, 
+          status=?, updated_at=NOW(), updated_by=?
       WHERE id=?
     `;
 
-    const values = [
+    const baseValues = [
       name || null, father_name || null, mother_name || null, mobile || null, optional_mobile || null,
       class_id ? Number(class_id) : null, section_id ? Number(section_id) : null, formattedDob, gender || null, 
       house || 'Not Assigned', address || null,
-      remarks || null, status || 'Active', id
+      remarks || null, status || 'Active', updatedBy
     ];
+
+    const values = roll_no !== undefined ? [...baseValues, roll_no, id] : [...baseValues, id];
 
     const [result] = await pool.execute(sql, values);
 
@@ -217,11 +238,28 @@ exports.updateStudent = async (req, res) => {
  * DELETE /api/students/:id
  */
 exports.deleteStudent = async (req, res) => {
+  const connection = await pool.getConnection();
   try {
-    await pool.execute('DELETE FROM students WHERE id = ?', [req.params.id]);
+    const studentId = req.params.id;
+    await connection.beginTransaction();
+
+    // Cascade delete related records
+    await connection.execute('DELETE FROM homework_submissions WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM learning_outcomes WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM micro_schedule_student_status WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM micro_schedule_tracking WHERE student_id = ?', [studentId]);
+    await connection.execute('DELETE FROM student_marks WHERE student_id = ?', [studentId]);
+    
+    await connection.execute('DELETE FROM students WHERE id = ?', [studentId]);
+    
+    await connection.commit();
     return sendResponse(res, true, [], 'Student deleted.');
   } catch (error) {
-    return sendResponse(res, false, [], 'Delete failed.', 500);
+    if (connection) await connection.rollback();
+    console.error("Failed to delete student:", error);
+    return sendResponse(res, false, [], 'Delete failed: ' + error.message, 500);
+  } finally {
+    if (connection) connection.release();
   }
 };
 
@@ -306,13 +344,6 @@ exports.handleLifecycle = async (req, res) => {
         WHERE cs.class_id = ?
       `, [nextClassId]);
 
-      if (sections.length === 0) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `The target class "${nextClassName}" has no sections defined. Please create a section first.` 
-        });
-      }
-
       // If multiple sections exist and none selected, return list for UI popup
       if (sections.length > 1 && !target_section_id) {
         return res.status(200).json({
@@ -326,8 +357,8 @@ exports.handleLifecycle = async (req, res) => {
         });
       }
 
-      // Use target_section_id if provided, otherwise auto-assign if only 1 section exists
-      let finalSectionId = target_section_id;
+      // Use target_section_id if provided, otherwise auto-assign if only 1 section exists, or null if 0 sections
+      let finalSectionId = target_section_id || null;
       
       if (target_section_id) {
         // Strict Validation: Ensure the selected section belongs to the CALCULATED next class
@@ -335,15 +366,17 @@ exports.handleLifecycle = async (req, res) => {
         if (!isValid) {
           return res.status(400).json({ success: false, message: `Invalid section selection. The chosen section does not belong to ${nextClassName}.` });
         }
-      } else {
+      } else if (sections.length > 0) {
         finalSectionId = sections[0].id;
       }
 
       // Identify max roll number in the target class + section
-      const [maxRollResult] = await pool.execute(
-        'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id = ?', 
-        [nextClassId, finalSectionId]
-      );
+      const rollQuery = finalSectionId 
+        ? 'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id = ?'
+        : 'SELECT MAX(CAST(roll_no AS UNSIGNED)) as maxRoll FROM students WHERE class_id = ? AND section_id IS NULL';
+      const rollParams = finalSectionId ? [nextClassId, finalSectionId] : [nextClassId];
+
+      const [maxRollResult] = await pool.execute(rollQuery, rollParams);
       
       let newRollNo = 1;
       if (maxRollResult[0].maxRoll && !isNaN(parseInt(maxRollResult[0].maxRoll))) {
@@ -355,10 +388,12 @@ exports.handleLifecycle = async (req, res) => {
         'UPDATE students SET class_id = ?, section_id = ?, roll_no = ?, status = "Active", updated_at = NOW() WHERE id = ?', 
         [nextClassId, finalSectionId, String(newRollNo), id]
       );
+      
+      const msgSuffix = finalSectionId ? '' : ' (No section assigned)';
       return res.status(200).json({ 
         success: true, 
         data: [], 
-        message: `Student promoted to ${nextClassName} successfully with Roll No ${newRollNo}.` 
+        message: `Student promoted to ${nextClassName} successfully with Roll No ${newRollNo}${msgSuffix}.` 
       });
     }
 
@@ -401,11 +436,13 @@ exports.bulkUploadStudents = async (req, res) => {
       dob: ['dob', 'dateofbirth']
     };
 
+    const createdBy = req.user?.name || 'Admin';
+
     const insertSql = `
       INSERT INTO students (
         name, roll_no, class_id, section_id, father_name, mother_name, 
-        mobile, optional_mobile, address, gender, dob, house, remarks, status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active')
+        mobile, optional_mobile, address, gender, dob, house, remarks, status, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?)
     `;
 
     for (const [index, rawRow] of rawRows.entries()) {
@@ -524,7 +561,8 @@ exports.bulkUploadStudents = async (req, res) => {
             row.gender ? String(row.gender).trim() : 'Male', 
             row.dob ? parseExcelDate(row.dob) : null, 
             row.house || 'Not Assigned',
-            row.remarks ? String(row.remarks).trim() : ''
+            row.remarks ? String(row.remarks).trim() : '',
+            createdBy
           ]);
         }
 

@@ -15,6 +15,7 @@ const COLOR_MAP = { blue: 'bg-brand-50 text-brand-600', green: 'bg-emerald-50 te
 const MENU_ITEMS = [
   { label: 'Dashboard', desc: 'Main overview & KPIs', to: '/teacher', icon: LayoutDashboard, color: 'blue' },
   { label: 'Syllabus Tracking', desc: 'Chapter completion charts', to: '/teacher/syllabus', icon: BookOpen, color: 'green', perm: 'SYLLABUS_UPLOAD' },
+  { label: 'Syllabus Report', desc: 'Syllabus status & report', to: '/teacher/syllabus-report', icon: ClipboardList, color: 'green', perm: 'SYLLABUS_UPLOAD' },
   { label: 'Learning Outcomes', desc: 'Student LO distribution', to: '/teacher/lo', icon: Brain, color: 'purple', perm: 'LO_ENTRY' },
   { label: 'Performance', desc: 'Analytics & observation', to: '/teacher/analytics', icon: TrendingUp, color: 'red', perm: 'MARKS_ENTRY' },
   { label: 'Time Table', desc: 'Weekly period overview', to: '/teacher/time-table', icon: Clock, color: 'blue' },
@@ -36,7 +37,6 @@ export default function TeacherDashboard() {
   // Filters for Overall Completion
   const [filterSubject, setFilterSubject] = useState('All')
   const [filterClass, setFilterClass] = useState('All')
-  const [filterSection, setFilterSection] = useState('All')
 
   const fetchDashboard = useCallback(async () => {
     try {
@@ -57,22 +57,24 @@ export default function TeacherDashboard() {
   // Filter Options
   const subjects = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.subject))], [syllabusRows])
   const classes = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.class_name))], [syllabusRows])
-  const sections = useMemo(() => ['All', ...new Set(syllabusRows.map(r => r.section_name).filter(Boolean))], [syllabusRows])
 
   // Filtered Syllabus Logic - FIXED: String concatenation bug + Period counting
   const filteredMetrics = useMemo(() => {
     const filtered = syllabusRows.filter(r => {
       return (filterSubject === 'All' || r.subject === filterSubject) &&
-        (filterClass === 'All' || r.class_name === filterClass) &&
-        (filterSection === 'All' || r.section_name === filterSection);
+        (filterClass === 'All' || r.class_name === filterClass);
     });
     // Use Number() to prevent string concatenation (e.g. 0 + "5" = "05")
     const total = filtered.reduce((acc, r) => acc + Number(r.total || 0), 0);
     const completed = filtered.reduce((acc, r) => acc + Number(r.completed || 0), 0);
+    const total_periods = filtered.reduce((acc, r) => acc + Number(r.total_periods || 0), 0);
+    const completed_periods = filtered.reduce((acc, r) => acc + Number(r.completed_periods || 0), 0);
+    const pending_periods = total_periods - completed_periods;
     const pending = total - completed;
     const pct = total > 0 ? Math.round((completed / total) * 100) : 0;
-    return { total, completed, pending, pct };
-  }, [syllabusRows, filterSubject, filterClass, filterSection]);
+    const period_pct = total_periods > 0 ? Math.round((completed_periods / total_periods) * 100) : 0;
+    return { total, completed, pending, pct, total_periods, completed_periods, pending_periods, period_pct };
+  }, [syllabusRows, filterSubject, filterClass]);
 
   const birthdayState = useMemo(() => {
     if (!data) return { today: [], thisWeek: [], isTeacherToday: false };
@@ -119,40 +121,56 @@ export default function TeacherDashboard() {
   const overallPerf = intelData.overall_score || 0;
 
   return (
-    <div className="max-w-[1400px] mx-auto space-y-8 animate-fade-in p-4 lg:p-6">
+    <div className="space-y-8 animate-fade-in">
       {/* Welcome Banner */}
       <div className="relative overflow-hidden bg-[#0d225c] rounded-[2rem] p-6 md:p-8 lg:p-10 text-white shadow-xl">
         <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-white/5 rounded-full -translate-y-1/2 translate-x-1/3 blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Hello,</p>
-              {(() => {
-                const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
-                if (rankIndex === 0) return <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-amber-400/30 uppercase tracking-tighter">🏆 Top Performer</span>;
-                if (rankIndex === 1) return <span className="bg-blue-400/20 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-400/30 uppercase tracking-tighter">🥈 Top Second Performer</span>;
-                if (rankIndex === 2) return <span className="bg-slate-400/20 text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-slate-400/30 uppercase tracking-tighter">🥉 Top Third Performer</span>;
-                return null;
-              })()}
+              <div className="flex items-center gap-3">
+                <p className="text-blue-200/80 text-xs font-bold uppercase tracking-widest">Hello,</p>
+                {(() => {
+                  const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+                  if (rankIndex === 0) return <span className="bg-amber-400/20 text-amber-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-amber-400/30 uppercase tracking-tighter">⭐ Top 1 Performer</span>;
+                  if (rankIndex === 1) return <span className="bg-blue-400/20 text-blue-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-blue-400/30 uppercase tracking-tighter">⭐ Top 2 Performer</span>;
+                  if (rankIndex === 2) return <span className="bg-slate-400/20 text-slate-300 text-[9px] font-black px-2 py-0.5 rounded-lg border border-slate-400/30 uppercase tracking-tighter">⭐ Top 3 Performer</span>;
+                  return null;
+                })()}
+              </div>
+              <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Dear <span className="text-white">{user?.name || 'Teacher'}</span></h1>
+              <div className="space-y-1">
+                {(() => {
+                  const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+                  const rank = rankIndex !== -1 ? rankIndex + 1 : null;
+                  const score = intelData.overall_score || 0;
+                  const isStar = score >= 85;
+                  if (isStar) {
+                    return <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — You are one of the Star Performers of the School 🌟</p>;
+                  }
+                  return <p className="text-blue-300 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — Keep Growing – You're Making Progress.</p>;
+                })()}
+                <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
+              </div>
             </div>
-            <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">Dear <span className="text-white">{user?.name || 'Teacher'}</span></h1>
-            <div className="space-y-1">
-              <p className="text-amber-400 text-xs md:text-sm font-black uppercase tracking-tight flex items-center gap-2">Welcome to ATLAS — YOU ARE THE STAR PERFORMER 🌟</p>
-              <p className="text-white/50 text-[10px] font-bold uppercase tracking-[0.2em]">{primaryAssignment.subject || 'Academic'} · {academicYear}</p>
-            </div>
-          </div>
-          <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
-          <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+            {(() => {
+               const rankIndex = (data?.topPerformers || []).findIndex(p => p.teacher_id === user?.id);
+               const score = intelData.overall_score || 0;
+               const isStar = score >= 85;
+               if (!isStar) return null;
+               return (
+                 <div className="flex gap-2">
+                   <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+                   <div className="hidden lg:block w-20 h-20 bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl flex items-center justify-center shadow-lg"><Star className="text-amber-400 fill-amber-400" size={32} /></div>
+                 </div>
+               )
+            })()}
         </div>
       </div>
 
       {/* KPI StatCards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Topics Completed" value={`${syllabusStats.completed}/${syllabusStats.total}`} subtitle={`${syllabusStats.percentage}% of syllabus`} icon={BookOpen} color="brand" trend={syllabusStats.percentage} />
-        {(() => {
-          const loPct = loSummary.total > 0 ? Math.round(((loSummary.exceeding * 100) + (loSummary.meeting * 80) + (loSummary.approaching * 60)) / loSummary.total) : 0;
-          return <StatCard title="LO Achievement" value={`${loPct}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={loPct} />;
-        })()}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
+        <StatCard title="Periods Completed" value={`${syllabusStats.periods_completed || 0}/${syllabusStats.periods_total || 0}`} subtitle={`${syllabusStats.percentage || 0}% of syllabus`} icon={BookOpen} color="brand" trend={syllabusStats.percentage || 0} />
+        <StatCard title="LO Achievement" value={`${intelData?.performance?.lo || 0}%`} subtitle="Avg teacher score" icon={Brain} color="green" trend={intelData?.performance?.lo || 0} />
         <StatCard title="Latest Obs." value={`${latestObs.pct}%`} subtitle="Classroom observation" icon={Eye} color="teal" trend={latestObs.pct} />
         <StatCard title="Overall Performance" value={`${Math.round(overallPerf)}%`} subtitle="Weighted score" icon={TrendingUp} color="amber" trend={overallPerf} />
       </div>
@@ -242,9 +260,8 @@ export default function TeacherDashboard() {
               <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest">{filterSubject === 'All' ? 'All Subjects' : filterSubject} · {filterClass === 'All' ? 'All Grades' : `Grade ${filterClass}`}</p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 md:gap-3 w-full md:w-auto">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 md:gap-3 w-full md:w-auto">
               <SelectDropdown label="Grade - Class" options={classes} value={filterClass} onChange={e => setFilterClass(e.target.value)} />
-              <SelectDropdown label="Section" options={sections} value={filterSection} onChange={e => setFilterSection(e.target.value)} />
               <SelectDropdown label="Subject" options={subjects} value={filterSubject} onChange={e => setFilterSubject(e.target.value)} />
             </div>
           </div>
@@ -268,15 +285,35 @@ export default function TeacherDashboard() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 md:gap-4 pt-2 md:pt-4">
+          <div className="space-y-4">
+            <div className="flex items-end justify-between">
+              <div className="space-y-1">
+                <p className="text-[10px] md:text-sm font-black text-slate-400 uppercase tracking-tight">Periods successfully completed</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl md:text-3xl font-black text-indigo-900 tracking-tighter">{filteredMetrics.completed_periods}</span>
+                  <span className="text-slate-300 text-base md:text-lg font-bold">/ {filteredMetrics.total_periods}</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-300 leading-none mb-1">{filteredMetrics.completed_periods}/{filteredMetrics.total_periods}</p>
+                <p className="text-xl md:text-2xl font-black text-slate-800 tracking-tighter leading-none">{filteredMetrics.period_pct}%</p>
+              </div>
+            </div>
+            <div className="h-2.5 md:h-3.5 w-full bg-slate-50 rounded-full overflow-hidden border border-slate-100/50">
+              <div className="h-full bg-indigo-500 rounded-full transition-all duration-1000 shadow-[0_0_12px_rgba(99,102,241,0.3)]" style={{ width: `${filteredMetrics.period_pct}%` }} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 pt-2 md:pt-4">
             {[
-              { val: filteredMetrics.total, lab: 'Total Week', col: 'slate', bg: 'bg-slate-50/50', border: 'border-slate-100', text: 'text-slate-800' },
-              { val: filteredMetrics.completed, lab: 'Completed', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' },
-              { val: filteredMetrics.pending, lab: 'Pending', col: 'amber', bg: 'bg-amber-50/50', border: 'border-amber-100', text: 'text-amber-600' }
+              { val: filteredMetrics.total, lab: 'Total Weeks', col: 'slate', bg: 'bg-slate-50/50', border: 'border-slate-100', text: 'text-slate-800' },
+              { val: filteredMetrics.completed, lab: 'Completed Weeks', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' },
+              { val: filteredMetrics.total_periods, lab: 'Total Periods', col: 'indigo', bg: 'bg-indigo-50/50', border: 'border-indigo-100', text: 'text-indigo-600' },
+              { val: filteredMetrics.completed_periods, lab: 'Completed Periods', col: 'emerald', bg: 'bg-emerald-50/50', border: 'border-emerald-100', text: 'text-emerald-600' }
             ].map((item, idx) => (
               <div key={idx} className={clsx(item.bg, item.border, "p-3 md:p-5 rounded-2xl md:rounded-3xl border text-center group hover:bg-white hover:shadow-md transition-all flex flex-col items-center justify-center")}>
                 <p className={clsx("text-2xl md:text-[36px] font-black tracking-tighter leading-none mb-1 md:mb-2", item.text)}>{item.val}</p>
-                <p className={clsx("text-[7px] md:text-[10px] font-black uppercase tracking-widest leading-none", idx === 0 ? "text-slate-400" : idx === 1 ? "text-emerald-500" : "text-amber-500")}>{item.lab}</p>
+                <p className={clsx("text-[7px] md:text-[10px] font-black uppercase tracking-widest leading-none", idx === 0 ? "text-slate-400" : (idx === 1 || idx === 3) ? "text-emerald-500" : "text-indigo-500")}>{item.lab}</p>
               </div>
             ))}
           </div>
@@ -311,13 +348,17 @@ export default function TeacherDashboard() {
         <div className="card p-6 rounded-[2rem]">
           <SectionHeader title="Top Performers" />
           <div className="space-y-2.5 mt-4">
-            {(data?.topPerformers || []).map((p, i) => (
-              <div key={i} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${p.teacher_id === user?.id ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50/50 border border-slate-100/50'}`}>
-                <div className="w-6 h-6 rounded-lg bg-white shadow-sm text-[9px] font-black flex items-center justify-center text-slate-400">{i + 1}</div>
-                <div className="flex-1 min-w-0"><p className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name}</p></div>
-                <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">{Number(p.weighted_score).toFixed(1)}%</div>
-              </div>
-            ))}
+            {(!data?.topPerformers || data.topPerformers.length === 0) ? (
+              <p className="text-sm font-bold text-slate-400 text-center py-4 italic">Insufficient performance data available.</p>
+            ) : (
+              data.topPerformers.slice(0, 5).map((p, i) => (
+                <div key={i} className={`flex items-center gap-3 p-2 rounded-xl transition-all ${p.teacher_id === user?.id ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50/50 border border-slate-100/50'}`}>
+                  <div className="w-6 h-6 rounded-lg bg-white shadow-sm text-[9px] font-black flex items-center justify-center text-slate-400">{i + 1}</div>
+                  <div className="flex-1 min-w-0"><p className="text-[11px] font-black text-slate-800 truncate uppercase tracking-tight">{p.teacher_name}</p></div>
+                  <div className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">{Number(p.weighted_score).toFixed(1)}%</div>
+                </div>
+              ))
+            )}
           </div>
         </div>
         <div className="card p-6 rounded-[2rem]">

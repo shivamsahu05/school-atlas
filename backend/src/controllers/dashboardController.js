@@ -311,17 +311,17 @@ exports.getTeacherDashboard = async (req, res) => {
           WHERE u.id = ?
         `, [userId]),
 
-      // 2. Teacher's class+subject assignments — from timetable
+      // 2. Teacher's class+subject assignments — from teacher_assignments
       pool.execute(`
         SELECT DISTINCT 
-          ac.id AS class_id, ac.class_number AS class_name, asec.name as section_name,
+          ac.id AS class_id, ac.name AS class_name, asec.name as section_name, asec.name as section,
           sub.id AS subject_id, sub.name AS subject,
           (SELECT COUNT(*) FROM students WHERE class_id = ac.id) AS student_count
-        FROM teacher_timetable tt
-        JOIN academic_classes ac ON (tt.class_number = ac.class_number OR tt.class_number = ac.name)
-        LEFT JOIN acad_sections asec ON (tt.section = asec.name OR tt.section = asec.code)
-        JOIN subjects sub ON tt.subject_id = sub.id
-        WHERE tt.teacher_id = ?
+        FROM teacher_assignments ta
+        JOIN academic_classes ac ON ta.class_id = ac.id
+        LEFT JOIN acad_sections asec ON ta.section_id = asec.id
+        JOIN subjects sub ON ta.subject_id = sub.id
+        WHERE ta.teacher_id = ?
       `, [userId]),
 
       // 3. Syllabus completion stats — tries academic_classes first (correct table),
@@ -337,6 +337,8 @@ exports.getTeacherDashboard = async (req, res) => {
           s.class_id,
           COUNT(*) AS total,
           SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) AS completed,
+          SUM(COALESCE(s.periods, 0)) AS total_periods,
+          SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN COALESCE(s.periods, 0) ELSE 0 END) AS completed_periods,
           ROUND(SUM(CASE WHEN s.is_completed = 1 OR s.status = 'completed' THEN 1 ELSE 0 END) / NULLIF(COUNT(*),0) * 100) AS pct
         FROM syllabus s
         LEFT JOIN academic_classes ac ON s.class_id = ac.id
@@ -453,8 +455,13 @@ exports.getTeacherDashboard = async (req, res) => {
     ]);
 
     const teacher = teacherRows[0] || {};
-    // --- NEW: Sync LO & Top Performers from Intelligence Engine ---
-    const intelData = await lmsIntelligence.getTeacherDashboard({ user: req.user }, { json: (d) => d });
+    const intelData = await lmsIntelligence.getTeacherDashboard(
+      { user: req.user }, 
+      { 
+        status: function() { return this; }, 
+        json: (d) => d 
+      }
+    );
     const loStats = intelData?.data?.lo || { approaching: 0, meeting: 0, exceeding: 0, total: 0 };
     const topPerformers = await lmsIntelligence.getTopPerformersList();
 

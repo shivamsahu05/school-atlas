@@ -150,7 +150,7 @@ const getTeacherObservations = async (req, res) => {
       const teacherId = tRows[0].id;
 
       const [rows] = await pool.execute(`
-        SELECT o.*, u.name as observer_name, (o.content_mastery + o.pedagogy + o.student_engagement + o.communication + o.assessment) as calc_total, ROUND(((o.content_mastery + o.pedagogy + o.student_engagement + o.communication + o.assessment) / 50) * 100) as pct
+        SELECT o.*, u.name as observer_name, (o.content_mastery + o.pedagogy + o.student_engagement + o.communication + o.assessment) as calc_total, ROUND((o.total_score / 50) * 100) as pct
         FROM class_observations o JOIN users u ON u.id = o.observer_id WHERE o.teacher_id = ? ORDER BY o.created_at DESC
       `, [teacherId]);
 

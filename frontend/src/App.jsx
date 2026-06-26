@@ -11,6 +11,7 @@ import Login           from './pages/Login'
 // Teacher pages
 import TeacherDashboard from './pages/teacher/TeacherDashboard'
 import TeacherSyllabus  from './pages/teacher/TeacherSyllabus'
+import TeacherSyllabusReport from './pages/teacher/TeacherSyllabusReport'
 import TeacherLO        from './pages/teacher/TeacherLO'
 import TeacherAnalytics from './pages/teacher/TeacherAnalytics'
 import TeacherSchedule  from './pages/teacher/TeacherSchedule'
@@ -64,6 +65,7 @@ export default function App() {
             <Route element={<DashboardLayout />}>
               <Route path="/teacher"          element={<TeacherDashboard />} />
               <Route path="/teacher/syllabus" element={<TeacherSyllabus />} />
+              <Route path="/teacher/syllabus-report" element={<TeacherSyllabusReport />} />
               <Route path="/teacher/lo"       element={<TeacherLO />} />
               <Route path="/teacher/analytics"element={<TeacherAnalytics />} />
               <Route path="/teacher/schedule" element={<TeacherSchedule />} />

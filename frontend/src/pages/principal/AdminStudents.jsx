@@ -436,7 +436,7 @@ export default function AdminStudents() {
       <div className="card p-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <Tabs tabs={TABS} active={activeTab} onChange={setActiveTab} />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input
@@ -465,7 +465,7 @@ export default function AdminStudents() {
               >
                 <option value="All">All Sections</option>
                 {availableSectionsForFilter.map(s => (
-                  <option key={s} value={s}>Section {s}</option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             )}
@@ -496,6 +496,14 @@ export default function AdminStudents() {
             </div>
           )}
 
+          <div className="bg-brand-50 border border-brand-100 p-3 rounded-xl flex gap-2 items-start">
+            <AlertCircle size={18} className="text-brand-600 mt-0.5 shrink-0" />
+            <p className="text-xs sm:text-sm font-medium text-brand-800">
+              Please fill all mandatory fields marked with an asterisk (*). <br className="hidden sm:block" />
+              <strong>Full Name, Father Name, Class Name, and Primary Mobile</strong> are required to complete registration.
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             <FormInput label="Full Name *" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             <FormInput label="Father Name *" value={form.father_name} onChange={e => setForm({ ...form, father_name: e.target.value })} />
@@ -504,9 +512,13 @@ export default function AdminStudents() {
             <SelectDropdown label="Gender" options={['Male', 'Female', 'Other']} value={form.gender} onChange={e => setForm({ ...form, gender: e.target.value })} />
             <SelectDropdown 
               label="Class Name *" 
-              options={['', ...(Array.isArray(acadClasses) ? acadClasses : []).map(c => c.class_name || c.name)]} 
-              value={(Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.name || (Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.class_name || ''} 
+              options={['Select class...', ...uniqueClassNames]} 
+              value={(Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.name || (Array.isArray(acadClasses) ? acadClasses : []).find(c => c.id == form.class_id)?.class_name || 'Select class...'} 
               onChange={e => {
+                if (e.target.value === 'Select class...') {
+                  setForm(prev => ({ ...prev, class_id: '', section_id: '' }));
+                  return;
+                }
                 const selectedClass = (Array.isArray(acadClasses) ? acadClasses : []).find(c => (c.class_name || c.name) === e.target.value);
                 setForm(prev => ({ ...prev, class_id: selectedClass ? selectedClass.id : '', section_id: '' }))
               }} 
@@ -540,7 +552,7 @@ export default function AdminStudents() {
 
             <FormInput label="Primary Mobile *" value={form.mobile} onChange={e => setForm({ ...form, mobile: e.target.value })} maxLength={10} />
             <FormInput label="Optional Mobile" value={form.optional_mobile} onChange={e => setForm({ ...form, optional_mobile: e.target.value })} maxLength={10} />
-            <FormInput label="Roll No (Optional)" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value })} disabled={!!editId} />
+            <FormInput label="Roll No (Optional)" value={form.roll_no} onChange={e => setForm({ ...form, roll_no: e.target.value })} />
 
             <div className="col-span-full">
               <FormInput label="Address" value={form.address} onChange={e => setForm({ ...form, address: e.target.value })} />
@@ -550,9 +562,49 @@ export default function AdminStudents() {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button onClick={handleSave} className="btn-primary flex-1 justify-center py-3">{editId ? 'Save Changes' : 'Register Student'}</button>
-            <button onClick={() => { setIsAddModalOpen(false); resetForm(); }} className="btn-secondary px-8">Cancel</button>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 mt-4">
+            {editId ? (
+              <div className="flex flex-col">
+                <button 
+                  onClick={() => {
+                    setConfirmDialog({
+                      isOpen: true,
+                      title: 'Delete Student',
+                      message: `Are you sure you want to delete ${form.name}?`,
+                      type: 'danger',
+                      onConfirm: () => {
+                        setTimeout(() => {
+                          setConfirmDialog({
+                            isOpen: true,
+                            title: 'Permanent Deletion',
+                            message: `Are you really sure? ${form.name} will be permanently deleted.`,
+                            type: 'danger',
+                            onConfirm: async () => {
+                              try {
+                                await studentsApi.delete(editId);
+                                toast.success('Student deleted successfully');
+                                setIsAddModalOpen(false);
+                                fetchAllData();
+                              } catch (err) {
+                                toast.error(err.response?.data?.message || err.message || 'Failed to delete student');
+                              }
+                            }
+                          });
+                        }, 100);
+                      }
+                    });
+                  }} 
+                  className="btn px-4 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 hover:text-rose-700 font-bold border border-rose-200 transition-colors w-max"
+                >
+                  Delete Student
+                </button>
+                <span className="text-[10px] text-rose-500 font-bold mt-1">Note: Delete student permanently, be careful.</span>
+              </div>
+            ) : <div />}
+            <div className="flex gap-3">
+              <button onClick={() => { setIsAddModalOpen(false); resetForm(); }} className="btn-secondary px-6">Cancel</button>
+              <button onClick={handleSave} className="btn-primary px-8">{editId ? 'Save Changes' : 'Register Student'}</button>
+            </div>
           </div>
         </div>
       </Modal>
@@ -593,17 +645,12 @@ export default function AdminStudents() {
         size="sm"
       >
         {promoteData && (
-          <div className="space-y-6">
-            <div className="bg-brand-50 p-4 rounded-2xl border border-brand-100">
-              <p className="text-xs font-bold text-brand-600 uppercase tracking-widest mb-1">Student</p>
-              <p className="text-lg font-black text-slate-800">{promoteData.student_name}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="text-xs font-bold text-slate-400">{selectedStudent?.class?.class_name}</span>
-                <ChevronRight size={14} className="text-slate-300" />
-                <span className="text-xs font-black text-brand-700">{promoteData.next_class_name}</span>
-              </div>
+          <div className="p-4 space-y-6">
+            <div className="bg-brand-50 p-4 rounded-xl border border-brand-100">
+              <p className="text-sm font-bold text-brand-800 mb-1">Target Class: {promoteData.next_class_name}</p>
+              <p className="text-xs text-brand-600">Please assign a section for the promoted class.</p>
             </div>
-
+            
             <div className="space-y-2">
               <label className="text-xs font-black text-slate-500 uppercase ml-1">Select Target Section</label>
               <select 
@@ -612,7 +659,7 @@ export default function AdminStudents() {
                 onChange={e => setSelectedTargetSection(e.target.value)}
               >
                 {promoteData.sections.map(s => (
-                  <option key={s.id} value={s.id}>Section {s.name}</option>
+                  <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </select>
             </div>
@@ -729,9 +776,28 @@ export default function AdminStudents() {
                   <p className="text-xs font-medium text-amber-800 bg-amber-50 p-2.5 rounded-xl border border-amber-100/50 leading-relaxed">{selectedStudent.remarks}</p>
                 </div>
               )}
+              
+              <div className="pt-3 border-t border-slate-100 grid grid-cols-2 gap-4">
+                {selectedStudent.created_by && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Created By</p>
+                    <p className="text-xs font-bold text-slate-700">{selectedStudent.created_by}</p>
+                    {selectedStudent.created_at && <p className="text-[10px] text-slate-500">{new Date(selectedStudent.created_at).toLocaleDateString('en-GB')}</p>}
+                  </div>
+                )}
+                {selectedStudent.updated_by && (
+                  <div>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Last Edited By</p>
+                    <p className="text-xs font-bold text-slate-700">{selectedStudent.updated_by}</p>
+                    {selectedStudent.updated_at && <p className="text-[10px] text-slate-500">{new Date(selectedStudent.updated_at).toLocaleDateString('en-GB')}</p>}
+                  </div>
+                )}
+              </div>
             </div>
 
-            <button onClick={() => setIsViewModalOpen(false)} className="btn-secondary w-full py-2.5 mt-1 rounded-xl font-bold shadow-sm hover:shadow-md transition-all text-slate-700 text-sm">Close Profile</button>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setIsViewModalOpen(false)} className="btn-secondary px-6 py-2 rounded-xl font-bold shadow-sm hover:shadow-md transition-all text-slate-700 text-sm">Close Profile</button>
+            </div>
           </div>
         )}
       </Modal>

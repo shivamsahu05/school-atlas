@@ -98,6 +98,7 @@ export const eventApi = {
 export const performanceApi = {
   getAll: () => api.get('/performance/all'),
   getTeacher: (id) => api.get(`/performance/teacher/${id}`),
+  saveOverride: (data) => api.post('/performance/override', data),
 };
 
 export const teacherLoApi = {
@@ -118,6 +119,7 @@ export const systemApi = {
   resetPermissions: () => api.post('/admin/system/reset-permissions'),
   cleanupData: () => api.post('/admin/system/cleanup'),
   rolloverYear: () => api.post('/admin/system/rollover'),
+  bulkPromote: (data) => api.post('/admin/system/bulk-promote', data),
 };
 
 export default api;

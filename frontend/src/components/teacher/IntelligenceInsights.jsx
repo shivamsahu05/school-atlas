@@ -13,17 +13,19 @@ import clsx from 'clsx';
 const COLORS = ['#119e6fff', '#ef4444']; // Emerald-500 (Green) and Red-500 (Red)
 const normalize = (value = '') => String(value || '').trim().toLowerCase();
 
-export default function IntelligenceInsights() {
+export default function IntelligenceInsights({ isAllView, filterTeacherId }) {
   const [loading, setLoading] = useState(true);
   const [syllabusData, setSyllabusData] = useState([]);
   
   // Filters
   const [assignments, setAssignments] = useState([]);
+  const [allViewAssignments, setAllViewAssignments] = useState([]);
   const [selClassId, setSelClassId] = useState('All');
   const [selSectionId, setSelSectionId] = useState('All');
   const [selectedSubject, setSelectedSubject] = useState('All');
 
   const fetchAssignments = useCallback(async () => {
+    if (isAllView) return; // Don't fetch teacher assignments in admin view
     try {
       const res = await scheduleApi.getMyAssignments();
       const raw = res?.data?.assignments || [];
@@ -37,12 +39,14 @@ export default function IntelligenceInsights() {
       });
       setAssignments(grouped);
     } catch (err) { console.error(err); }
-  }, []);
+  }, [isAllView]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await syllabusApi.getPlan();
+      // Fetch all syllabus data. We do this for both Teacher and Admin.
+      // Admin gets all, Teacher gets theirs (handled by API endpoint)
+      const res = await syllabusApi.getPlan(isAllView ? { class_id: null, section_id: null, subject_id: null, month: null } : {});
       setSyllabusData(Array.isArray(res) ? res : (res?.data || []));
     } catch (err) {
       console.error("Insights Error:", err);
@@ -66,8 +70,58 @@ export default function IntelligenceInsights() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isAllView) return;
+    if (!syllabusData || syllabusData.length === 0) {
+      setAllViewAssignments([]);
+      return;
+    }
+
+    const sourceData = (filterTeacherId && filterTeacherId !== 'All')
+      ? syllabusData.filter(r => Number(r.teacher_id) === Number(filterTeacherId))
+      : syllabusData;
+
+    const grouped = [];
+    sourceData.forEach(a => {
+      if (!a.class_id) return;
+      let cls = grouped.find(c => c.classId === Number(a.class_id));
+      if (!cls) {
+        const className = a.class || a.class_number || String(a.class_id);
+        cls = { classId: Number(a.class_id), className, sections: [] };
+        grouped.push(cls);
+      }
+      if (!a.section_id) return;
+      let sec = cls.sections.find(s => s.sectionId === Number(a.section_id));
+      if (!sec) {
+        sec = { sectionId: Number(a.section_id), sectionName: String(a.section || '').trim(), subjects: [] };
+        cls.sections.push(sec);
+      }
+      if (a.subject_id && !sec.subjects.find(s => s.subjectId === Number(a.subject_id))) {
+        sec.subjects.push({ subjectId: Number(a.subject_id), subjectName: a.subject_name || a.subject || String(a.subject_id) });
+      }
+    });
+    grouped.sort((a, b) => a.className.localeCompare(b.className, undefined, { numeric: true }));
+    setAllViewAssignments(grouped);
+    setSelClassId('All');
+    setSelSectionId('All');
+    setSelectedSubject('All');
+  }, [filterTeacherId, syllabusData, isAllView]);
+
+  const effectiveAssignments = isAllView ? allViewAssignments : assignments;
+
+  const shouldShowSection = useMemo(() => {
+    if (!isAllView) return true;
+    if (selClassId === 'All' || selectedSubject === 'All') return false;
+    const filtered = syllabusData.filter(item => 
+      Number(item.class_id) === Number(selClassId) && 
+      Number(item.subject_id) === Number(selectedSubject)
+    );
+    const uniqueTeachers = new Set(filtered.map(item => item.teacher_id).filter(id => id));
+    return uniqueTeachers.size > 1;
+  }, [isAllView, selClassId, selectedSubject, syllabusData]);
+
   const filteredStats = useMemo(() => {
-    const selectedClassData = assignments.find(c => String(c.classId) === String(selClassId));
+    const selectedClassData = effectiveAssignments.find(c => String(c.classId) === String(selClassId));
     const selClassName = selectedClassData?.className || (selClassId === 'All' ? 'All' : '');
     const selectedSectionData = selectedClassData?.sections.find(s => String(s.sectionId) === String(selSectionId));
     const selSectionName = selectedSectionData?.sectionName || (selSectionId === 'All' ? 'All' : '');
@@ -79,11 +133,12 @@ export default function IntelligenceInsights() {
       const itemSection = item.section;
       const itemSubject = item.subject || item.subject_name;
       
-      const classMatch = selClassId === "All" || normalize(itemClass).includes(normalize(selClassName));
-      const sectionMatch = selSectionId === "All" || normalize(itemSection).includes(normalize(selSectionName));
-      const subjectMatch = selectedSubject === "All" || normalize(itemSubject).includes(normalize(selSubjectName));
+      const classMatch = selClassId === "All" || normalize(itemClass).includes(normalize(selClassName)) || Number(item.class_id) === Number(selClassId);
+      const sectionMatch = selSectionId === "All" || normalize(itemSection).includes(normalize(selSectionName)) || Number(item.section_id) === Number(selSectionId);
+      const subjectMatch = selectedSubject === "All" || normalize(itemSubject).includes(normalize(selSubjectName)) || Number(item.subject_id) === Number(selectedSubject);
+      const teacherMatch = !isAllView || !filterTeacherId || filterTeacherId === 'All' || Number(item.teacher_id) === Number(filterTeacherId);
       
-      return classMatch && sectionMatch && subjectMatch;
+      return classMatch && sectionMatch && subjectMatch && teacherMatch;
     });
 
     let totalExtra = 0;
@@ -91,7 +146,6 @@ export default function IntelligenceInsights() {
     let totalCompleted = 0;
 
     filtered.forEach(item => {
-      // Correct field for extra periods is periods_planned
       const extra = Number(item.periods_planned || 0);
       const base = Number(item.periods || 0);
       
@@ -114,7 +168,7 @@ export default function IntelligenceInsights() {
       ],
       hasData: filtered.length > 0
     };
-  }, [syllabusData, selClassId, selSectionId, selectedSubject, assignments]);
+  }, [syllabusData, selClassId, selSectionId, selectedSubject, effectiveAssignments, filterTeacherId, isAllView]);
 
   if (loading) {
     return (
@@ -135,21 +189,29 @@ export default function IntelligenceInsights() {
           </label>
           <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId('All'); setSelectedSubject('All'); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             <option value="All">All Classes</option>
-            {assignments.map(c => <option key={c.classId} value={c.classId}>Class {c.className}</option>)}
+            {effectiveAssignments.map(c => {
+              const displayName = c.className?.startsWith('Class') ? c.className : `Class ${c.className}`;
+              return <option key={c.classId} value={c.classId}>{displayName}</option>;
+            })}
           </select>
         </div>
-        <div className="flex-1 min-w-[150px]">
-          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
-          <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 transition-colors cursor-pointer">
-            <option value="All">All Sections</option>
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections || []).map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
-          </select>
-        </div>
+        {(isAllView && shouldShowSection) && (
+          <div className="flex-1 min-w-[150px]">
+            <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
+            <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={selClassId === 'All' && !isAllView} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 transition-colors cursor-pointer">
+              <option value="All">All Sections</option>
+              {(effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || []).map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
+            </select>
+          </div>
+        )}
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Subject Area</label>
-          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={selSectionId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 transition-colors cursor-pointer">
+          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 transition-colors cursor-pointer">
             <option value="All">All Subjects</option>
-            {(assignments.find(c => String(c.classId) === String(selClassId))?.sections.find(s => String(s.sectionId) === String(selSectionId))?.subjects || []).map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
+            {(isAllView && selSectionId !== 'All'
+              ? effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections.find(s => String(s.sectionId) === String(selSectionId))?.subjects || []
+              : (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || []).flatMap(sec => sec.subjects).filter((v, i, a) => a.findIndex(t => (t.subjectId === v.subjectId)) === i)
+            ).map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
           </select>
         </div>
       </div>

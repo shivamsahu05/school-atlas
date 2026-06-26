@@ -13,9 +13,9 @@ exports.getTeacherOptions = async (req, res) => {
       if (t.length > 0) teacherId = t[0].id;
     }
     
-    const [classes] = await pool.execute('SELECT id, name FROM academic_classes ORDER BY name');
+    const [classes] = await pool.execute('SELECT id, name, sort_order FROM academic_classes ORDER BY sort_order ASC, name ASC');
     const [sections] = await pool.execute('SELECT s.id, s.name, cs.class_id FROM acad_sections s JOIN acad_class_sections cs ON s.id = cs.section_id ORDER BY s.name');
-    const [subjects] = await pool.execute('SELECT id, name FROM subjects ORDER BY name');
+    const [subjects] = await pool.execute('SELECT s.id, s.name, cs.class_id FROM subjects s JOIN acad_class_subjects cs ON s.id = cs.subject_id ORDER BY s.name');
 
     if (role === 'admin' || role === 'principal') {
       return sendOk(res, { classes, sections, subjects, globalAccess: true });
@@ -31,12 +31,21 @@ exports.getTeacherOptions = async (req, res) => {
       AND (m.module_key = 'MARKS_ENTRY' OR m.module_key = 'ALL_ACADEMIC' OR m.module_key = 'ALL_FULL')
     `, [teacherId]);
 
-    const hasGlobal = perms.some(p => p.class_id === null);
-    if (hasGlobal) {
-      return sendOk(res, { classes, sections, subjects, globalAccess: true });
+    const hasModuleAccess = perms.length > 0;
+
+    if (hasModuleAccess) {
+      // Fetch actual teaching assignments to restrict dropdowns to assigned classes/sections/subjects
+      const [assignments] = await pool.execute(`
+        SELECT class_id, section_id, subject_id
+        FROM teacher_assignments
+        WHERE teacher_id = ?
+      `, [req.user.id]);
+      
+      return sendOk(res, { classes, sections, subjects, permissions: assignments, globalAccess: false });
     }
 
-    return sendOk(res, { classes, sections, subjects, permissions: perms, globalAccess: false });
+    // No module access at all
+    return sendOk(res, { classes, sections, subjects, permissions: [], globalAccess: false });
   } catch (err) {
     return sendErr(res, err.message);
   }
@@ -44,12 +53,12 @@ exports.getTeacherOptions = async (req, res) => {
 
 exports.getStudents = async (req, res) => {
   const { class_id, section_id, subject_id, exam_type, academic_year = '2025-2026' } = req.query;
-  if (!class_id || !subject_id || !exam_type) return sendErr(res, 'class_id, subject_id, exam_type required', 400);
+  if (!class_id || !section_id || !subject_id || !exam_type) return sendErr(res, 'class_id, section_id, subject_id, exam_type required', 400);
 
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-             m.id as mark_id, m.marks_obtained
+             m.id as mark_id, m.marks_obtained, m.total_marks, m.status
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
         AND m.subject_id = ? 
@@ -94,28 +103,36 @@ exports.saveMarks = async (req, res) => {
     const targetStatus = isFinal ? 'final_saved' : 'draft';
     const tMrk = (globalTotalMarks === '' || globalTotalMarks === null) ? null : Number(globalTotalMarks);
     for (const item of marksData) {
-      const { student_id, marks_obtained } = item;
+      const { student_id, marks_obtained, status } = item;
       
       const mObt = (marks_obtained === '' || marks_obtained === null) ? null : Number(marks_obtained);
 
       const [existing] = await connection.execute(
-        'SELECT id FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ?',
+        'SELECT id, status FROM student_marks WHERE student_id = ? AND subject_id = ? AND exam_type = ?',
         [student_id, subject_id, exam_type]
       );
 
+      let studentStatus = targetStatus;
       if (existing.length > 0) {
-        // Bypass final_saved check since status column doesn't exist
+        if (existing[0].status === 'final_saved' && !isFinal) {
+          studentStatus = 'final_saved';
+        }
+      } else if (status === 'final_saved' && !isFinal) {
+        studentStatus = 'final_saved';
+      }
+
+      if (existing.length > 0) {
         await connection.execute(`
           UPDATE student_marks 
-          SET marks_obtained = ?, teacher_id = ?
+          SET marks_obtained = ?, total_marks = ?, status = ?, teacher_id = ?, entered_by_user_id = ?
           WHERE student_id = ? AND subject_id = ? AND exam_type = ?
-        `, [mObt, req.user.id, student_id, subject_id, exam_type]);
+        `, [mObt, tMrk, studentStatus, teacherId, req.user.id, student_id, subject_id, exam_type]);
       } else {
         await connection.execute(`
           INSERT INTO student_marks 
-          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, teacher_id)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, req.user.id]);
+          (student_id, class_id, section_id, subject_id, exam_type, marks_obtained, total_marks, status, teacher_id, entered_by_user_id)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [student_id, class_id, section_id || null, subject_id, exam_type, mObt, tMrk, studentStatus, teacherId, req.user.id]);
       }
     }
 
@@ -140,14 +157,14 @@ exports.unlockMarks = async (req, res) => {
     if (student_id) {
       await pool.execute(`
         UPDATE student_marks 
-        SET marks_obtained = marks_obtained 
+        SET status = 'draft' 
         WHERE student_id = ? AND subject_id = ? AND exam_type = ?
       `, [student_id, subject_id, exam_type]);
     } else if (class_id) {
       await pool.execute(`
         UPDATE student_marks m
         JOIN students s ON m.student_id = s.id
-        SET m.marks_obtained = m.marks_obtained
+        SET m.status = 'draft'
         WHERE s.class_id = ? AND m.subject_id = ? AND m.exam_type = ?
       `, [class_id, subject_id, exam_type]);
     } else {
@@ -161,12 +178,12 @@ exports.unlockMarks = async (req, res) => {
 
 exports.getHistory = async (req, res) => {
   const { class_id, section_id, subject_id, academic_year = '2025-2026' } = req.query;
-  if (!class_id || !subject_id) return sendErr(res, 'class_id, subject_id required', 400);
+  if (!class_id || !section_id || !subject_id) return sendErr(res, 'class_id, section_id, subject_id required', 400);
 
   try {
     let sql = `
       SELECT s.id as student_id, s.name, s.roll_no, 
-             m.exam_type, m.marks_obtained,
+             m.exam_type, m.marks_obtained, m.total_marks, m.status,
              'System' as teacher_name
       FROM students s
       LEFT JOIN student_marks m ON s.id = m.student_id 
@@ -197,8 +214,8 @@ exports.getHistory = async (req, res) => {
       if (row.exam_type) {
         studentMap[row.student_id].marks[row.exam_type] = {
           obtained: row.marks_obtained,
-          total: 50,
-          status: 'draft',
+          total: row.total_marks || 50,
+          status: row.status || 'draft',
           teacher_name: row.teacher_name
         };
       }
@@ -211,7 +228,7 @@ exports.getHistory = async (req, res) => {
 };
 exports.getMarksheet = async (req, res) => {
   const { academic_year, class_id, section_id } = req.query;
-  if (!class_id || !academic_year) return sendErr(res, 'class_id and academic_year required', 400);
+  if (!class_id || !section_id || !academic_year) return sendErr(res, 'class_id, section_id and academic_year required', 400);
 
   // Canonical order of exam types (must match exact DB values)
   const EXAM_ORDER = ['Unit Test', 'Half Yearly Exam', 'Annual Exam'];
@@ -240,7 +257,7 @@ exports.getMarksheet = async (req, res) => {
     const marksParams = section_id ? [class_id, section_id] : [class_id];
     const marksSecFilter = section_id ? 'AND s.section_id = ?' : '';
     const [marks] = await pool.execute(`
-      SELECT m.student_id, m.subject_id, m.marks_obtained, m.exam_type
+      SELECT m.student_id, m.subject_id, m.marks_obtained, m.total_marks, m.exam_type
       FROM student_marks m
       JOIN students s ON m.student_id = s.id
       WHERE s.class_id = ? ${marksSecFilter}
@@ -265,12 +282,12 @@ exports.getMarksheet = async (req, res) => {
         presentExamTypes.forEach(et => {
           const examMark = subMarks.find(m => m.exam_type === et);
           byExam[et] = examMark
-            ? { obtained: Number(examMark.marks_obtained || 0), total: 50 }
+            ? { obtained: Number(examMark.marks_obtained || 0), total: Number(examMark.total_marks || 50) }
             : null;
         });
 
         // Subject total across all exams
-        const subTotal = subMarks.length * 50;
+        const subTotal = subMarks.reduce((s, m) => s + Number(m.total_marks || 50), 0);
         const subObtained = subMarks.reduce((s, m) => s + Number(m.marks_obtained || 0), 0);
         const hasData = subMarks.length > 0;
 

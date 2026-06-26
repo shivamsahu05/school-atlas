@@ -11,6 +11,12 @@ const ACADEMIC_WEEKS = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5']
 const normalize = (val) => String(val || '').trim().toLowerCase()
 
 export default function TeacherSyllabus() {
+  const currentMonthName = useMemo(() => new Date().toLocaleString('default', { month: 'long' }), []);
+  const currentWeekName = useMemo(() => {
+    const day = new Date().getDate();
+    return `Week ${Math.min(Math.ceil(day / 7), 5)}`;
+  }, []);
+
   const [items, setItems] = useState([])
   const [assignments, setAssignments] = useState({ classes: [], subjects: [] })
   const [loading, setLoading] = useState(true)
@@ -80,10 +86,11 @@ export default function TeacherSyllabus() {
   const filteredItems = useMemo(() => {
     return items.filter(item => {
       const matchMonth  = !selectedMonth  || normalize(item.month) === normalize(selectedMonth)
-      const matchWeek   = !selectedWeek   || normalize(item.week).includes(selectedWeek.replace('Week ', ''))
+      const matchWeek   = !selectedWeek   || normalize(item.week).includes(normalize(selectedWeek))
       const matchStatus = filterStatus === 'All' || normalize(item.status) === normalize(filterStatus)
-      // filterCls is already handled by backend fetch, but adding here for extra safety
-      const matchCls    = !filterCls    || normalize(item.class || item.className) === normalize(filterCls)
+      const itemCls = String(item.class || item.className || '').trim().replace(/^Class\s+/i, '');
+      const selCls = String(filterCls || '').trim().replace(/^Class\s+/i, '');
+      const matchCls = !filterCls || itemCls === selCls;
       
       return matchMonth && matchWeek && matchStatus && matchCls
     })
@@ -140,14 +147,19 @@ export default function TeacherSyllabus() {
 
   const columns = [
     {
+      key: 'serial',
+      label: '#',
+      render: (_, __, meta) => <span className="text-xs font-bold text-slate-400">{meta.rowIndex + 1}</span>
+    },
+    {
       key: 'week', label: 'Week', sortable: true,
       render: (v, r) => (
         <div className="flex flex-col gap-1.5">
           <span className="px-2.5 py-1 bg-brand-50 text-brand-700 rounded-lg text-[10px] font-black uppercase tracking-wider w-fit border border-brand-100">
-            {v}
+            {r.month ? `${r.month} • ` : ''}{v}
           </span>
-          <span className="text-[9px] text-slate-400 font-medium px-1">
-            {formatDate(r.start_date)} - {formatDate(r.end_date)}
+          <span className="text-[9px] text-slate-400 font-bold px-1 uppercase tracking-widest">
+            {formatDate(r.planned_start_date)} — {formatDate(r.planned_end_date)}
           </span>
         </div>
       )
@@ -190,7 +202,7 @@ export default function TeacherSyllabus() {
   if (loading && items.length === 0) return <div className="flex items-center justify-center h-64"><Loader2 size={32} className="animate-spin text-brand-500" /></div>
 
   return (
-    <div className="space-y-6 animate-fade-in p-4 lg:p-8 bg-slate-50 min-h-screen">
+    <div className="space-y-6 animate-fade-in py-2 sm:py-4 px-0">
       
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -203,7 +215,7 @@ export default function TeacherSyllabus() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 relative overflow-hidden group">
           <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
             <BookOpen size={48} className="text-brand-600" />
@@ -276,9 +288,10 @@ export default function TeacherSyllabus() {
             className="text-xs font-bold border border-slate-200 bg-white shadow-sm rounded-xl px-4 py-2 text-slate-700 outline-none min-w-[140px] focus:ring-2 focus:ring-brand-100 transition-all"
           >
             <option value="">All Classes</option>
-            {availableClasses.map(cls => (
-              <option key={cls} value={cls}>Class {cls}</option>
-            ))}
+            {availableClasses.map(cls => {
+              const displayName = cls?.toString().startsWith('Class') ? cls : `Class ${cls}`;
+              return <option key={cls} value={cls}>{displayName}</option>;
+            })}
           </select>
 
           <select 
@@ -339,15 +352,21 @@ export default function TeacherSyllabus() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredItems.map((row, idx) => (
-                    <tr key={row.id || idx} className="hover:bg-slate-50/50 transition-colors group">
+                  {filteredItems.map((row, idx) => {
+                    const isCurrent = normalize(row.month) === normalize(currentMonthName) && normalize(row.week).includes(normalize(currentWeekName));
+                    const isCompleted = normalize(row.status) === 'completed';
+                    
+                    let rowClass = "hover:bg-slate-50/50 transition-colors group border-l-[3px] border-l-transparent";
+
+                    return (
+                    <tr key={row.id || idx} className={rowClass}>
                       {columns.map(col => (
                         <td key={col.key} className="px-3 py-2 sm:px-6 sm:py-4">
-                          {col.render ? col.render(row[col.key], row) : row[col.key]}
+                          {col.render ? col.render(row[col.key], row, { rowIndex: idx }) : row[col.key]}
                         </td>
                       ))}
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

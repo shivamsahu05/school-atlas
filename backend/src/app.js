@@ -24,6 +24,7 @@ const performanceRoutes     = require('./routes/performance')
 const leaveRoutes           = require('./routes/leave')
 const observationsRoutes    = require('./routes/observations')
 const teacherScheduleRoutes = require('./routes/teacherScheduleRoutes')
+const timetableRoutes       = require('./routes/timetableRoutes')
 const academicRoutes        = require('./routes/academic')
 const reportsRoutes         = require('./routes/reports')
 const intelligenceRoutes    = require('./routes/lmsIntelligenceRoutes')
@@ -93,6 +94,7 @@ app.use(`${A}/teacher`,        teacherScheduleRoutes) // /api/teacher/timetable,
 
 // 6. Admin Management
 app.use(`${A}/admin`,          academicRoutes)
+app.use(`${A}/timetable`,      timetableRoutes)
 app.use(`${A}/admin`,          reportsRoutes)
 app.use(`${A}/admin/permissions`, permissionsRoutes)
 app.use(`${A}/admin/system`,      systemRoutes)
@@ -106,9 +108,22 @@ app.use(errorHandler)
 
 // Server Listen
 const PORT = process.env.PORT || 5000;
+const prisma = require('./config/db');
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server flying on port ${PORT}`);
   console.log(`🔗 API Base: http://0.0.0.0:${PORT}${A}`);
+
+  // Test database connection at startup
+  prisma.$connect()
+    .then(() => {
+      console.log('🔌 [Database]: Connected to MySQL successfully!');
+    })
+    .catch((err) => {
+      console.error('\n❌ [DATABASE CONNECTION ERROR]:');
+      console.error('👉 Could not connect to the MySQL database at 127.0.0.1:3306.');
+      console.error('👉 Please make sure XAMPP, Laragon, or your MySQL Windows Service is started and running!\n');
+    });
 });
 
 module.exports = app;

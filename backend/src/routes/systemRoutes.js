@@ -11,5 +11,6 @@ router.get('/status', systemController.getSystemStatus);
 router.post('/reset-permissions', systemController.resetPermissions);
 router.post('/cleanup', systemController.cleanupData);
 router.post('/rollover', systemController.rolloverYear);
+router.post('/bulk-promote', systemController.bulkPromote);
 
 module.exports = router;

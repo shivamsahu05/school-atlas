@@ -13,5 +13,7 @@ router.get('/teacher', authenticate, roleCheck('teacher'), asyncHandler(ctrl.get
 // ─── NOTIFICATIONS (Unified) ──────────────────────────────────────────────────
 router.get('/homework-notifications', authenticate, roleCheck('admin', 'principal'), asyncHandler(ctrl.getHomeworkNotifications));
 router.get('/notifications', authenticate, roleCheck('admin', 'teacher', 'principal'), asyncHandler(ctrl.getNotifications));
+router.post('/notifications/mark-read', authenticate, roleCheck('admin', 'teacher', 'principal'), asyncHandler(ctrl.markNotificationsRead));
+router.post('/notifications/clear', authenticate, roleCheck('admin', 'teacher', 'principal'), asyncHandler(ctrl.clearNotifications));
 
 module.exports = router;

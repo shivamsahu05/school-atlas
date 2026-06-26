@@ -66,47 +66,26 @@ exports.getTeachers = async (req, res) => {
 
     // Fetch class assignments for these teachers
     const teacherIds = rows.map(r => r.id);
-    let classAssignments = [];
-    let subjectAssignments = [];
+    let allAssignments = [];
     
     if (teacherIds.length > 0) {
-      const [classRows] = await pool.query(`
-        SELECT tca.teacher_id, 
-               COALESCE(ac.name, '') as class_name, 
-               COALESCE(s.name, '') as section_name
-        FROM teacher_class_assignments tca
-        LEFT JOIN academic_classes ac ON tca.class_id = ac.id
-        LEFT JOIN acad_sections s ON tca.section_id = s.id
-        WHERE tca.teacher_id IN (?)
+      const [assignRows] = await pool.query(`
+        SELECT ta.teacher_id, ta.class_id, ta.section_id, ta.subject_id,
+               c.name AS class_name, s.name AS section_name, sub.name AS subject_name,
+               s.code as section_code
+        FROM teacher_assignments ta
+        LEFT JOIN academic_classes c ON ta.class_id = c.id
+        LEFT JOIN acad_sections s ON ta.section_id = s.id
+        LEFT JOIN subjects sub ON ta.subject_id = sub.id
+        WHERE ta.teacher_id IN (?)
       `, [teacherIds]);
-      classAssignments = classRows;
-
-      const [subjectRows] = await pool.query(`
-        SELECT ts.teacher_id, ts.class_id, ts.subject_id, sub.name as subject_name,
-               COALESCE(ac.name, c.class_name, '') as class_name, 
-               COALESCE(asec.name, c.section, '') as section
-        FROM teacher_subjects ts
-        JOIN subjects sub ON ts.subject_id = sub.id
-        LEFT JOIN academic_classes ac ON ts.class_id = ac.id
-        LEFT JOIN acad_sections asec ON ts.class_id = ac.id -- Join acad_sections via academic_classes if possible, or mapping
-        LEFT JOIN classes c ON ts.class_id = c.id AND ac.id IS NULL
-        WHERE ts.teacher_id IN (?)
-      `, [teacherIds]);
-      subjectAssignments = subjectRows;
+      allAssignments = assignRows;
     }
 
     // Attach to rows
     const items = rows.map(r => ({
       ...r,
-      assignedClasses: classAssignments
-        .filter(a => a.teacher_id === r.id)
-        .map(a => `${a.class_name}-${a.section_name}`),
-      subjectAssignments: subjectAssignments
-        .filter(a => a.teacher_id === r.id)
-        .map(a => ({
-          subject: a.subject_name,
-          class: `${a.class_name}-${a.section}`
-        }))
+      assignments: allAssignments.filter(a => a.teacher_id === r.id)
     }));
 
     return res.status(200).json({
@@ -139,7 +118,20 @@ exports.getTeacherById = async (req, res) => {
     `, [req.params.id]);
 
     if (rows.length === 0) return sendResponse(res, false, null, 'Teacher not found.', 404);
-    return sendResponse(res, true, rows[0]);
+    
+    const teacher = rows[0];
+    const [assignments] = await pool.execute(`
+      SELECT ta.class_id, ta.section_id, ta.subject_id,
+             c.name AS class_name, s.name AS section_name, sub.name AS subject_name
+      FROM teacher_assignments ta
+      LEFT JOIN academic_classes c ON ta.class_id = c.id
+      LEFT JOIN acad_sections s ON ta.section_id = s.id
+      LEFT JOIN subjects sub ON ta.subject_id = sub.id
+      WHERE ta.teacher_id = ?
+    `, [req.params.id]);
+    teacher.assignments = assignments;
+
+    return sendResponse(res, true, teacher);
   } catch (error) {
     return sendResponse(res, false, null, 'Error fetching teacher.', 500);
   }
@@ -154,12 +146,20 @@ exports.createTeacher = async (req, res) => {
     await connection.beginTransaction();
 
     const { name, email, password, phone, status,
-            mobile, dob, qualification, experience, salary, subject, joining_date, address } = req.body;
+            mobile, dob, qualification, experience, salary, subject, joining_date, address, assignments } = req.body;
 
-    const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
+    const loginPhone = phone || mobile || '';
+    const [existing] = await connection.execute('SELECT id, email, phone FROM users WHERE email = ? OR (phone != "" AND phone = ?)', [email, loginPhone]);
     if (existing.length > 0) {
+      const emailConflict = existing.some(u => u.email === email);
+      const phoneConflict = loginPhone && existing.some(u => String(u.phone) === String(loginPhone));
+      let msgs = [];
+      if (emailConflict) msgs.push('Email');
+      if (phoneConflict) msgs.push('Phone number');
+      
+      const msg = `${msgs.join(' and ')} already exists.`;
       connection.release();
-      return sendResponse(res, false, null, 'Email already exists.', 409);
+      return sendResponse(res, false, null, msg, 409);
     }
 
     const hashed = await bcrypt.hash(password || '123456', SALT_ROUNDS);
@@ -180,6 +180,32 @@ exports.createTeacher = async (req, res) => {
       [userId, mobile || phone || '', dob || null, qualification || '', experience || '', salary || '', subject || '']
     );
 
+    // 3. Create Assignments
+    if (Array.isArray(assignments) && assignments.length > 0) {
+      // VALIDATION: Check if class + section + subject is already assigned to another teacher
+      for (const a of assignments) {
+        const sectionCondition = a.section_id ? `ta.section_id = ?` : `ta.section_id IS NULL`;
+        const params = a.section_id ? [a.class_id, a.section_id, a.subject_id, userId] : [a.class_id, a.subject_id, userId];
+        const [conflict] = await connection.query(`
+          SELECT u.name 
+          FROM teacher_assignments ta
+          JOIN users u ON ta.teacher_id = u.id
+          WHERE ta.class_id = ? AND ${sectionCondition} AND ta.subject_id = ? AND ta.teacher_id != ?
+        `, params);
+
+        if (conflict.length > 0) {
+          await connection.rollback();
+          return res.status(409).json({ success: false, message: `Class, Section, and Subject is already assigned to ${conflict[0].name}.` });
+        }
+      }
+
+      const assignmentValues = assignments.map(a => [userId, a.class_id, a.section_id || null, a.subject_id]);
+      await connection.query(
+        `INSERT INTO teacher_assignments (teacher_id, class_id, section_id, subject_id) VALUES ?`,
+        [assignmentValues]
+      );
+    }
+
     await connection.commit();
     return sendResponse(res, true, { id: userId }, 'Teacher created.', 201);
   } catch (error) {
@@ -199,7 +225,7 @@ exports.updateTeacher = async (req, res) => {
   try {
     await connection.beginTransaction();
     const id = req.params.id;
-    const { name, email, phone, mobile, dob, qualification, experience, salary, subject, password } = req.body;
+    const { name, email, phone, mobile, dob, qualification, experience, salary, subject, password, assignments } = req.body;
 
     // Update User (Safe Partial)
     let userQuery = 'UPDATE users SET name = COALESCE(?, name), email = COALESCE(?, email), phone = COALESCE(?, phone)';
@@ -230,6 +256,37 @@ exports.updateTeacher = async (req, res) => {
       );
     }
 
+    // Update Assignments
+    if (Array.isArray(assignments)) {
+      // VALIDATION
+      if (assignments.length > 0) {
+        for (const a of assignments) {
+          const sectionCondition = a.section_id ? `ta.section_id = ?` : `ta.section_id IS NULL`;
+          const params = a.section_id ? [a.class_id, a.section_id, a.subject_id, id] : [a.class_id, a.subject_id, id];
+          const [conflict] = await connection.query(`
+            SELECT u.name 
+            FROM teacher_assignments ta
+            JOIN users u ON ta.teacher_id = u.id
+            WHERE ta.class_id = ? AND ${sectionCondition} AND ta.subject_id = ? AND ta.teacher_id != ?
+          `, params);
+
+          if (conflict.length > 0) {
+            await connection.rollback();
+            return res.status(409).json({ success: false, message: `Class, Section, and Subject is already assigned to ${conflict[0].name}.` });
+          }
+        }
+      }
+
+      await connection.execute('DELETE FROM teacher_assignments WHERE teacher_id = ?', [id]);
+      if (assignments.length > 0) {
+        const assignmentValues = assignments.map(a => [id, a.class_id, a.section_id || null, a.subject_id]);
+        await connection.query(
+          `INSERT INTO teacher_assignments (teacher_id, class_id, section_id, subject_id) VALUES ?`,
+          [assignmentValues]
+        );
+      }
+    }
+
     await connection.commit();
     return res.status(200).json({ success: true, message: 'Teacher updated safely.' });
   } catch (error) {
@@ -248,7 +305,12 @@ exports.deleteTeacher = async (req, res) => {
     const id = req.params.id;
     if (id == req.user.id) return res.status(400).json({ success: false, message: 'Cannot delete self.' });
     
+    // Soft delete the teacher
     await pool.execute('UPDATE teachers SET is_deleted = TRUE WHERE user_id = ?', [id]);
+    
+    // Also deactivate their login in users table to prevent duplicate login fetching
+    await pool.execute('UPDATE users SET status = "inactive" WHERE id = ?', [id]);
+    
     return res.status(200).json({ success: true, message: 'Action completed' });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Delete failed safely.' });
@@ -280,7 +342,7 @@ exports.downloadTeacherTemplate = async (req, res) => {
   try {
     const headers = [
       'Full Name', 'Email', 'Password', 'Phone (used for Login)', 'Mobile', 
-      'Date of Birth', 'Subject', 'Experience', 'Qualification', 'Salary'
+      'Date of Birth', 'Specialization', 'Experience', 'Qualification', 'Salary'
     ];
 
     const sampleData = [
@@ -317,7 +379,7 @@ exports.exportTeachers = async (req, res) => {
     `;
     const [rows] = await pool.execute(query);
 
-    const headers = ['Name', 'Email', 'Login Phone', 'Password', 'Mobile', 'Subject', 'Qualification', 'Experience', 'Salary', 'Status'];
+    const headers = ['Name', 'Email', 'Login Phone', 'Password', 'Mobile', 'Specialization', 'Qualification', 'Experience', 'Salary', 'Status'];
     const data = rows.map(r => [
       r.name, r.email, r.login_phone || '', '', r.mobile || '', r.subject || '', 
       r.qualification || '', r.experience || '', r.salary || '', r.status || 'active'
@@ -360,7 +422,7 @@ exports.bulkUploadTeachers = async (req, res) => {
         const phone = row['Phone (used for Login)'] || row['Login Phone'];
         const mobile = row['Mobile'];
         const dob = row['Date of Birth'] || row['DOB'];
-        const subject = row['Subject'];
+        const subject = row['Specialization'] || row['Subject'];
         const experience = row['Experience'];
         const qualification = row['Qualification'];
         const salary = row['Salary'];
@@ -371,11 +433,19 @@ exports.bulkUploadTeachers = async (req, res) => {
           continue;
         }
 
-        // Email conflict check
-        const [existing] = await connection.execute('SELECT id FROM users WHERE email = ?', [email]);
+        // Email and Phone conflict check
+        const loginPhone = phone || mobile || '';
+        const [existing] = await connection.execute('SELECT id, email, phone FROM users WHERE email = ? OR (phone != "" AND phone = ?)', [email, loginPhone]);
         if (existing.length > 0) {
           results.failed++;
-          results.errors.push(`Row ${index + 2}: Email ${email} already registered.`);
+          const emailConflict = existing.some(u => u.email === email);
+          const phoneConflict = loginPhone && existing.some(u => String(u.phone) === String(loginPhone));
+          
+          let msgs = [];
+          if (emailConflict) msgs.push(`Email ${email}`);
+          if (phoneConflict) msgs.push(`Phone ${loginPhone}`);
+          
+          results.errors.push(`Row ${index + 2}: ${msgs.join(' and ')} already registered.`);
           continue;
         }
 

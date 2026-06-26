@@ -175,6 +175,14 @@ export const academicApi = {
   getFollowUps:    (params = {}) => api.get('/admin/followups', { params }).then(r => r.data),
 }
 
+export const timetableApi = {
+  downloadTemplate: () => api.get('/timetable/download-template', { responseType: 'blob' }).then(r => r.data),
+  uploadExcel: (formData) => api.post('/timetable/upload-excel', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  }).then(res => res.data),
+  resolveConflict: (data) => api.post('/timetable/resolve-conflict', data).then(res => res.data)
+};
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SYLLABUS
 // ═════════════════════════════════════════════════════════════════════════════
@@ -191,7 +199,9 @@ export const syllabusApi = {
   getPlan: (params = {}) => api.get('/syllabus/plan', { params }).then(r => r.data),
   uploadPlan: (formData) => api.post('/syllabus/upload-syllabus', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
   addMicroSchedule: (data) => api.post('/syllabus/add-micro-schedule', data).then(r => r.data),
+  updateMicroSchedule: (id, data) => api.put(`/syllabus/update-micro-schedule/${id}`, data).then(r => r.data),
   exportPlan: (params = {}) => api.get('/syllabus/export-syllabus', { params, responseType: 'blob' }),
+  getTeacherAssignments: (class_id, subject_id) => api.get('/syllabus/teacher-assignments', { params: { class_id, subject_id } }).then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -255,6 +265,7 @@ export const performanceApi = {
   getMe:      ()          => api.get('/performance/me').then(r => r.data),
   getById:    (teacherId) => api.get(`/performance/${teacherId}`).then(r => r.data),
   recalculate:(teacherId) => api.post(`/performance/${teacherId}/recalculate`).then(r => r.data),
+  saveOverride:(data)     => api.post('/performance/override', data).then(r => r.data),
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

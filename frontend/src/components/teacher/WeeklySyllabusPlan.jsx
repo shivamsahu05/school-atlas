@@ -5,6 +5,7 @@ import {
   Clock, Users, Save, Loader2, Edit2, BookOpen, Check, X, Search, XCircle, ChevronDown, Book, ClipboardCheck, TrendingUp, BarChart3, Calendar, Filter, Trash2
 } from 'lucide-react';
 import { scheduleApi, syllabusApi } from '../../api';
+import { MONTHS } from '../../data/constants';
 
 const normalize = (value = '') => String(value || '').trim().toLowerCase();
 const safeDate = (d) => {
@@ -37,6 +38,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   const [editingId, setEditingId] = useState(null);
 
   const [studentDataMap, setStudentDataMap] = useState({});
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   const init = useCallback(async () => {
     try {
@@ -82,13 +84,23 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
   useEffect(() => { init() }, [init]);
 
   useEffect(() => {
-    if (selClassId && selSectionId && selectedSubject && selClassId !== 'All' && selSectionId !== 'All' && selectedSubject !== 'All') {
-      syllabusApi.getMetadata({ class_id: selClassId, section_id: selSectionId, subject_id: selectedSubject }).then(res => {
+    const shouldFetchMeta = isAllView 
+      ? (selClassId && selClassId !== 'All' && selSectionId && selSectionId !== 'All' && selectedSubject && selectedSubject !== 'All')
+      : (selClassId && selectedSubject && selClassId !== 'All' && selectedSubject !== 'All');
+
+    if (shouldFetchMeta) {
+      syllabusApi.getMetadata({ class_id: selClassId, section_id: isAllView ? selSectionId : undefined, subject_id: selectedSubject }).then(res => {
         const meta = res?.data || { months: [], syllabus: [] };
         setSyllabusMetadata(meta);
         if (!isAllView && meta.months?.length > 0 && filterMonth === 'All') {
-          const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
-          setFilterMonth(meta.months.includes(currentMonthName) ? currentMonthName : meta.months[0]);
+          const now = new Date();
+          const currentMonthName = now.toLocaleString('default', { month: 'long' });
+          
+          let targetMonth = meta.months.includes(currentMonthName) ? currentMonthName : (meta.months.length > 0 ? meta.months[0] : currentMonthName);
+          let targetWeek = 'All';
+
+          setFilterMonth(targetMonth);
+          setFilterWeek(targetWeek);
         }
       });
     }
@@ -133,10 +145,50 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
     const handleSync = () => {
       init();
       loadPlan();
+      setSelectedIds(new Set());
     };
     window.addEventListener('syllabus-updated', handleSync);
     return () => window.removeEventListener('syllabus-updated', handleSync);
   }, [loadPlan, init]);
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedIds(new Set(weeklyData.map(r => r.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectRow = (id) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`You have selected ${selectedIds.size} weeks/topics. Are you sure you want to delete them?`)) {
+      return;
+    }
+    if (!window.confirm(`Are you absolutely sure? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await Promise.all(Array.from(selectedIds).map(id => syllabusApi.delete(id)));
+      setSelectedIds(new Set());
+      loadPlan();
+      window.dispatchEvent(new Event('syllabus-updated'));
+      window.dispatchEvent(new Event('insights-refresh'));
+      alert('Selected schedules deleted successfully.');
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete some schedules. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // In isAllView: build dropdown options from syllabusData filtered by teacher only
   // This is stable because syllabusData is always the full dataset in isAllView mode
@@ -187,53 +239,71 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
 
   // Build effective sections for selected class (only those that exist for selected class)
   const effectiveSections = useMemo(() => {
-    if (!isAllView) {
-      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-        .filter(s => s.sectionName && s.sectionName.trim() !== '');
-    }
-    // In allView: if a class is selected, only show sections of that class; else all unique sections
-    if (selClassId !== 'All') {
-      return (effectiveAssignments.find(c => String(c.classId) === String(selClassId))?.sections || [])
-        .filter(s => s.sectionName && s.sectionName.trim() !== '');
-    }
-    // All classes - aggregate all unique sections
-    const allSecs = [];
-    effectiveAssignments.forEach(cls => {
+    let sourceClasses = isAllView && selClassId === 'All' 
+      ? effectiveAssignments 
+      : [effectiveAssignments.find(c => String(c.classId) === String(selClassId))].filter(Boolean);
+    
+    let allSecs = [];
+    sourceClasses.forEach(cls => {
       cls.sections.forEach(sec => {
-        if (sec.sectionName && !allSecs.find(s => s.sectionId === sec.sectionId)) {
+        if (sec.sectionName && sec.sectionName.trim() !== '' && !allSecs.find(s => String(s.sectionId) === String(sec.sectionId))) {
+          // If subject is selected, only show sections that contain this subject
+          if (selectedSubject && selectedSubject !== 'All') {
+            if (!sec.subjects.find(sub => String(sub.subjectId) === String(selectedSubject))) return;
+          }
           allSecs.push(sec);
         }
       });
     });
     return allSecs;
-  }, [effectiveAssignments, selClassId, isAllView]);
+  }, [effectiveAssignments, selClassId, selectedSubject, isAllView]);
 
   // Build effective subjects for selected class+section
   const effectiveSubjects = useMemo(() => {
-    if (!isAllView) {
-      return effectiveAssignments.find(c => String(c.classId) === String(selClassId))
-        ?.sections.find(s => String(s.sectionId) === String(selSectionId))?.subjects || [];
-    }
-    // In allView: filter by selected class and/or section
-    let sourceAssignments = effectiveAssignments;
-    if (selClassId !== 'All') {
-      sourceAssignments = sourceAssignments.filter(c => String(c.classId) === String(selClassId));
-    }
-    const allSubjects = [];
-    sourceAssignments.forEach(cls => {
-      const secs = selSectionId !== 'All' 
+    let sourceClasses = isAllView && selClassId === 'All' 
+      ? effectiveAssignments 
+      : [effectiveAssignments.find(c => String(c.classId) === String(selClassId))].filter(Boolean);
+      
+    let allSubs = [];
+    sourceClasses.forEach(cls => {
+      let secs = (selSectionId && selSectionId !== 'All') 
         ? cls.sections.filter(s => String(s.sectionId) === String(selSectionId))
         : cls.sections;
+        
       secs.forEach(sec => {
         sec.subjects.forEach(sub => {
-          if (!allSubjects.find(s => s.subjectId === sub.subjectId)) {
-            allSubjects.push(sub);
+          if (!allSubs.find(s => String(s.subjectId) === String(sub.subjectId))) {
+            allSubs.push(sub);
           }
         });
       });
     });
-    return allSubjects;
+    return allSubs;
   }, [effectiveAssignments, selClassId, selSectionId, isAllView]);
+
+  // Auto-select dropdowns if only 1 option is available
+  useEffect(() => {
+    if (!isAllView) {
+      if (effectiveAssignments.length === 1 && !selClassId) {
+        setSelClassId(effectiveAssignments[0].classId);
+      }
+    }
+  }, [effectiveAssignments, isAllView, selClassId]);
+
+
+
+  const shouldShowSection = useMemo(() => {
+    if (!isAllView) return true;
+    if (selClassId === 'All' || selectedSubject === 'All') return false;
+    
+    // Check if there are multiple teachers for this class & subject
+    const filtered = syllabusData.filter(item => 
+      Number(item.class_id) === Number(selClassId) && 
+      Number(item.subject_id) === Number(selectedSubject)
+    );
+    const uniqueTeachers = new Set(filtered.map(item => item.teacher_id).filter(id => id));
+    return uniqueTeachers.size > 1;
+  }, [isAllView, selClassId, selectedSubject, syllabusData]);
 
   useEffect(() => {
     if (!syllabusData) return;
@@ -243,7 +313,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       const sectionMatch = selSectionId === "All" || Number(item.section_id) === Number(selSectionId);
       const subjectMatch = selectedSubject === "All" || Number(item.subject_id) === Number(selectedSubject);
       const monthMatch = filterMonth === "All" || normalize(item.month) === normalize(filterMonth);
-      const weekMatch = filterWeek === "All" || normalize(item.week) === normalize(filterWeek);
+      const weekMatch = filterWeek === "All" || normalize(item.week).includes(normalize(filterWeek));
       const teacherMatch = !filterTeacherId || filterTeacherId === "All" || Number(item.teacher_id) === Number(filterTeacherId);
       return classMatch && sectionMatch && subjectMatch && monthMatch && weekMatch && teacherMatch;
     }).map(row => {
@@ -265,7 +335,9 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
         notebookChecked: row.notebook_checked || 'No',
         class_understanding_level: row.class_understanding_level || '',
         is_completed: Number(row.is_completed || 0),
-        subject_name: row.subjectName || row.subject_name || row.subject
+        subject_name: row.subjectName || row.subject_name || row.subject,
+        class: row.className || row.class || '',
+        section: row.sectionName || row.section || ''
       };
     });
     setWeeklyData(formatted);
@@ -446,25 +518,26 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       <div className="bg-white p-5 rounded-lg border border-slate-200 flex flex-wrap gap-5 items-end shadow-sm">
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Class Level</label>
-          <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId('All'); setSelectedSubject('All'); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
+          <select value={selClassId} onChange={(e) => { setSelClassId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelSectionId(isAllView ? 'All' : ''); setSelectedSubject(isAllView ? 'All' : ''); }} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             {isAllView && <option value="All">All Classes</option>}
             {!isAllView && <option value="">Select class…</option>}
-            {effectiveAssignments.map(c => <option key={c.classId} value={c.classId}>Class {c.className}</option>)}
+            {effectiveAssignments.map(c => {
+              const displayName = c.className?.startsWith('Class') ? c.className : `Class ${c.className}`;
+              return <option key={c.classId} value={c.classId}>{displayName}</option>;
+            })}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Section</label>
-          <select value={selSectionId} onChange={(e) => { setSelSectionId(e.target.value === 'All' ? 'All' : Number(e.target.value)); setSelectedSubject('All'); }} disabled={!isAllView && !selClassId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
-            {isAllView && <option value="All">All Sections</option>}
-            {!isAllView && <option value="">Select section…</option>}
+          <select value={selSectionId} onChange={(e) => setSelSectionId(e.target.value)} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+            <option value="All">All Sections</option>
             {effectiveSections.map(s => <option key={s.sectionId} value={s.sectionId}>{s.sectionName}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[150px]">
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Subject Area</label>
-          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!isAllView && !selSectionId} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
-            {isAllView && <option value="All">All Subjects</option>}
-            {!isAllView && <option value="">Select subject…</option>}
+          <select value={selectedSubject} onChange={(e) => setSelectedSubject(e.target.value)} disabled={!selClassId || selClassId === 'All'} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 disabled:bg-slate-50 disabled:text-slate-400 transition-colors cursor-pointer">
+            <option value="All">All Subjects</option>
             {effectiveSubjects.map(s => <option key={s.subjectId} value={s.subjectId}>{s.subjectName}</option>)}
           </select>
         </div>
@@ -472,7 +545,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1.5 ml-1">Month</label>
           <select value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} className="w-full border border-slate-200 rounded-md px-3 py-2.5 bg-white text-xs font-semibold outline-none focus:border-blue-500 transition-colors cursor-pointer">
             <option value="All">All Months</option>
-            {syllabusMetadata.months.map(m => <option key={m} value={m}>{m}</option>)}
+            {MONTHS.filter(m => m !== 'All').map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
         <div className="flex-1 min-w-[120px]">
@@ -543,7 +616,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
             <Loader2 className="animate-spin text-blue-600" size={40} />
             <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Syncing Academic Database...</span>
           </div>
-        ) : (!selClassId || !selSectionId || !selectedSubject) && !isAllView ? (
+        ) : (!selClassId || (isAllView && !selSectionId) || !selectedSubject) && !isAllView ? (
           <div className="py-32 text-center space-y-4">
             <div className="w-24 h-24 bg-blue-50/50 rounded-full flex items-center justify-center mx-auto text-blue-200 border border-blue-100/50 shadow-sm">
               <Filter size={40} className="animate-pulse" />
@@ -568,6 +641,17 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
             <table className="w-full text-left border-collapse min-w-[1700px] table-fixed">
               <thead className="bg-slate-50/80 border-b border-slate-200">
                 <tr>
+                  {isAllView && !!onEditClick && (
+                    <th className="px-5 py-4 text-center w-12">
+                      <input 
+                        type="checkbox" 
+                        className="rounded border-slate-300 text-red-500 focus:ring-red-500/20 cursor-pointer w-4 h-4"
+                        checked={weeklyData.length > 0 && selectedIds.size === weeklyData.length}
+                        onChange={handleSelectAll}
+                      />
+                    </th>
+                  )}
+                  <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-12 text-center">#</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-48">Timeline / Week</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-72">Chapter/Topic</th>
                   <th className="px-5 py-4 text-[11px] font-bold text-slate-500 uppercase w-24 text-center">Periods</th>
@@ -582,7 +666,7 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {weeklyData.map((row) => {
+                {weeklyData.map((row, index) => {
                   const isAlreadyComp = row.is_completed === 1;
                   const isViewOnly = (isAlreadyComp && editingId !== row.id) || isAllView;
                   const isEffectiveComp = isAlreadyComp && editingId !== row.id;
@@ -592,8 +676,21 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
                       "transition-all duration-300 border-l-[6px]",
                       isEffectiveComp
                         ? "bg-indigo-50/40 border-indigo-500/80 grayscale-[0.1]"
-                        : "bg-white border-transparent hover:bg-slate-50/30"
+                        : selectedIds.has(row.id) ? "bg-red-50/50 border-red-400" : "bg-white border-transparent hover:bg-slate-50/30"
                     )}>
+                      {isAllView && !!onEditClick && (
+                        <td className="px-5 py-5 align-top text-center">
+                          <input 
+                            type="checkbox" 
+                            className="rounded border-slate-300 text-red-500 focus:ring-red-500/20 cursor-pointer w-4 h-4 mt-1"
+                            checked={selectedIds.has(row.id)}
+                            onChange={() => handleSelectRow(row.id)}
+                          />
+                        </td>
+                      )}
+                      <td className="px-5 py-5 align-top text-center">
+                        <span className="text-xs font-bold text-slate-400 mt-0.5 inline-block">{index + 1}</span>
+                      </td>
                       <td className="px-5 py-5 align-top">
                         <div className="flex flex-col gap-0.5">
                           <span className="text-[10px] font-bold text-slate-400 uppercase leading-none">{row.month}</span>
@@ -813,6 +910,20 @@ export default function WeeklySyllabusPlan({ isAllView = false, filterTeacherId,
       )}
 
       {/* Student Tracker Modal */}
+      {/* Modals and Floating Elements */}
+      {isAllView && !!onEditClick && selectedIds.size > 0 && (
+        <div className="fixed bottom-8 right-8 z-50 animate-in slide-in-from-bottom-8 fade-in duration-300">
+          <button
+            onClick={handleBulkDelete}
+            disabled={loading}
+            className="flex items-center gap-2.5 bg-red-600 text-white px-6 py-3.5 rounded-2xl shadow-xl shadow-red-600/20 hover:bg-red-700 hover:-translate-y-1 transition-all font-black text-sm active:scale-95 disabled:opacity-50"
+          >
+            <Trash2 size={18} strokeWidth={3} />
+            DELETE SELECTED ({selectedIds.size})
+          </button>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px]" onClick={() => setIsModalOpen(false)} />

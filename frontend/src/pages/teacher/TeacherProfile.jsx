@@ -20,8 +20,7 @@ export default function TeacherProfile() {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
-  const [form, setForm] = useState({ mobile: '', dob: '', qualification: '', experience: '' })
-
+  const [form, setForm] = useState({ mobile: '', email: '' })
   const fetchProfile = useCallback(async () => {
     try {
       setLoading(true)
@@ -33,9 +32,7 @@ export default function TeacherProfile() {
       setProfile(me)
       setForm({
         mobile: me.mobile || '',
-        dob: me.dob || '',
-        qualification: me.qualification || '',
-        experience: me.experience || '',
+        email: me.email || '',
       })
       setPermissions(dash.data?.permissions || [])
       setAssignments(dash.data?.assignments || [])
@@ -118,19 +115,9 @@ export default function TeacherProfile() {
                 onChange={e => setForm(f => ({ ...f, mobile: e.target.value }))} />
             </div>
             <div>
-              <label className="label">Date of Birth</label>
-              <input className="input" type="date" value={form.dob}
-                onChange={e => setForm(f => ({ ...f, dob: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Qualification</label>
-              <input className="input" placeholder="e.g. M.Sc. Mathematics, B.Ed." value={form.qualification}
-                onChange={e => setForm(f => ({ ...f, qualification: e.target.value }))} />
-            </div>
-            <div>
-              <label className="label">Experience</label>
-              <input className="input" placeholder="e.g. 8 years" value={form.experience}
-                onChange={e => setForm(f => ({ ...f, experience: e.target.value }))} />
+              <label className="label">Email</label>
+              <input className="input" type="email" placeholder="email@example.com" value={form.email}
+                onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
             </div>
             <button type="submit" disabled={saving} className="btn-primary btn gap-1.5 disabled:opacity-60">
               {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
@@ -186,7 +173,7 @@ export default function TeacherProfile() {
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{pm.action}</p>
                         <p className="text-xs text-slate-400">{pm.class} · {pm.subject}</p>
-                        <p className="text-[10px] text-slate-300 mt-0.5">{pm.from} → {pm.to}</p>
+                        <p className="text-[10px] text-slate-300 mt-0.5">{pm.from?.substring(0, 10)} → {pm.to?.substring(0, 10)}</p>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0 ml-4">

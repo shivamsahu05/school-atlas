@@ -53,3 +53,116 @@ exports.getSystemStatus = async (req, res) => {
     res.status(500).json({ success: false, session: 'Unknown' });
   }
 };
+
+// 5. Bulk Student Promotion
+exports.bulkPromote = async (req, res) => {
+  const { promotions } = req.body;
+  if (!Array.isArray(promotions)) {
+    return res.status(400).json({ success: false, message: 'Invalid payload.' });
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+
+    // 1. Fetch all classes ordered by sort_order
+    const [classes] = await connection.execute('SELECT * FROM academic_classes ORDER BY sort_order ASC');
+    
+    // 2. Fetch class sections mapping
+    const [classSections] = await connection.execute('SELECT * FROM acad_class_sections');
+
+    // Fetch all students involved
+    const studentIds = promotions.filter(p => p.promote && p.student_id).map(p => p.student_id);
+    let studentsToPromote = [];
+    
+    if (studentIds.length > 0) {
+      // Create placeholders for IN clause
+      const placeholders = studentIds.map(() => '?').join(',');
+      const [rows] = await connection.execute(`SELECT * FROM students WHERE id IN (${placeholders})`, studentIds);
+      studentsToPromote = rows;
+    }
+
+    // Map classes for quick lookup
+    const classMap = {};
+    classes.forEach(c => { classMap[String(c.id)] = c; });
+
+    // Sort students top-down (highest sort_order first), then alphabetically
+    studentsToPromote.sort((a, b) => {
+      const classA = classMap[String(a.class_id)];
+      const classB = classMap[String(b.class_id)];
+      const orderA = classA ? classA.sort_order : 0;
+      const orderB = classB ? classB.sort_order : 0;
+      
+      if (orderA !== orderB) return orderB - orderA; // Descending
+      return a.name.localeCompare(b.name);
+    });
+
+    let promotedCount = 0;
+    let graduatedCount = 0;
+    let unchangedCount = promotions.length - studentIds.length;
+
+    // Grouping for roll number regeneration
+    // Map: classId -> currentMaxRollNo
+    const classRolls = {};
+
+    for (const student of studentsToPromote) {
+      const currentClassIndex = classes.findIndex(c => String(c.id) === String(student.class_id));
+      
+      if (currentClassIndex === -1) {
+        continue;
+      }
+
+      const nextClassIndex = currentClassIndex + 1;
+      
+      if (nextClassIndex >= classes.length) {
+        // No next class -> Graduate
+        await connection.execute('UPDATE students SET status = ? WHERE id = ?', ['Graduated', student.id]);
+        graduatedCount++;
+      } else {
+        const nextClass = classes[nextClassIndex];
+        
+        let nextSectionId = null;
+        const availableSectionsForNextClass = classSections.filter(cs => String(cs.class_id) === String(nextClass.id));
+        
+        if (availableSectionsForNextClass.length > 0) {
+          const sameSection = availableSectionsForNextClass.find(cs => String(cs.section_id) === String(student.section_id));
+          if (sameSection) {
+            nextSectionId = student.section_id;
+          } else {
+            nextSectionId = availableSectionsForNextClass[0].section_id;
+          }
+        }
+
+        // Generate next roll number for this class (ignoring section)
+        if (!classRolls[nextClass.id]) classRolls[nextClass.id] = 0;
+        classRolls[nextClass.id]++;
+        const newRollNo = classRolls[nextClass.id].toString();
+
+        await connection.execute(
+          'UPDATE students SET class_id = ?, section_id = ?, roll_no = ?, status = ? WHERE id = ?',
+          [nextClass.id, nextSectionId, newRollNo, 'Active', student.id]
+        );
+        promotedCount++;
+      }
+    }
+
+    // Log the operation
+    await connection.execute(
+      'INSERT INTO notifications (type, message, role_target, status, is_read, created_at, updated_at) VALUES (?, ?, ?, ?, ?, NOW(), NOW())',
+      ['alert', `Bulk Promotion Executed: ${promotedCount} promoted, ${graduatedCount} graduated.`, 'admin', 'pending', 0]
+    );
+
+    await connection.commit();
+    res.json({ 
+      success: true, 
+      message: `Bulk promotion completed. Promoted: ${promotedCount}, Graduated: ${graduatedCount}, Unchanged: ${unchangedCount}` 
+    });
+
+  } catch (error) {
+    await connection.rollback();
+    console.error('Bulk promote error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process bulk promotion.' });
+  } finally {
+    connection.release();
+  }
+};

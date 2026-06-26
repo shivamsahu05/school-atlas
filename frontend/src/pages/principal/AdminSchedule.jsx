@@ -6,6 +6,7 @@ import IntelligenceInsights from '../../components/teacher/IntelligenceInsights'
 import { Plus, Download, Upload, Loader2 } from 'lucide-react';
 import { syllabusApi, classesApi, academicApi, teachersApi } from '../../api';
 import { MONTHS } from '../../data/constants';
+import clsx from 'clsx';
 
 export default function AdminSchedule() {
   const { user } = useAuth();
@@ -22,6 +23,10 @@ export default function AdminSchedule() {
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
 
+  // Manual Add overrides
+  const [manualMappedTeachers, setManualMappedTeachers] = useState([]);
+  const [manualMappedSections, setManualMappedSections] = useState([]);
+
   // Bulk upload override drop downs
   const [bulkTeacherId, setBulkTeacherId] = useState('');
   const [bulkClassId, setBulkClassId] = useState('');
@@ -29,11 +34,16 @@ export default function AdminSchedule() {
   const [bulkSubjectId, setBulkSubjectId] = useState('');
   const [bulkSections, setBulkSections] = useState([]);
   const [bulkSubjects, setBulkSubjects] = useState([]);
+  const [bulkMappedTeachers, setBulkMappedTeachers] = useState([]);
+  const [bulkMappedSections, setBulkMappedSections] = useState([]);
 
   const handleBulkClassChange = async (classId) => {
     setBulkClassId(classId);
     setBulkSectionId('');
     setBulkSubjectId('');
+    setBulkTeacherId('');
+    setBulkMappedTeachers([]);
+    setBulkMappedSections([]);
     if (!classId) {
       setBulkSections([]);
       setBulkSubjects([]);
@@ -48,6 +58,69 @@ export default function AdminSchedule() {
       setBulkSubjects(subRes.data || subRes.subjects || []);
     } catch (err) {
       console.error('Failed to load class data for bulk:', err);
+    }
+  };
+
+  const handleBulkSubjectChange = async (subjectId) => {
+    setBulkSubjectId(subjectId);
+    setBulkTeacherId('');
+    setBulkSectionId('');
+    setBulkMappedTeachers([]);
+    setBulkMappedSections([]);
+
+    if (!bulkClassId || !subjectId) return;
+
+    try {
+      const res = await syllabusApi.getTeacherAssignments(bulkClassId, subjectId);
+      if (res && res.success && res.data) {
+        setBulkMappedTeachers(res.data);
+        if (res.data.length === 1) {
+           const teacher = res.data[0];
+           setBulkTeacherId(teacher.teacher_id);
+           const validSections = teacher.sections?.filter(s => s !== null);
+           if (validSections && validSections.length > 0) {
+              setBulkMappedSections(validSections);
+              if (validSections.length === 1) {
+                 setBulkSectionId(validSections[0]);
+              }
+           } else {
+              setBulkMappedSections([]); // All sections
+           }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load mapped teachers:', err);
+    }
+  };
+
+  const handleBulkTeacherChange = (tId) => {
+    setBulkTeacherId(tId);
+    setBulkSectionId('');
+    setBulkMappedSections([]);
+    
+    if (tId) {
+      const teacher = bulkMappedTeachers.find(t => String(t.teacher_id) === String(tId));
+      if (teacher) {
+         const validSections = teacher.sections?.filter(s => s !== null);
+         if (validSections && validSections.length > 0) {
+            setBulkMappedSections(validSections);
+            if (validSections.length === 1) {
+               setBulkSectionId(validSections[0]);
+            }
+         }
+      }
+    }
+  };
+
+  const handleBulkSectionChange = (sectionId) => {
+    setBulkSectionId(sectionId);
+    if (sectionId && sectionId !== 'All' && bulkMappedTeachers.length > 0) {
+       const mappedTeacher = bulkMappedTeachers.find(t => t.sections?.includes(Number(sectionId)));
+       if (mappedTeacher) {
+          setBulkTeacherId(mappedTeacher.teacher_id);
+       }
+    } else if ((!sectionId || sectionId === 'All') && bulkMappedTeachers.length > 1) {
+       setBulkTeacherId('');
     }
   };
 
@@ -92,8 +165,71 @@ export default function AdminSchedule() {
   };
 
   const handleClassChange = async (classId) => {
-    setForm(f => ({ ...f, class_id: classId, section_id: '', subject_id: '' }));
+    setForm(f => ({ ...f, class_id: classId, section_id: '', subject_id: '', teacher_id: '' }));
+    setManualMappedTeachers([]);
+    setManualMappedSections([]);
     await loadClassData(classId);
+  };
+
+  const handleSubjectChange = async (subjectId) => {
+    setForm(f => ({ ...f, subject_id: subjectId, teacher_id: '', section_id: '' }));
+    setManualMappedTeachers([]);
+    setManualMappedSections([]);
+
+    if (!form.class_id || !subjectId) return;
+
+    try {
+      const res = await syllabusApi.getTeacherAssignments(form.class_id, subjectId);
+      if (res && res.success && res.data) {
+        setManualMappedTeachers(res.data);
+        if (res.data.length === 1) {
+           const teacher = res.data[0];
+           setForm(f => ({ ...f, subject_id: subjectId, teacher_id: teacher.teacher_id, section_id: '' }));
+           const validSections = teacher.sections?.filter(s => s !== null);
+           if (validSections && validSections.length > 0) {
+              setManualMappedSections(validSections);
+              if (validSections.length === 1) {
+                 setForm(f => ({ ...f, section_id: validSections[0] }));
+              }
+           } else {
+              setManualMappedSections([]); 
+           }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load mapped teachers:', err);
+    }
+  };
+
+  const handleTeacherChange = (tId) => {
+    setForm(f => ({ ...f, teacher_id: tId, section_id: '' }));
+    setManualMappedSections([]);
+    
+    if (tId && manualMappedTeachers.length > 0) {
+      const teacher = manualMappedTeachers.find(t => String(t.teacher_id) === String(tId));
+      if (teacher) {
+         const validSections = teacher.sections?.filter(s => s !== null);
+         if (validSections && validSections.length > 0) {
+            setManualMappedSections(validSections);
+            if (validSections.length === 1) {
+               setForm(f => ({ ...f, section_id: validSections[0] }));
+            }
+         }
+      }
+    }
+  };
+
+  const handleSectionChange = (sectionId) => {
+    setForm(f => ({ ...f, section_id: sectionId }));
+    
+    if (sectionId && sectionId !== 'All' && manualMappedTeachers.length > 0) {
+       const mappedTeacher = manualMappedTeachers.find(t => t.sections?.includes(Number(sectionId)));
+       if (mappedTeacher) {
+          setForm(f => ({ ...f, teacher_id: mappedTeacher.teacher_id }));
+       }
+    } else if ((!sectionId || sectionId === 'All') && manualMappedTeachers.length > 1) {
+       setForm(f => ({ ...f, teacher_id: '' }));
+    }
   };
 
   // Auto-calculate dates based on month and week selection
@@ -151,19 +287,61 @@ export default function AdminSchedule() {
       is_completed: row.is_completed === 1 || row.is_completed === true,
       status: row.status || (row.is_completed ? 'completed' : 'pending')
     });
+    setManualMappedTeachers([]);
+    setManualMappedSections([]);
     await loadClassData(row.class_id);
+    
+    // Load mapping for dropdowns
+    try {
+      if (row.class_id && row.subject_id) {
+        const res = await syllabusApi.getTeacherAssignments(row.class_id, row.subject_id);
+        if (res?.success && res.data) {
+          setManualMappedTeachers(res.data);
+          const teacher = res.data.find(t => String(t.teacher_id) === String(row.teacher_id));
+          if (teacher) {
+            const validSections = teacher.sections?.filter(s => s !== null);
+            setManualMappedSections(validSections || []);
+          }
+        }
+      }
+    } catch (e) {}
+
     setModalOpen(true);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!form.class_id || !form.subject_id || !form.topic || !form.teacher_id) {
+    if (!form.class_id || !form.subject_id || !form.topic || (!form.teacher_id && manualMappedTeachers.length <= 1)) {
       alert('Teacher, Class, subject and topic are required.');
       return;
     }
 
     try {
       setSubmitting(true);
+
+      // Duplicate Check
+      if (!editId) {
+        try {
+          const res = await syllabusApi.getAll({ class_id: form.class_id, subject_id: form.subject_id });
+          if (res?.data?.items && res.data.items.length > 0) {
+            const isDuplicate = res.data.items.some(item => 
+              String(item.teacher_id) === String(form.teacher_id) &&
+              (String(item.section_id || '') === String(form.section_id || '')) &&
+              String(item.month).toLowerCase() === String(form.month).toLowerCase() &&
+              String(item.week).toLowerCase() === String(form.week).toLowerCase()
+            );
+
+            if (isDuplicate) {
+              setSubmitting(false);
+              alert(`⚠️ A Micro Schedule already exists for this Teacher in the selected Class, Subject, Section, Month, and Week.\n\nPlease select another Week or Month.`);
+              return;
+            }
+          }
+        } catch (e) {
+          console.error("Duplicate check failed:", e);
+        }
+      }
+
       const selectedClass = classes.find(c => c.id === Number(form.class_id));
       const sectionObj = acadSections.find(s => s.section_id === Number(form.section_id));
 
@@ -219,6 +397,8 @@ export default function AdminSchedule() {
     setBulkSubjectId('');
     setBulkSections([]);
     setBulkSubjects([]);
+    setBulkMappedTeachers([]);
+    setBulkMappedSections([]);
   };
 
   const handleBulkUpload = async (e) => {
@@ -267,7 +447,7 @@ export default function AdminSchedule() {
   if (!user) return <div className="p-4 text-center text-slate-400">Loading...</div>;
 
   return (
-    <div className="space-y-8 animate-fade-in p-4 sm:p-8">
+    <div className="space-y-8 animate-fade-in py-2 sm:py-4 px-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-800 tracking-tight">Admin Micro Schedule</h1>
@@ -340,7 +520,7 @@ export default function AdminSchedule() {
 
         {activeTab === 'insights' && (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-            <IntelligenceInsights />
+            <IntelligenceInsights isAllView={true} filterTeacherId={selectedTeacherId} />
           </div>
         )}
       </div>
@@ -350,18 +530,6 @@ export default function AdminSchedule() {
         <div className="p-1">
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Assigned Teacher *</label>
-                <select
-                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer"
-                  value={form.teacher_id}
-                  onChange={e => setForm(f => ({ ...f, teacher_id: e.target.value }))}
-                  required
-                >
-                  <option value="">Select teacher…</option>
-                  {allTeachers.map(t => <option key={t.id} value={t.id}>{t.name} (ID: {t.id})</option>)}
-                </select>
-              </div>
               <div>
                 <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Class *</label>
                 <select
@@ -374,6 +542,19 @@ export default function AdminSchedule() {
                   {classes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+              <div>
+                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Subject *</label>
+                <select
+                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
+                  value={form.subject_id}
+                  onChange={e => handleSubjectChange(e.target.value)}
+                  required
+                  disabled={!form.class_id}
+                >
+                  <option value="">Select subject…</option>
+                  {acadSubjects.map(s => <option key={s.mapping_id || s.id} value={s.subject_id || s.id}>{s.subject_name || s.name}</option>)}
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -382,25 +563,51 @@ export default function AdminSchedule() {
                 <select
                   className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
                   value={form.section_id || ''}
-                  onChange={e => setForm(f => ({ ...f, section_id: e.target.value }))}
-                  required
-                  disabled={!form.class_id}
+                  onChange={e => handleSectionChange(e.target.value)}
+                  disabled={!form.subject_id || (manualMappedTeachers.length === 1 && manualMappedSections.length === 0) || manualMappedSections.length === 1}
                 >
-                  <option value="">Select section…</option>
-                  {acadSections.map(s => <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>)}
+                  {manualMappedTeachers.length === 1 && manualMappedSections.length === 0 ? (
+                    <option value="">All Sections (Auto)</option>
+                  ) : manualMappedSections.length === 1 ? (
+                    manualMappedSections.map(secId => {
+                      const secObj = acadSections.find(a => String(a.section_id || a.id) === String(secId));
+                      const name = secObj ? (secObj.section_name || secObj.name || secObj.code) : `Section ${secId}`;
+                      return <option key={secId} value={secId}>{name}</option>;
+                    })
+                  ) : (
+                    <>
+                      <option value="">Select section…</option>
+                      <option value="All">All Sections</option>
+                      {manualMappedSections.length > 0
+                        ? manualMappedSections.map(secId => {
+                            const secObj = acadSections.find(a => String(a.section_id || a.id) === String(secId));
+                            const name = secObj ? (secObj.section_name || secObj.name || secObj.code) : `Section ${secId}`;
+                            return <option key={secId} value={secId}>{name}</option>;
+                          })
+                        : acadSections.map(s => <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>)
+                      }
+                    </>
+                  )}
                 </select>
               </div>
               <div>
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Subject *</label>
+                <label className={clsx("text-[10px] font-black uppercase tracking-widest mb-2 flex items-center justify-between", manualMappedTeachers.length === 1 ? "text-emerald-500" : "text-slate-400")}>
+                  {manualMappedTeachers.length === 1 ? '✅ Assigned Teacher' : 'Assigned Teacher *'}
+                </label>
                 <select
-                  className="w-full bg-slate-50 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all appearance-none cursor-pointer disabled:opacity-50"
-                  value={form.subject_id}
-                  onChange={e => setForm(f => ({ ...f, subject_id: e.target.value }))}
-                  required
-                  disabled={!form.class_id}
+                  className={clsx(
+                    "w-full border-none rounded-2xl px-4 py-3.5 text-sm font-bold transition-all appearance-none cursor-pointer",
+                    manualMappedTeachers.length === 1 ? "bg-emerald-50 text-emerald-700" : "bg-slate-50 text-slate-700 focus:ring-2 focus:ring-brand-500/20"
+                  )}
+                  value={form.teacher_id}
+                  onChange={e => handleTeacherChange(e.target.value)}
+                  disabled={manualMappedTeachers.length === 1}
                 >
-                  <option value="">Select subject…</option>
-                  {acadSubjects.map(s => <option key={s.mapping_id || s.id} value={s.subject_id || s.id}>{s.subject_name || s.name}</option>)}
+                  <option value="">{manualMappedTeachers.length > 1 && (!form.section_id || form.section_id === 'All') ? 'All Teachers (Auto-Assign)' : 'Select teacher…'}</option>
+                  {manualMappedTeachers.length > 0
+                    ? manualMappedTeachers.map(t => <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>)
+                    : allTeachers.map(t => <option key={t.id} value={t.id}>{t.name} (ID: {t.id})</option>)
+                  }
                 </select>
               </div>
             </div>
@@ -524,21 +731,12 @@ export default function AdminSchedule() {
       {/* Bulk Upload Modal */}
       <Modal open={bulkModalOpen} onClose={() => { setBulkModalOpen(false); resetBulk(); }} title="Bulk Syllabus Upload">
         <form onSubmit={handleBulkUpload} className="space-y-4">
+          <div className="bg-brand-50 border border-brand-100 rounded-xl p-3 text-[11px] text-brand-700 font-medium">
+            <span className="font-bold text-brand-800">Instructions:</span> Select Class and Subject to automatically resolve the Assigned Teacher. 
+            If no teacher is assigned or if you need to override, you can select one manually.
+          </div>
+          
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-200">
-            <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Teacher (Fallback)</label>
-              <select
-                value={bulkTeacherId}
-                onChange={e => setBulkTeacherId(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer"
-              >
-                <option value="">Select teacher…</option>
-                {allTeachers.map(t => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Class (Fallback)</label>
               <select
@@ -554,25 +752,10 @@ export default function AdminSchedule() {
             </div>
 
             <div>
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Section (Fallback)</label>
-              <select
-                value={bulkSectionId}
-                onChange={e => setBulkSectionId(e.target.value)}
-                disabled={!bulkClassId}
-                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50"
-              >
-                <option value="">Select section…</option>
-                {bulkSections.map(s => (
-                  <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
               <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Subject (Fallback)</label>
               <select
                 value={bulkSubjectId}
-                onChange={e => setBulkSubjectId(e.target.value)}
+                onChange={e => handleBulkSubjectChange(e.target.value)}
                 disabled={!bulkClassId}
                 className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50"
               >
@@ -580,6 +763,51 @@ export default function AdminSchedule() {
                 {bulkSubjects.map(s => (
                   <option key={s.mapping_id || s.id} value={s.subject_id || s.id}>{s.subject_name || s.name}</option>
                 ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1.5 block">Section (Fallback)</label>
+              <select
+                value={bulkSectionId}
+                onChange={e => handleBulkSectionChange(e.target.value)}
+                disabled={!bulkClassId || (bulkMappedTeachers.length === 1 && bulkMappedSections.length === 0) || bulkMappedSections.length === 1}
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50"
+              >
+                {bulkMappedSections.length === 1 ? (
+                  bulkSections.filter(s => bulkMappedSections.includes(s.section_id || s.id)).map(s => (
+                    <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
+                  ))
+                ) : (
+                  <>
+                    <option value="">All Sections</option>
+                    {bulkSections.filter(s => bulkMappedSections.length === 0 || bulkMappedSections.includes(s.section_id || s.id)).map(s => (
+                      <option key={s.mapping_id || s.id} value={s.section_id || s.id}>{s.section_name || s.name || s.code}</option>
+                    ))}
+                  </>
+                )}
+              </select>
+            </div>
+
+            <div>
+              <label className={`text-[10px] font-black uppercase tracking-widest mb-1.5 block ${bulkMappedTeachers.length === 1 ? 'text-green-600' : 'text-slate-400'}`}>
+                {bulkMappedTeachers.length === 1 ? '✅ Assigned Teacher' : 'Teacher (Fallback)'}
+              </label>
+              <select
+                value={bulkTeacherId}
+                onChange={e => handleBulkTeacherChange(e.target.value)}
+                disabled={bulkMappedTeachers.length === 1}
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold text-slate-700 focus:ring-2 focus:ring-brand-500/20 transition-all outline-none cursor-pointer disabled:opacity-50 disabled:bg-green-50 disabled:text-green-800 disabled:border-green-200"
+              >
+                <option value="">{bulkMappedTeachers.length > 1 && (!bulkSectionId || bulkSectionId === 'All') ? 'All Teachers (Auto-Assign)' : 'Select teacher…'}</option>
+                {bulkMappedTeachers.length > 0 
+                  ? bulkMappedTeachers.map(t => (
+                      <option key={t.teacher_id} value={t.teacher_id}>{t.name}</option>
+                    ))
+                  : allTeachers.map(t => (
+                      <option key={t.id} value={t.user_id || t.id}>{t.name || t.user_name}</option>
+                    ))
+                }
               </select>
             </div>
           </div>

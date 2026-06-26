@@ -16,7 +16,7 @@ const safeParse = (data) => {
 const lmsIntelligenceController = {
   getTeacherDashboard: async (req, res) => {
     const result = {
-      syllabus: { completed: 0, total: 0, percentage: 0 },
+      syllabus: { completed: 0, total: 0, percentage: 0, periods_completed: 0, periods_total: 0 },
       lo: { approaching: 0, meeting: 0, exceeding: 0, total: 0 },
       not_done_students: [], 
       overall_score: 0,
@@ -24,6 +24,7 @@ const lmsIntelligenceController = {
       participate_score: 0,
       other_score: 0,
       lang_score: 0,
+      admin_scores_set: false, // true when admin has manually saved participate/other/lang
       warnings: []
     };
 
@@ -31,7 +32,7 @@ const lmsIntelligenceController = {
       const teacherId = req.user?.id;
       if (!teacherId) return res.json({ success: true, data: result });
 
-      // 1. Fetch Syllabus/Micro-Schedule Data
+      // 1. Fetch Syllabus/Micro-Schedule Data (for Syllabus Completion %)
       const [rows] = await pool.execute(`
         SELECT 
           s.id, s.topic, s.week, s.month, s.is_completed, s.status, s.students_data,
@@ -45,41 +46,22 @@ const lmsIntelligenceController = {
         WHERE s.teacher_id = ?
       `, [teacherId]);
 
-      let loWeightedSum = 0;
-      let loTotalCount = 0;
-      let extraPeriodsCount = 0;
-
       rows.forEach(row => {
         result.syllabus.total++;
+        result.syllabus.periods_total += Number(row.periods || 0);
         const isTopicDone = row.is_completed === 1 || row.status === 'completed';
-        if (isTopicDone) result.syllabus.completed++;
-
-        if (row.periods_needed > 0) extraPeriodsCount++;
+        if (isTopicDone) {
+          result.syllabus.completed++;
+          result.syllabus.periods_completed += Number(row.periods || 0);
+        }
 
         const students = safeParse(row.students_data);
         const classLvl = (row.class_understanding_level || '').toLowerCase();
-        
-        // Calculate LO Score for this topic based on student data
-        if (isTopicDone) {
-          let topicLOPoints = 0;
-          let topicStudentCount = 0;
 
+        // Track student homework alerts and LO distribution (for lo object counts only)
+        if (isTopicDone) {
           if (students.length > 0) {
             students.forEach(s => {
-              const slvl = (s.learning_status || classLvl).toLowerCase();
-              let points = 80; // Default Meeting
-              if (slvl.includes('approach')) { points = 60; }
-              else if (slvl.includes('exceed')) { points = 100; }
-              else { points = 80; }
-              
-              // Penalize if homework or notebook is not done
-              if (s.homework === false || s.homework_status === 'PENDING') points -= 10;
-              if (row.notebook_checked === 'No') points -= 5;
-
-              topicLOPoints += Math.max(0, points);
-              topicStudentCount++;
-
-              // Track alerts
               if (s.homework === false || s.homework_status === 'PENDING') {
                 result.not_done_students.push({
                   id: row.id, topic: row.topic, week: row.week,
@@ -88,93 +70,115 @@ const lmsIntelligenceController = {
                 });
               }
             });
-            // Count this as 1 Topic for the overall distribution
             if (classLvl.includes('exceed')) result.lo.exceeding++;
             else if (classLvl.includes('approach')) result.lo.approaching++;
             else result.lo.meeting++;
             result.lo.total++;
           } else if (classLvl && classLvl !== '-' && classLvl !== 'awaiting status') {
-            let points = 80;
-            if (classLvl.includes('approach')) { points = 60; result.lo.approaching++; }
-            else if (classLvl.includes('exceed')) { points = 100; result.lo.exceeding++; }
-            else { points = 80; result.lo.meeting++; }
+            if (classLvl.includes('approach')) result.lo.approaching++;
+            else if (classLvl.includes('exceed')) result.lo.exceeding++;
+            else result.lo.meeting++;
             result.lo.total++;
-            topicLOPoints += points;
-            topicStudentCount = 1;
-          }
-
-          if (topicStudentCount > 0) {
-            loWeightedSum += (topicLOPoints / topicStudentCount);
-            loTotalCount++;
           }
         }
       });
 
-      const syllabusPct = result.syllabus.total > 0 ? (result.syllabus.completed / result.syllabus.total) * 100 : 0;
-      const loPct = loTotalCount > 0 ? (loWeightedSum / loTotalCount) : 0;
-
-      // 2. Fetch Observation Data (Observation Score 25% + Language Proficiency 15%)
-      const [obsRows] = await pool.execute(`
-        SELECT 
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs,
-          AVG((communication / 10) * 100) AS avg_lang
-        FROM class_observations 
-        WHERE teacher_id = ?
-      `, [teacherId]);
-
-      const obsPct = obsRows[0]?.avg_obs || 0;
-      const langPct = obsRows[0]?.avg_lang || 0;
-
-      // 3. Participation Score (10%)
-      // Count participants from students in teacher's assigned classes
-      const [partRows] = await pool.execute(`
-        SELECT COUNT(DISTINCT ep.roll_no, ep.student_class) as participant_count
-        FROM event_participants ep
-        JOIN students st ON ep.roll_no = st.roll_no
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        WHERE ts.teacher_id = ?
-      `, [teacherId]);
-      
-      const [totalStudentsRows] = await pool.execute(`
-        SELECT COUNT(DISTINCT st.id) as total_students
-        FROM students st
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        WHERE ts.teacher_id = ?
-      `, [teacherId]);
-
-      const totalStudents = totalStudentsRows[0]?.total_students || 1;
-      const participatePct = Math.min(100, ((partRows[0]?.participant_count || 0) / totalStudents) * 500); // Scaled: 20% participation = 100% score
-
-      // 4. Other Parameters (20%) - Deductions for extra periods and leaves
-      const [leaveRows] = await pool.execute(`
-        SELECT COUNT(*) as leave_count FROM leave_requests 
-        WHERE user_id = ? AND status IN ('Approved', 'Pending')
-      `, [teacherId]);
-
-      const leaveCount = leaveRows[0]?.leave_count || 0;
-      let otherScore = 100 - (extraPeriodsCount * 5) - (leaveCount * 2);
-      otherScore = Math.max(0, otherScore);
-
-      // Final Weighted Aggregation
-      // Syllabus (15%) + LO (15%) + Obs (25%) + Participate (10%) + Other (20%) + Language (15%)
-      const totalWeighted = 
-        (syllabusPct * 0.15) + 
-        (loPct * 0.15) + 
-        (obsPct * 0.25) + 
-        (participatePct * 0.10) + 
-        (otherScore * 0.20) + 
-        (langPct * 0.15);
-
+      const syllabusPct = result.syllabus.periods_total > 0 ? (result.syllabus.periods_completed / result.syllabus.periods_total) * 100 : 0;
       result.syllabus.percentage = Math.round(syllabusPct);
-      result.overall_score = parseFloat(totalWeighted.toFixed(1));
+
+      // 2. LO Achievement — sourced from Award LO module (teacher_performance_lo)
+      // Admin awards a principal_score per topic via /admin/award-lo
+      // First resolve teacher profile id from user id
+      let loPct = 0;
+      let teacherProfileId = null;
+      try {
+        const [tProfileRows] = await pool.execute(
+          'SELECT id FROM teachers WHERE user_id = ?', [teacherId]
+        );
+        if (tProfileRows && tProfileRows.length > 0) {
+          teacherProfileId = tProfileRows[0].id;
+          const [loRows] = await pool.execute(`
+            SELECT AVG(principal_score) AS avg_lo_score
+            FROM teacher_performance_lo
+            WHERE teacher_id = ?
+          `, [teacherProfileId]);
+          loPct = loRows[0]?.avg_lo_score != null ? Number(loRows[0].avg_lo_score) : 0;
+        }
+      } catch (loErr) {
+        console.warn('LO Award fetch failed:', loErr.message);
+      }
+
+      // 3. Fetch Observation Data (Observation Score 25%)
+      // Language Proficiency is admin-only; not computed from observations.
+      let obsPct = 0;
+      if (teacherProfileId) {
+        const [obsRows] = await pool.execute(`
+          SELECT AVG((total_score / 50) * 100) AS avg_obs
+          FROM class_observations 
+          WHERE teacher_id = ?
+        `, [teacherProfileId]);
+        obsPct = obsRows[0]?.avg_obs || 0;
+      }
+
+      // 4. Participate Score (10%), Other Parameters (20%), Language Proficiency (15%)
+      // These are ADMIN-ONLY manual values. Default to 0 until admin sets them.
+      let finalSyllabus = syllabusPct;
+      let finalLo = loPct;
+      let finalObs = obsPct;
+      let finalParticipate = 0; // admin-only
+      let finalOther = 0;       // admin-only
+      let finalLang = 0;        // admin-only
+      let finalOverall = null;
+      let adminScoresSet = false;
+      let remarks = "";
+
+      try {
+        const [overrideRows] = await pool.execute(`
+          SELECT * FROM teacher_performance_overrides WHERE teacher_id = ?
+        `, [teacherId]);
+
+        if (overrideRows && overrideRows.length > 0) {
+          const o = overrideRows[0];
+          // Syllabus, LO, Observation overrides (kept for backward compat; unused in normal flow)
+          if (o.syllabus_completion_pct !== null) finalSyllabus = Number(o.syllabus_completion_pct);
+          if (o.lo_avg_pct !== null) finalLo = Number(o.lo_avg_pct);
+          if (o.observation_pct !== null) finalObs = Number(o.observation_pct);
+          // Admin-only manual scores
+          if (o.participate_score !== null) { finalParticipate = Number(o.participate_score); adminScoresSet = true; }
+          if (o.other_score !== null) { finalOther = Number(o.other_score); adminScoresSet = true; }
+          if (o.lang_score !== null) { finalLang = Number(o.lang_score); adminScoresSet = true; }
+          if (o.overall_score !== null) finalOverall = Number(o.overall_score);
+          if (o.remarks !== null) remarks = o.remarks;
+        }
+      } catch (err) {
+        console.warn("Override table fetch failed or doesn't exist yet:", err.message);
+      }
+
+      if (finalOverall === null) {
+        // Formula: Syllabus(15%) + LO(15%) + Observation(25%) + Participate(10%) + Other(20%) + Language(15%)
+        const totalWeighted = 
+          (finalSyllabus * 0.15) + 
+          (finalLo * 0.15) + 
+          (finalObs * 0.25) + 
+          (finalParticipate * 0.10) + 
+          (finalOther * 0.20) + 
+          (finalLang * 0.15);
+        finalOverall = parseFloat(totalWeighted.toFixed(1));
+      }
+
+      result.syllabus.percentage = Math.round(finalSyllabus);
+      result.overall_score = finalOverall;
       result.performance = { 
-        syllabus: Math.round(syllabusPct), 
-        lo: Math.round(loPct), 
-        observation: Math.round(obsPct) 
+        syllabus: Math.round(finalSyllabus), 
+        lo: Math.round(finalLo), 
+        observation: Math.round(finalObs) 
       };
-      result.participate_score = Math.round(participatePct);
-      result.other_score = Math.round(otherScore);
-      result.lang_score = Math.round(langPct);
+      result.participate_score = Math.round(finalParticipate);
+      result.other_score = Math.round(finalOther);
+      result.lang_score = Math.round(finalLang);
+      result.admin_scores_set = adminScoresSet;
+      result.assessment_incomplete = !adminScoresSet;
+      result.remarks = remarks;
       
       result.not_done_students = result.not_done_students.slice(0, 15);
       res.json({ success: true, data: { ...result, all_rows: rows } });
@@ -262,90 +266,114 @@ const lmsIntelligenceController = {
       const [obsStats] = await pool.execute(`
         SELECT 
           teacher_id,
-          AVG(((content_mastery + pedagogy + student_engagement + communication + assessment) / 50) * 100) AS avg_obs,
-          AVG((communication / 10) * 100) AS avg_lang
+          AVG((total_score / 50) * 100) AS avg_obs
         FROM class_observations GROUP BY teacher_id
       `);
 
-      const [leaveStats] = await pool.execute(`
-        SELECT user_id as teacher_id, COUNT(*) as leave_count 
-        FROM leave_requests WHERE status IN ('Approved', 'Pending') 
-        GROUP BY user_id
+      // LO from Award LO module (teacher_performance_lo), keyed by teacher profile id
+      const [loAwardStats] = await pool.execute(`
+        SELECT tpl.teacher_id, AVG(tpl.principal_score) AS avg_lo_score
+        FROM teacher_performance_lo tpl
+        GROUP BY tpl.teacher_id
       `);
 
-      const [participationStats] = await pool.execute(`
-        SELECT ts.teacher_id, COUNT(DISTINCT ep.roll_no, ep.student_class) as participant_count
-        FROM event_participants ep
-        JOIN students st ON ep.roll_no = st.roll_no
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        GROUP BY ts.teacher_id
+      // Map teacher profile id -> user id for LO lookup
+      const [teacherProfileMap] = await pool.execute(`
+        SELECT t.id as profile_id, t.user_id FROM teachers t
       `);
-
-      const [classSizeStats] = await pool.execute(`
-        SELECT ts.teacher_id, COUNT(DISTINCT st.id) as total_students
-        FROM students st
-        JOIN teacher_subjects ts ON st.class_id = ts.class_id
-        GROUP BY ts.teacher_id
-      `);
-
-      const [loStats] = await pool.execute(`
-        SELECT 
-          teacher_id,
-          AVG(
-            CASE 
-              WHEN learning_status LIKE '%exceed%' THEN 100
-              WHEN learning_status LIKE '%meet%' THEN 80
-              WHEN learning_status LIKE '%approach%' THEN 60
-              ELSE 0 
-            END
-          ) as avg_lo
-        FROM syllabus 
-        WHERE (is_completed = 1 OR status = 'completed') 
-        AND learning_status IS NOT NULL 
-        AND learning_status NOT IN ('-', 'awaiting status')
-        GROUP BY teacher_id
-      `);
+      const profileToUser = teacherProfileMap.reduce((acc, r) => ({ ...acc, [r.profile_id]: r.user_id }), {});
+      // Build user_id -> avg_lo_score map
+      const loMap = {};
+      loAwardStats.forEach(r => {
+        const userId = profileToUser[r.teacher_id];
+        if (userId) loMap[userId] = Number(r.avg_lo_score || 0);
+      });
 
       // Map data for quick lookup
       const syllabusMap = syllabusStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
-      const obsMap = obsStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
-      const leaveMap = leaveStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.leave_count }), {});
-      const partMap = participationStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.participant_count }), {});
-      const sizeMap = classSizeStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.total_students }), {});
-      const loMap = loStats.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r.avg_lo }), {});
+      // Build user_id -> avg_obs map
+      const obsMap = {};
+      obsStats.forEach(r => {
+        const userId = profileToUser[r.teacher_id];
+        if (userId) obsMap[userId] = r;
+      });
 
-      const rankedTeachers = teachers.map(t => {
+      // Fetch admin overrides for manual scores
+      const [overrides] = await pool.execute(`
+        SELECT teacher_id, participate_score, other_score, lang_score, overall_score, updated_at 
+        FROM teacher_performance_overrides
+      `);
+      const overrideMap = overrides.reduce((acc, r) => ({ ...acc, [r.teacher_id]: r }), {});
+
+      let rankedTeachers = teachers.map(t => {
         const s = syllabusMap[t.id] || { total: 0, completed: 0, extra_periods: 0 };
-        const o = obsMap[t.id] || { avg_obs: 0, avg_lang: 0 };
-        const leaves = leaveMap[t.id] || 0;
-        const parts = partMap[t.id] || 0;
-        const totalStu = sizeMap[t.id] || 1;
-        const loVal = loMap[t.id] || 0;
+        const o = obsMap[t.id] || { avg_obs: 0 };
+        const ov = overrideMap[t.id] || {};
 
         const syllabusPct = s.total > 0 ? (s.completed / s.total) * 100 : 0;
-        const loPct = loVal || 0;
+        const loPct = loMap[t.id] || 0;
         const obsPct = o.avg_obs || 0;
-        const partPct = Math.min(100, (parts / totalStu) * 500);
-        const otherScore = Math.max(0, 100 - (s.extra_periods * 5) - (leaves * 2));
-        const langPct = o.avg_lang || 0;
+        
+        // Admin set scores or default 0
+        const hasParticipate = ov.participate_score != null;
+        const hasOther = ov.other_score != null;
+        const hasLang = ov.lang_score != null;
+        const hasOverall = ov.overall_score != null;
+        const adminScoresSet = hasParticipate && hasOther && hasLang;
+        const assessmentIncomplete = !adminScoresSet && !hasOverall;
 
-        const weightedScore = 
-          (syllabusPct * 0.15) + 
-          (loPct * 0.15) + 
-          (obsPct * 0.25) + 
-          (partPct * 0.10) + 
-          (otherScore * 0.20) + 
-          (langPct * 0.15);
+        const partPct = hasParticipate ? Number(ov.participate_score) : 0;
+        const otherScore = hasOther ? Number(ov.other_score) : 0;
+        const langPct = hasLang ? Number(ov.lang_score) : 0;
+
+        let weightedScore = 0;
+        if (hasOverall) {
+          weightedScore = Number(ov.overall_score);
+        } else {
+          weightedScore = 
+            (syllabusPct * 0.15) + 
+            (loPct * 0.15) + 
+            (obsPct * 0.25) + 
+            (partPct * 0.10) + 
+            (otherScore * 0.20) + 
+            (langPct * 0.15);
+        }
+
+        const updatedAt = ov.updated_at ? new Date(ov.updated_at).getTime() : 0;
 
         return {
           teacher_id: t.id,
           teacher_name: t.name,
           weighted_score: parseFloat(weightedScore.toFixed(1)),
+          admin_scores_set: adminScoresSet || hasOverall,
+          assessment_incomplete: assessmentIncomplete,
+          updated_at: updatedAt,
           details: { syllabusPct, loPct, obsPct, partPct, otherScore, langPct }
         };
       });
 
-      rankedTeachers.sort((a, b) => b.weighted_score - a.weighted_score);
+      // 1. Filter out incomplete assessments and scores = 0
+      rankedTeachers = rankedTeachers.filter(t => t.admin_scores_set && t.weighted_score > 0);
+
+      // If no eligible teachers exist, return empty array
+      if (rankedTeachers.length === 0) {
+        if (res) res.json({ success: true, data: [] });
+        return [];
+      }
+
+      // 2. Sort according to tie-breaker logic
+      rankedTeachers.sort((a, b) => {
+        // Primary Sort: Overall Weighted Score (Descending)
+        if (b.weighted_score !== a.weighted_score) return b.weighted_score - a.weighted_score;
+        // Tie Breaker 1: LO Achievement (Descending)
+        if (b.details.loPct !== a.details.loPct) return b.details.loPct - a.details.loPct;
+        // Tie Breaker 2: Classroom Observation (Descending)
+        if (b.details.obsPct !== a.details.obsPct) return b.details.obsPct - a.details.obsPct;
+        // Tie Breaker 3: Latest Updated (Descending)
+        if (b.updated_at !== a.updated_at) return b.updated_at - a.updated_at;
+        // Final Tie Breaker: Name (Ascending)
+        return a.teacher_name.localeCompare(b.teacher_name);
+      });
       
       if (res) res.json({ success: true, data: rankedTeachers.slice(0, 10) });
       return rankedTeachers;

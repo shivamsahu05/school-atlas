@@ -1,62 +1,46 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Loader2, Clock, Download } from 'lucide-react';
-import { teachersApi, syllabusApi } from '../../api';
+import { syllabusApi } from '../../api';
+import { useAuth } from '../../context/AuthContext';
 
-export default function AdminSyllabusReport() {
+export default function TeacherSyllabusReport() {
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  const [teachers, setTeachers] = useState([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState('All');
   const [syllabusData, setSyllabusData] = useState([]);
 
-  // Fetch all teachers on mount
-  useEffect(() => {
-    teachersApi.getAll()
-      .then(res => {
-        const list = res.data?.items || res.items || [];
-        setTeachers(list);
-      })
-      .catch(err => console.error('Error fetching teachers:', err));
-  }, []);
-
-  // Fetch syllabus data whenever selected teacher changes
+  // Fetch syllabus data on mount
   useEffect(() => {
     setLoading(true);
-    const params = {
-      teacher_id: selectedTeacherId === 'All' ? null : selectedTeacherId
-    };
-    syllabusApi.getPlan(params)
+    syllabusApi.getPlan()
       .then(res => {
         setSyllabusData(Array.isArray(res) ? res : (res?.data || []));
       })
       .catch(err => {
-        console.error('Error fetching syllabus data:', err);
+        console.error('Error fetching teacher syllabus data:', err);
         setSyllabusData([]);
       })
       .finally(() => setLoading(false));
-  }, [selectedTeacherId]);
+  }, []);
 
   // Compute stats dynamically
   const reportData = useMemo(() => {
     const today = new Date();
     today.setHours(23, 59, 59, 999);
 
-    // Group by Class + Section + Subject + Teacher
+    // Group by Class + Section + Subject
     const groups = {};
     syllabusData.forEach(item => {
-      // Find clean class, section and subject names
       const className = item.class_name || (typeof item.class === 'object' ? item.class?.class_name : item.class) || '—';
       const sectionName = item.section_name || (typeof item.class === 'object' ? item.class?.section : item.section) || '—';
       const subjectName = item.subject_name || (typeof item.subject === 'object' ? item.subject?.name : item.subject) || '—';
-      const teacherName = (typeof item.teacher === 'object' ? item.teacher?.name : item.teacher) || item.teacher_name || '—';
       
-      const key = `${className}-${sectionName}-${subjectName}-${teacherName}`;
+      const key = `${className}-${sectionName}-${subjectName}`;
 
       if (!groups[key]) {
         groups[key] = {
           class: className,
           section: sectionName,
           subject: subjectName,
-          teacher: teacherName,
           items: []
         };
       }
@@ -79,7 +63,6 @@ export default function AdminSyllabusReport() {
       let completedYearly = 0;
 
       g.items.forEach(item => {
-        const periods = Number(item.periods || 0);
         const isCompleted = item.is_completed || item.status === 'completed';
 
         // Check if planned_end_date exists and is <= today
@@ -87,22 +70,26 @@ export default function AdminSyllabusReport() {
         const isPlannedTillToday = plannedEnd && plannedEnd <= today;
 
         if (isPlannedTillToday) {
-          plannedTillToday += periods;
+          plannedTillToday += 1;
           if (isCompleted) {
-            completedTillToday += periods;
+            completedTillToday += 1;
           }
         }
 
-        totalYearly += periods;
+        totalYearly += 1;
         if (isCompleted) {
-          completedYearly += periods;
+          completedYearly += 1;
         }
       });
 
-      // Calculate till today row
+      // Accumulate overall stats for all subjects (even those hidden from the tables below)
+      overallPlannedTillToday += plannedTillToday;
+      overallCompletedTillToday += completedTillToday;
+
+      // Calculate till today row (Only show if completion > 0)
       if (plannedTillToday > 0 && completedTillToday > 0) {
         const completionPct = Math.round((completedTillToday / plannedTillToday) * 100);
-        const pendingPeriods = Math.max(0, plannedTillToday - completedTillToday);
+        const pendingTopics = Math.max(0, plannedTillToday - completedTillToday);
         
         let status = 'DELAYED';
         let statusColor = 'text-rose-600 bg-rose-50 border-rose-100';
@@ -118,27 +105,22 @@ export default function AdminSyllabusReport() {
           class: g.class,
           section: g.section,
           subject: g.subject,
-          teacher: g.teacher,
           planned: plannedTillToday,
           completed: completedTillToday,
           percent: completionPct,
-          pending: pendingPeriods,
+          pending: pendingTopics,
           status,
           statusColor
         });
-
-        overallPlannedTillToday += plannedTillToday;
-        overallCompletedTillToday += completedTillToday;
       }
 
-      // Calculate yearly row
+      // Calculate yearly row (Only show if completion > 0)
       if (totalYearly > 0 && completedYearly > 0) {
         const completionPct = Math.round((completedYearly / totalYearly) * 100);
         rowsYearly.push({
           class: g.class,
           section: g.section,
           subject: g.subject,
-          teacher: g.teacher,
           totalPlanned: totalYearly,
           completed: completedYearly,
           percent: completionPct
@@ -186,13 +168,7 @@ export default function AdminSyllabusReport() {
         
         const subA = (a.subject || '').toString().toLowerCase();
         const subB = (b.subject || '').toString().toLowerCase();
-        if (subA !== subB) {
-          return subA.localeCompare(subB);
-        }
-        
-        const teachA = (a.teacher || '').toString().toLowerCase();
-        const teachB = (b.teacher || '').toString().toLowerCase();
-        return teachA.localeCompare(teachB);
+        return subA.localeCompare(subB);
       });
     };
 
@@ -212,23 +188,15 @@ export default function AdminSyllabusReport() {
     };
   }, [syllabusData]);
 
-  const selectedTeacherName = useMemo(() => {
-    if (selectedTeacherId === 'All') return 'All Teachers';
-    const t = teachers.find(item => Number(item.id) === Number(selectedTeacherId));
-    return t ? t.name : 'Unknown';
-  }, [selectedTeacherId, teachers]);
-
   const [downloading, setDownloading] = useState(false);
 
   const handleDownloadReport = () => {
     setDownloading(true);
-    const params = {
-      teacher_id: selectedTeacherId === 'All' ? 'All' : selectedTeacherId
-    };
-    syllabusApi.exportPlan(params)
+    // Export scopes to the current teacher on the backend
+    syllabusApi.exportPlan()
       .then(res => {
         const url = URL.createObjectURL(res.data);
-        const fileName = `Syllabus_Report_${selectedTeacherName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
+        const fileName = `My_Syllabus_Report_${user?.name?.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`;
         Object.assign(document.createElement('a'), { href: url, download: fileName }).click();
         URL.revokeObjectURL(url);
       })
@@ -250,23 +218,10 @@ export default function AdminSyllabusReport() {
             Syllabus Completion Report
           </h1>
           <p className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mt-0.5">
-            Real-time tracking of syllabus pacing and delays
+            Real-time tracking of your syllabus pacing and delays
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 sm:py-2 rounded-xl border border-slate-200 shadow-sm min-w-[200px] flex-1 sm:flex-initial">
-            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider whitespace-nowrap">Choose Teacher:</span>
-            <select
-              value={selectedTeacherId}
-              onChange={(e) => setSelectedTeacherId(e.target.value === 'All' ? 'All' : Number(e.target.value))}
-              className="w-full bg-transparent border-none text-xs font-semibold text-slate-700 outline-none cursor-pointer focus:ring-0 py-0.5"
-            >
-              <option value="All">All Teachers</option>
-              {teachers.map(t => (
-                <option key={t.id} value={t.id}>{t.name}</option>
-              ))}
-            </select>
-          </div>
+        <div className="flex items-center gap-2">
           <button
             onClick={handleDownloadReport}
             disabled={downloading}
@@ -277,13 +232,13 @@ export default function AdminSyllabusReport() {
             ) : (
               <Download className="w-4 h-4" />
             )}
-            <span>{downloading ? 'Downloading...' : 'Download Report'}</span>
+            <span>{downloading ? 'Downloading...' : 'Download My Report'}</span>
           </button>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-24 flex flex-col items-center justify-center gap-4">
+        <div className="py-24 flex flex-col items-center justify-center gap-4 bg-white rounded-3xl border border-slate-200 shadow-sm">
           <Loader2 className="animate-spin text-blue-600" size={36} />
           <span className="text-[10px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest">Generating Syllabus Completion Metrics...</span>
         </div>
@@ -293,11 +248,11 @@ export default function AdminSyllabusReport() {
           {/* Header Info */}
           <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-4 border-b-2 border-slate-100 pb-4 sm:pb-6">
             <div className="space-y-1">
-              <div className="text-[9px] sm:text-xs font-black text-blue-600 uppercase tracking-widest">Academic Report</div>
+              <div className="text-[9px] sm:text-xs font-black text-blue-600 uppercase tracking-widest">My Syllabus Performance</div>
               <h2 className="text-lg sm:text-2xl font-black text-slate-800 tracking-tight uppercase">Syllabus Completion Report</h2>
               <div className="text-xs sm:text-sm font-bold text-slate-600 flex items-center gap-1.5">
-                <span>Name of the teacher:</span>
-                <span className="text-indigo-600 underline decoration-indigo-200 decoration-2 font-black">{selectedTeacherName}</span>
+                <span>Teacher Name:</span>
+                <span className="text-indigo-600 underline decoration-indigo-200 decoration-2 font-black">{user?.name}</span>
               </div>
             </div>
             <div className="text-left sm:text-right text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest">
@@ -317,9 +272,6 @@ export default function AdminSyllabusReport() {
                   <tr className="bg-slate-800 text-white border-b border-slate-700">
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Class</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Section</th>
-                    {selectedTeacherId === 'All' && (
-                      <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Teacher</th>
-                    )}
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Subject</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Planned Till Today</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Completed</th>
@@ -333,9 +285,6 @@ export default function AdminSyllabusReport() {
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-800">{r.class}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-semibold text-slate-600">{r.section}</td>
-                      {selectedTeacherId === 'All' && (
-                        <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-indigo-600">{r.teacher}</td>
-                      )}
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-700">{r.subject}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-slate-600 bg-slate-50/30">{r.planned}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-emerald-600 bg-emerald-50/20">{r.completed}</td>
@@ -351,8 +300,8 @@ export default function AdminSyllabusReport() {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={selectedTeacherId === 'All' ? 9 : 8} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
-                        No syllabus entries found for this teacher
+                      <td colSpan={8} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
+                        No syllabus entries found till today
                       </td>
                     </tr>
                   )}
@@ -373,9 +322,6 @@ export default function AdminSyllabusReport() {
                   <tr className="bg-slate-800 text-white border-b border-slate-700">
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Class</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Section</th>
-                    {selectedTeacherId === 'All' && (
-                      <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Teacher</th>
-                    )}
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider">Subject</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Planned Yearly</th>
                     <th className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold uppercase tracking-wider text-center">Total Completed</th>
@@ -387,9 +333,6 @@ export default function AdminSyllabusReport() {
                     <tr key={i} className="hover:bg-slate-50/50 transition-colors">
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-800">{r.class}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-semibold text-slate-600">{r.section}</td>
-                      {selectedTeacherId === 'All' && (
-                        <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-indigo-600">{r.teacher}</td>
-                      )}
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 font-bold text-slate-700">{r.subject}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-slate-600 bg-slate-50/30">{r.totalPlanned}</td>
                       <td className="px-2.5 sm:px-5 py-2 sm:py-3.5 text-center font-bold text-emerald-600 bg-emerald-50/20">{r.completed}</td>
@@ -399,7 +342,7 @@ export default function AdminSyllabusReport() {
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={selectedTeacherId === 'All' ? 7 : 6} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
+                      <td colSpan={6} className="px-2.5 sm:px-5 py-8 text-center text-slate-400 font-bold uppercase tracking-widest">
                         No syllabus entries found
                       </td>
                     </tr>
@@ -419,7 +362,7 @@ export default function AdminSyllabusReport() {
               </div>
               
               <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-12 w-full justify-center">
-                {/* CSS Conic Gradient Pie Chart */}
+                {/* Donut Chart */}
                 <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full shadow-[0_0_15px_rgba(0,0,0,0.05)] border-4 border-white flex items-center justify-center flex-shrink-0">
                   <div 
                     className="absolute inset-0 rounded-full transition-all duration-500"
@@ -427,14 +370,13 @@ export default function AdminSyllabusReport() {
                       background: `conic-gradient(#10b981 0% ${reportData.overallPct}%, #ef4444 ${reportData.overallPct}% 100%)`
                     }}
                   />
-                  {/* Inner cut-out for donut look */}
                   <div className="absolute w-20 h-20 sm:w-24 sm:h-24 bg-white rounded-full flex flex-col items-center justify-center shadow-inner">
                     <span className="text-lg sm:text-xl font-black text-slate-800 tracking-tight">{reportData.overallPct}%</span>
                     <span className="text-[7px] sm:text-[8px] font-black text-slate-400 uppercase tracking-wider">Completed</span>
                   </div>
                 </div>
 
-                {/* Legend & Summary Box */}
+                {/* Legend & Summary */}
                 <div className="space-y-4 w-full sm:w-auto max-w-xs">
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between gap-8 text-[10px] sm:text-xs font-bold text-slate-600">

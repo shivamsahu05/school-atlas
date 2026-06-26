@@ -93,6 +93,45 @@ const AdminAcademics = () => {
     const [subjects, setSubjects] = useState([])          // master subjects (pool)
     const [streams, setStreams] = useState([])            // master streams (for HS)
 
+    const CLASS_OPTIONS = {
+        primary: [
+            { id: 'Pre-Nursery', name: 'Pre-Nursery', sort: 1 },
+            { id: 'Nursery', name: 'Nursery', sort: 2 },
+            { id: 'LKG', name: 'LKG', sort: 3 },
+            { id: 'UKG', name: 'UKG', sort: 4 },
+            { id: '1', name: 'Class 1', sort: 5 },
+            { id: '2', name: 'Class 2', sort: 6 },
+            { id: '3', name: 'Class 3', sort: 7 },
+            { id: '4', name: 'Class 4', sort: 8 },
+            { id: '5', name: 'Class 5', sort: 9 },
+            { id: '6', name: 'Class 6', sort: 10 },
+            { id: '7', name: 'Class 7', sort: 11 },
+            { id: '8', name: 'Class 8', sort: 12 }
+        ],
+        high_school: [
+            { id: '9', name: 'Class 9', sort: 13 },
+            { id: '10', name: 'Class 10', sort: 14 }
+        ],
+        higher_secondary: [
+            { id: '11', name: 'Class 11', sort: 15 },
+            { id: '12', name: 'Class 12', sort: 16 }
+        ]
+    };
+
+    const handleClassIdentifierChange = (identifier) => {
+        const options = CLASS_OPTIONS[classForm.classCategory] || [];
+        const opt = options.find(o => o.id === identifier);
+        if (opt) {
+            setClassForm(f => ({ ...f, classNumber: opt.id, name: opt.name, sortOrder: opt.sort }));
+        } else {
+            setClassForm(f => ({ ...f, classNumber: identifier }));
+        }
+    };
+
+    const handleCategoryChange = (category) => {
+        setClassForm(f => ({ ...f, classCategory: category, classNumber: '', name: '', sortOrder: '' }));
+    };
+
     // Selection State
     const [selectedClass, setSelectedClass] = useState(null)
     const [activeTab, setActiveTab] = useState('sections') // for regular classes: 'sections' or 'subjects'
@@ -127,9 +166,11 @@ const AdminAcademics = () => {
     // Modal States
     const [modals, setModals] = useState({
         class: false,
-        section: false,    // for adding a new section directly to the selected class
-        subject: false,    // for adding a new subject directly to the selected class
-        stream: false
+        section: false,
+        subject: false,
+        stream: false,
+        editMasterSection: false,
+        editMasterSubject: false
     })
 
     // Form States
@@ -140,6 +181,8 @@ const AdminAcademics = () => {
     
     const [editingId, setEditingId] = useState(null)
     const [editingStreamId, setEditingStreamId] = useState(null)
+    const [editingMasterSectionId, setEditingMasterSectionId] = useState(null)
+    const [editingMasterSubjectId, setEditingMasterSubjectId] = useState(null)
 
     const token = JSON.parse(localStorage.getItem('sams_session') || '{}')?.token
     const headers = { 'Authorization': `Bearer ${token}` }
@@ -343,7 +386,7 @@ const AdminAcademics = () => {
             if (secData.success) {
                 sectionId = secData.section?.id || secData.id
             } else {
-                // Section already exists — find its ID from the master list
+                // Section already exists - find its ID from the master list
                 const existingSection = sections.find(
                     s => s.name?.toLowerCase() === sectionForm.name.toLowerCase() ||
                          s.code?.toLowerCase() === sectionForm.code.toLowerCase()
@@ -355,8 +398,8 @@ const AdminAcademics = () => {
                     const refreshRes = await fetch(`${API_URL}/api/admin/sections`, { headers })
                     const refreshData = await refreshRes.json()
                     if (refreshData.success) {
-                        setSections(refreshData.sections)
-                        const found = refreshData.sections.find(
+                        setSections(refreshData.sections || refreshData.data || [])
+                        const found = (refreshData.sections || refreshData.data || []).find(
                             s => s.name?.toLowerCase() === sectionForm.name.toLowerCase() ||
                                  s.code?.toLowerCase() === sectionForm.code.toLowerCase()
                         )
@@ -373,21 +416,81 @@ const AdminAcademics = () => {
             const assignRes = await fetch(`${API_URL}/api/admin/class-sections`, {
                 method: 'POST',
                 headers: { ...headers, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ class_id: selectedClass.id, section_id: sectionId })
+                body: JSON.stringify({ class_id: selectedClass.id, section_id: sectionId, stream_id: selectedStream?.id })
             })
             const assignData = await assignRes.json()
             if (assignData.success) {
-                toast.success('Section assigned to class')
+                toast.success('Section created and assigned')
                 setModals({ ...modals, section: false })
                 setSectionForm({ name: '', code: '', description: '' })
-                fetchInitialData()           // refresh master sections
-                fetchClassDetails(selectedClass.id)  // refresh class sections
-            } else {
-                toast.error('Assignment failed: ' + assignData.message)
-            }
+                fetchClassDetails(selectedClass.id)
+                if (selectedStream) fetchStreamDetails(selectedStream.id)
+                fetchInitialData() // refresh master sections pool
+            } else throw new Error(assignData.message)
         } catch (error) {
-            console.error('Error creating section:', error)
-            toast.error('Failed to create section')
+            toast.error(error.message || 'Failed to create section')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    const handleUpdateMasterSection = async () => {
+        if (!sectionForm.name || !sectionForm.code) {
+            toast.error('Name and Code are required')
+            return
+        }
+        setActionLoading(true)
+        try {
+            const res = await fetch(`${API_URL}/api/admin/sections/${editingMasterSectionId}`, {
+                method: 'PUT',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: sectionForm.name, code: sectionForm.code, description: sectionForm.description })
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success('Master Section updated')
+                setModals({ ...modals, editMasterSection: false })
+                setEditingMasterSectionId(null)
+                setSectionForm({ name: '', code: '', description: '' })
+                fetchInitialData() // refresh master sections pool
+                if (selectedClass) {
+                    fetchClassDetails(selectedClass.id)
+                    if (selectedStream) fetchStreamDetails(selectedStream.id)
+                }
+            } else throw new Error(data.message)
+        } catch (error) {
+            toast.error(error.message || 'Failed to update section')
+        } finally {
+            setActionLoading(false)
+        }
+    }
+
+    const handleUpdateMasterSubject = async () => {
+        if (!subjectForm.name || !subjectForm.code) {
+            toast.error('Name and Code are required')
+            return
+        }
+        setActionLoading(true)
+        try {
+            const res = await fetch(`${API_URL}/api/admin/subjects/${editingMasterSubjectId}`, {
+                method: 'PUT',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: subjectForm.name, code: subjectForm.code, description: subjectForm.description })
+            })
+            const data = await res.json()
+            if (data.success) {
+                toast.success('Subject updated')
+                setModals({ ...modals, editMasterSubject: false })
+                setEditingMasterSubjectId(null)
+                setSubjectForm({ name: '', code: '', description: '' })
+                fetchInitialData()
+                if (selectedClass) {
+                    fetchClassDetails(selectedClass.id)
+                    if (selectedStream) fetchStreamDetails(selectedStream.id)
+                }
+            } else throw new Error(data.message)
+        } catch (error) {
+            toast.error(error.message || 'Failed to update subject')
         } finally {
             setActionLoading(false)
         }
@@ -727,7 +830,7 @@ const AdminAcademics = () => {
                                     }`}
                                 onClick={() => setSelectedClass(cls)}
                             >
-                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedClass?.id === cls.id ? 'bg-white/20' : 'bg-slate-100 group-hover:bg-indigo-100'}`}>
+                                <div className={`min-w-[2rem] px-2 h-8 rounded-lg flex items-center justify-center transition-colors ${selectedClass?.id === cls.id ? 'bg-white/20' : 'bg-slate-100 group-hover:bg-indigo-100'}`}>
                                     <span className={selectedClass?.id === cls.id ? 'text-white' : 'text-indigo-600'}>
                                         {cls.class_number || '?'}
                                     </span>
@@ -764,7 +867,7 @@ const AdminAcademics = () => {
                     {/* Class Header */}
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8 pb-8 border-b border-slate-100">
                         <div className="flex items-center gap-5">
-                            <div className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-100">
+                            <div className="min-w-[4rem] px-4 w-auto h-16 bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-2xl flex items-center justify-center text-white text-2xl font-bold shadow-lg shadow-indigo-100">
                                 {selectedClass.class_number}
                             </div>
                             <div>
@@ -1059,17 +1162,22 @@ const AdminAcademics = () => {
                                                 {sortedSections.map(sec => {
                                                     const isAssigned = classSections.some(cs => cs.section_id === sec.id)
                                                     return (
-                                                        <button
-                                                            key={sec.id}
-                                                            onClick={() => !isAssigned && handleAssignExistingSection(sec.id)}
-                                                            disabled={actionLoading || isAssigned}
-                                                            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold transition-all rounded-xl border ${isAssigned
-                                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-400 hover:text-indigo-600 hover:shadow-sm active:scale-95'
-                                                                }`}>
-                                                            {isAssigned ? <Check size={12} /> : <Plus size={12} />}
-                                                            {sec.name}
-                                                        </button>
+                                                        <div key={sec.id} className={`flex rounded-xl border transition-all ${isAssigned ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-indigo-400 hover:shadow-sm overflow-hidden'}`}>
+                                                            <button
+                                                                onClick={() => !isAssigned && handleAssignExistingSection(sec.id)}
+                                                                disabled={actionLoading || isAssigned}
+                                                                className="flex-1 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 active:scale-95 transition-all">
+                                                                {isAssigned ? <Check size={12} className="text-slate-400" /> : <Plus size={12} className="text-indigo-500" />}
+                                                                {sec.name}
+                                                            </button>
+                                                            <button
+                                                                onClick={() => { setSectionForm({ name: sec.name, code: sec.code, description: sec.description || '' }); setEditingMasterSectionId(sec.id); setModals({ ...modals, editMasterSection: true }) }}
+                                                                className="px-3 py-2 border-l border-slate-200 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-600 text-slate-400 transition-colors"
+                                                                title="Edit Master Section"
+                                                            >
+                                                                <Pencil size={12} />
+                                                            </button>
+                                                        </div>
                                                     )
                                                 })}
                                             </div>
@@ -1097,15 +1205,17 @@ const AdminAcademics = () => {
                                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                             {classSubjects.map((sub, index) => (
                                                 <div key={sub.mapping_id || `subject-${index}`} className="group relative bg-white border border-slate-200 p-4 rounded-xl hover:border-amber-300 hover:shadow-md transition-all">
-                                                    <button onClick={() => handleUnassignSubject(sub.mapping_id, sub.subject_id)}
-                                                        className="absolute top-2 right-2 p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all">
-                                                        <X size={14} />
-                                                    </button>
+                                                    <div className="absolute top-2 right-2 flex gap-1">
+                                                        <button onClick={() => handleUnassignSubject(sub.mapping_id, sub.subject_id)}
+                                                            className="p-1.5 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Remove subject">
+                                                            <X size={14} />
+                                                        </button>
+                                                    </div>
                                                     <div className="flex items-center gap-4">
                                                         <div className="w-10 h-10 bg-amber-50 border border-amber-100 rounded-lg flex items-center justify-center text-amber-600 font-bold text-sm">
                                                             {(sub.code || sub.subject_code || '?').charAt(0).toUpperCase()}
                                                         </div>
-                                                        <div className="pr-6">
+                                                        <div className="pr-16">
                                                             <span className="font-bold text-slate-800 text-sm block" title={sub.name || sub.subject_name}>{sub.name || sub.subject_name}</span>
                                                             <span className="text-[10px] text-slate-400 font-bold uppercase">{sub.code || sub.subject_code}</span>
                                                         </div>
@@ -1129,17 +1239,15 @@ const AdminAcademics = () => {
                                                 {sortedSubjects.map(sub => {
                                                     const isAssigned = classSubjects.some(cs => cs.subject_id === sub.id)
                                                     return (
-                                                        <button
-                                                            key={sub.id}
-                                                            onClick={() => !isAssigned && handleAssignExistingSubject(sub.id)}
-                                                            disabled={isAssigned}
-                                                            className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-bold transition-all rounded-xl border ${isAssigned
-                                                                    ? 'bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed'
-                                                                    : 'bg-white border-slate-200 text-slate-600 hover:border-amber-400 hover:text-amber-600 hover:shadow-sm active:scale-95'
-                                                                }`}>
-                                                            {isAssigned ? <Check size={12} /> : <Plus size={12} />}
-                                                            {sub.name}
-                                                        </button>
+                                                        <div key={sub.id} className={`flex rounded-xl border transition-all ${isAssigned ? 'bg-slate-100 border-slate-200 cursor-not-allowed' : 'bg-white border-slate-200 hover:border-amber-400 hover:shadow-sm overflow-hidden'}`}>
+                                                            <button
+                                                                onClick={() => !isAssigned && handleAssignExistingSubject(sub.id)}
+                                                                disabled={isAssigned}
+                                                                className="flex-1 inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-slate-600 active:scale-95 transition-all">
+                                                                {isAssigned ? <Check size={12} className="text-slate-400" /> : <Plus size={12} className="text-amber-500" />}
+                                                                {sub.name}
+                                                            </button>
+                                                        </div>
                                                     )
                                                 })}
                                             </div>
@@ -1178,19 +1286,14 @@ const AdminAcademics = () => {
                 }
             >
                 <div className="space-y-5">
-                    <Input label="Class Name" placeholder="e.g. Class 10 or Grade A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input label="Class Identifier" placeholder="e.g. 10" value={classForm.classNumber} onChange={e => setClassForm({ ...classForm, classNumber: e.target.value })} />
-                        <Input label="Sort Order" placeholder="e.g. 1" type="number" value={classForm.sortOrder} onChange={e => setClassForm({ ...classForm, sortOrder: e.target.value })} />
-                    </div>
                     <div className="space-y-1.5">
                         <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Class Category</label>
                         <select
                             className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium transition-all"
                             value={classForm.classCategory}
-                            onChange={e => setClassForm({ ...classForm, classCategory: e.target.value })}
+                            onChange={e => handleCategoryChange(e.target.value)}
                         >
-                            <option value="primary">Primary (1-8)</option>
+                            <option value="primary">Primary (Pre-Nursery to 8)</option>
                             <option value="high_school">High School (9-10)</option>
                             <option value="higher_secondary">Higher Secondary (11-12)</option>
                         </select>
@@ -1198,6 +1301,32 @@ const AdminAcademics = () => {
                             <Info size={12} /> Higher Secondary enables group/stream selection.
                         </p>
                     </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Class Identifier *</label>
+                            <select
+                                className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm font-medium transition-all"
+                                value={classForm.classNumber}
+                                onChange={e => handleClassIdentifierChange(e.target.value)}
+                            >
+                                <option value="">Select Class...</option>
+                                {(CLASS_OPTIONS[classForm.classCategory] || []).map(opt => (
+                                    <option key={opt.id} value={opt.id}>{opt.id}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest">Sort Order</label>
+                            <input
+                                readOnly
+                                className="w-full px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-sm text-slate-400 cursor-not-allowed"
+                                value={classForm.sortOrder || '(auto)'}
+                                title="Sort order is auto-set from class identifier"
+                            />
+                            <p className="text-[10px] text-slate-400 flex items-center gap-1"><Info size={10} /> Auto-set from class identifier</p>
+                        </div>
+                    </div>
+                    <Input label="Class Name *" placeholder="e.g. Class 10 or Grade A" value={classForm.name} onChange={e => setClassForm({ ...classForm, name: e.target.value })} />
                 </div>
             </Modal>
 
@@ -1267,6 +1396,59 @@ const AdminAcademics = () => {
                             Groups are reusable across classes (e.g., Science for both Class 11 and 12).
                         </p>
                     </div>
+                </div>
+            </Modal>
+
+            {/* Edit Master Section Modal */}
+            <Modal
+                isOpen={modals.editMasterSection}
+                onClose={() => { setModals({ ...modals, editMasterSection: false }); setEditingMasterSectionId(null); setSectionForm({ name: '', code: '', description: '' }); }}
+                title="Edit Master Section"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => { setModals({ ...modals, editMasterSection: false }); setEditingMasterSectionId(null); setSectionForm({ name: '', code: '', description: '' }); }}>Cancel</Button>
+                        <Button variant="primary" onClick={handleUpdateMasterSection} disabled={actionLoading}>
+                            {actionLoading ? 'Updating...' : 'Update Section'}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-5">
+                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 flex gap-3">
+                        <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                            Updating this master section will reflect across <strong>all classes</strong> where it is currently assigned.
+                        </p>
+                    </div>
+                    <Input label="Section Name *" placeholder="e.g. Section A or Lotus" value={sectionForm.name} onChange={e => setSectionForm({ ...sectionForm, name: e.target.value })} />
+                    <Input label="Section Code *" placeholder="e.g. A" value={sectionForm.code} onChange={e => setSectionForm({ ...sectionForm, code: e.target.value })} />
+                </div>
+            </Modal>
+
+            {/* Edit Master Subject Modal */}
+            <Modal
+                isOpen={modals.editMasterSubject}
+                onClose={() => { setModals({ ...modals, editMasterSubject: false }); setEditingMasterSubjectId(null); setSubjectForm({ name: '', code: '', description: '' }); }}
+                title="Edit Master Subject"
+                footer={
+                    <>
+                        <Button variant="secondary" onClick={() => { setModals({ ...modals, editMasterSubject: false }); setEditingMasterSubjectId(null); setSubjectForm({ name: '', code: '', description: '' }); }}>Cancel</Button>
+                        <Button variant="warning" onClick={handleUpdateMasterSubject} disabled={actionLoading}>
+                            {actionLoading ? 'Updating...' : 'Update Subject'}
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-5">
+                    <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 flex gap-3">
+                        <AlertTriangle className="text-amber-600 flex-shrink-0" size={18} />
+                        <p className="text-xs text-amber-800 leading-relaxed">
+                            Updating this master subject will reflect across <strong>all classes</strong> where it is currently assigned.
+                        </p>
+                    </div>
+                    <Input label="Subject Name *" placeholder="e.g. Mathematics" value={subjectForm.name} onChange={e => setSubjectForm({ ...subjectForm, name: e.target.value })} />
+                    <Input label="Subject Code *" placeholder="e.g. MATH101" value={subjectForm.code} onChange={e => setSubjectForm({ ...subjectForm, code: e.target.value })} />
+                    <Input label="Description (Optional)" placeholder="Brief overview" value={subjectForm.description} onChange={e => setSubjectForm({ ...subjectForm, description: e.target.value })} />
                 </div>
             </Modal>
 
